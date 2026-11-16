@@ -1,0 +1,218 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
+import { ScrollView, Text, View } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { apiSend, useAnalysis } from "@/src/api";
+import { fonts, phaseLabel, radius, space } from "@/src/constants";
+import { ErrorBanner, Ionicons, Loading, Pill, PressScale, PrimaryButton, SectionTitle, riskColor, scoreColor } from "@/src/components/ui";
+import { makeStyles, useTheme } from "@/src/theme";
+
+export default function Report() {
+  const s = useStyles();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const q = useAnalysis(id);
+  const a = q.data;
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const remove = async () => {
+    await apiSend(`/analyses/${id}`, "DELETE");
+    qc.invalidateQueries();
+    router.back();
+  };
+
+  const min = a?.pace_band?.min_kmh ?? 0;
+  const max = a?.pace_band?.max_kmh ?? 0;
+  const pct = (v: number) => `${Math.min(100, Math.max(0, ((v - 90) / 70) * 100))}%` as const;
+
+  return (
+    <View style={s.screen}>
+      <View style={[s.header, { paddingTop: insets.top + space.sm }]}>
+        <PressScale testID="report-back-button" style={s.iconBtn} onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}>
+          <Ionicons name="chevron-back" size={22} color={colors.onSurface} />
+        </PressScale>
+        <Text style={s.headerTitle}>Delivery Report</Text>
+        <PressScale testID="report-delete-button" style={s.iconBtn} onPress={() => setConfirmDelete((v) => !v)}>
+          <Ionicons name="trash-outline" size={20} color={colors.onSurface} />
+        </PressScale>
+      </View>
+
+      {q.isLoading ? (
+        <Loading testID="report-loading" />
+      ) : q.isError || !a ? (
+        <View style={{ padding: space.lg }}>
+          <ErrorBanner testID="report-error" message="Could not load this report." onRetry={() => q.refetch()} />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: insets.bottom + space.xl, gap: space.xl }}>
+          {confirmDelete ? (
+            <View style={s.confirm} testID="delete-confirm-card">
+              <Text style={s.confirmText}>Delete this report permanently?</Text>
+              <View style={{ flexDirection: "row", gap: space.sm }}>
+                <PressScale testID="confirm-delete-button" style={[s.smallBtn, { backgroundColor: colors.error }]} onPress={remove}>
+                  <Text style={s.smallBtnText}>Delete</Text>
+                </PressScale>
+                <PressScale testID="cancel-delete-button" style={[s.smallBtn, { backgroundColor: colors.surfaceTertiary }]} onPress={() => setConfirmDelete(false)}>
+                  <Text style={s.smallBtnText}>Cancel</Text>
+                </PressScale>
+              </View>
+            </View>
+          ) : null}
+
+          <Animated.View entering={FadeInDown} style={s.scoreCard}>
+            <Text style={s.kicker}>OVERALL SCORE</Text>
+            <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
+              <Text style={[s.bigScore, { color: scoreColor(a.overall_score, colors) }]} testID="report-overall-score">{a.overall_score.toFixed(1)}</Text>
+              <Text style={s.outOf}>/10</Text>
+            </View>
+            <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
+              {a.action_type ? <Pill testID="report-action-type" label={`${a.action_type} action`} color={colors.onSurface} icon="body" /> : null}
+              <Pill label={new Date(a.created_at).toLocaleDateString()} color={colors.muted} icon="calendar" />
+            </View>
+            <Text style={s.summary} testID="report-summary">{a.summary}</Text>
+          </Animated.View>
+
+          {a.is_bowling_video ? (
+            <>
+              <View style={{ flexDirection: "row", gap: space.md }}>
+                <View style={[s.metric, { flex: 1 }]} testID="report-pace-band">
+                  <Text style={s.kicker}>PACE BAND</Text>
+                  <Text style={s.metricValue}>{min && max ? `${min}-${max}` : "—"}</Text>
+                  <Text style={s.metricSub}>{a.pace_band?.label ?? ""} km/h</Text>
+                  <View style={s.gauge}>
+                    {min && max ? <View style={[s.gaugeFill, { left: pct(min), right: `${100 - parseFloat(pct(max))}%` }]} /> : null}
+                  </View>
+                  <View style={s.gaugeLabels}>
+                    <Text style={s.gaugeLabel}>90</Text>
+                    <Text style={s.gaugeLabel}>160</Text>
+                  </View>
+                </View>
+                <View style={[s.metric, { flex: 1, borderColor: riskColor(a.injury_risk?.level, colors) }]} testID="report-injury-risk">
+                  <Text style={s.kicker}>INJURY RISK</Text>
+                  <Text style={[s.metricValue, { color: riskColor(a.injury_risk?.level, colors), textTransform: "uppercase" }]}>{a.injury_risk?.level ?? "low"}</Text>
+                  <Text style={s.metricSub}>{a.injury_risk?.mixed_action ? "Mixed action detected" : "No mixed action"}</Text>
+                  <Text style={s.metricSub}>Counter-rotation: {a.injury_risk?.counter_rotation ?? "—"}</Text>
+                </View>
+              </View>
+              {a.injury_risk?.notes ? <Text style={s.note}>{a.injury_risk.notes}</Text> : null}
+
+              <View>
+                <SectionTitle title="Phase Breakdown" />
+                <View style={s.grid}>
+                  {a.phases.map((p) => (
+                    <View key={p.key} style={s.phase} testID={`phase-card-${p.key}`}>
+                      <View style={s.phaseHead}>
+                        <Text style={s.phaseName}>{p.name || phaseLabel(p.key)}</Text>
+                        <Text style={[s.phaseScore, { color: scoreColor(p.score, colors) }]}>{Number(p.score).toFixed(1)}</Text>
+                      </View>
+                      <View style={s.track}>
+                        <View style={[s.fill, { width: `${p.score * 10}%`, backgroundColor: scoreColor(p.score, colors) }]} />
+                      </View>
+                      <Text style={s.phaseFeedback}>{p.feedback}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              {a.faults.length ? (
+                <View>
+                  <SectionTitle title="Faults to Fix" action="See drills" onAction={() => router.push("/drills")} testID="report-see-drills" />
+                  <View style={{ gap: space.sm }}>
+                    {a.faults.map((f, i) => (
+                      <View key={i} style={[s.fault, { borderLeftColor: riskColor(f.severity, colors) }]} testID={`fault-card-${i}`}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm }}>
+                          <Text style={s.faultTitle}>{f.title}</Text>
+                          <Pill label={f.severity} color={riskColor(f.severity, colors)} />
+                        </View>
+                        <Text style={s.faultPhase}>{phaseLabel(f.phase)}</Text>
+                        <Text style={s.body}>{f.description}</Text>
+                        {f.fix ? (
+                          <View style={s.fixRow}>
+                            <Ionicons name="construct" size={14} color={colors.brandPrimary} />
+                            <Text style={[s.body, { flex: 1, color: colors.onSurface }]}>{f.fix}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              {a.strengths.length ? (
+                <View>
+                  <SectionTitle title="Strengths" />
+                  {a.strengths.map((t, i) => (
+                    <View key={i} style={s.listRow}>
+                      <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                      <Text style={s.listText}>{t}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {a.tips.length ? (
+                <View>
+                  <SectionTitle title="Coach Tips" />
+                  {a.tips.map((t, i) => (
+                    <View key={i} style={s.listRow}>
+                      <Text style={s.tipNum}>{i + 1}</Text>
+                      <Text style={s.listText}>{t}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </>
+          ) : null}
+
+          <PrimaryButton testID="report-ask-coach-button" label="Ask AI Coach about this" icon="chatbubbles" onPress={() => router.push("/coach")} />
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+const useStyles = makeStyles((c) => ({
+  screen: { flex: 1, backgroundColor: c.surface },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.lg, paddingBottom: space.sm, borderBottomWidth: 1, borderBottomColor: c.divider },
+  headerTitle: { fontFamily: fonts.display, fontSize: 22, color: c.onSurface, textTransform: "uppercase" },
+  iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  confirm: { padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.error, gap: space.md },
+  confirmText: { fontFamily: fonts.textBold, fontSize: 15, color: c.onSurface },
+  smallBtn: { minHeight: 44, paddingHorizontal: space.xl, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  smallBtnText: { fontFamily: fonts.textBold, fontSize: 14, color: c.onSurface },
+  scoreCard: { padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.md },
+  kicker: { fontFamily: fonts.textXBold, fontSize: 11, color: c.muted, letterSpacing: 1.5 },
+  bigScore: { fontFamily: fonts.display, fontSize: 96, lineHeight: 96 },
+  outOf: { fontFamily: fonts.displaySemi, fontSize: 30, color: c.muted, marginBottom: 12, marginLeft: 4 },
+  summary: { fontFamily: fonts.text, fontSize: 14, lineHeight: 21, color: c.onSurfaceSecondary },
+  metric: { padding: space.md, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: 4 },
+  metricValue: { fontFamily: fonts.display, fontSize: 30, color: c.onSurface },
+  metricSub: { fontFamily: fonts.text, fontSize: 12, color: c.muted },
+  gauge: { height: 8, borderRadius: 4, backgroundColor: c.surfaceTertiary, marginTop: space.sm, overflow: "hidden" },
+  gaugeFill: { position: "absolute", top: 0, bottom: 0, backgroundColor: c.brandPrimary, borderRadius: 4 },
+  gaugeLabels: { flexDirection: "row", justifyContent: "space-between" },
+  gaugeLabel: { fontFamily: fonts.text, fontSize: 10, color: c.muted },
+  note: { fontFamily: fonts.text, fontSize: 13, lineHeight: 19, color: c.onSurfaceTertiary, marginTop: -space.md },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  phase: { width: "48.5%", padding: space.md, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.sm },
+  phaseHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  phaseName: { flex: 1, fontFamily: fonts.textBold, fontSize: 13, color: c.onSurface },
+  phaseScore: { fontFamily: fonts.display, fontSize: 24 },
+  track: { height: 4, borderRadius: 2, backgroundColor: c.surfaceTertiary, overflow: "hidden" },
+  fill: { height: 4, borderRadius: 2 },
+  phaseFeedback: { fontFamily: fonts.text, fontSize: 12, lineHeight: 17, color: c.muted },
+  fault: { padding: space.md, borderRadius: radius.md, backgroundColor: c.surfaceSecondary, borderLeftWidth: 3, gap: 6 },
+  faultTitle: { flex: 1, fontFamily: fonts.textXBold, fontSize: 15, color: c.onSurface },
+  faultPhase: { fontFamily: fonts.textBold, fontSize: 12, color: c.brandPrimary },
+  body: { fontFamily: fonts.text, fontSize: 13, lineHeight: 19, color: c.onSurfaceTertiary },
+  fixRow: { flexDirection: "row", gap: space.sm, alignItems: "flex-start", paddingTop: 4 },
+  listRow: { flexDirection: "row", gap: space.md, alignItems: "flex-start", marginBottom: space.sm },
+  listText: { flex: 1, fontFamily: fonts.text, fontSize: 14, lineHeight: 20, color: c.onSurfaceSecondary },
+  tipNum: { width: 22, height: 22, borderRadius: 11, textAlign: "center", lineHeight: 22, fontFamily: fonts.textXBold, fontSize: 12, color: c.onBrandPrimary, backgroundColor: c.brandPrimary, overflow: "hidden" },
+}));

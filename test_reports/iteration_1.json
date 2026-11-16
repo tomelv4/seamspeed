@@ -1,0 +1,45 @@
+{
+  "summary": "Frontend-only test of PaceSensei Expo web preview at 390x844. All requested flows work: Home (wordmark, hero, CTA to Analyze, coach card, empty state), all 4 tabs, Analyze (record/upload buttons, filming tips), Drills (8 filter chips filter the 12-drill list correctly, For You is empty with no analyses and shows 2 after analyses, d1 opens the detail screen, back works), Progress (empty state; with 2 TEST_ seeded bowling analyses the stats, Score/Pace/Phases segments and phase averages render correctly), Report (score, summary, pace band, injury risk, phase cards, fault cards; delete confirm, cancel and confirm work and the session disappears), Coach (SSE reply streams in pieces, typed message plus send works, history survives reload, clear resets to the empty state with prompts) and Profile (save updates 'Hi <name>'). 1 race-condition bug in Profile and 1 native tap-area risk in PressScale found. No page errors and no deprecated packages (expo-av, expo-barcode-scanner, expo-background-fetch) found. There is a deprecation warning for expo-router/unstable-native-tabs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/profile", "issue": "When no profile is saved, get_profile returns a new unsaved Profile(device_id) with a new id/updated_at on every call (server.py:212-214). Each refetch therefore gives the frontend a new data object, which causes the Profile form reset bug below."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Profile form", "issue": "Edits can be lost. useEffect([profile.data]) in profile.tsx:30-32 overwrites the form every time profile.data changes. Reproduced: on the first open of the Profile screen, typed a name and picked Left/Club right after the input appeared. The profile GET from mount came back after that and reset the form, so the PUT sent {name:'Bowler', bowling_arm:'Right', ...} and Home still showed 'Hi Bowler'. It works when the user waits about 1.5s before editing. Because the unsaved default profile changes on every GET, a window-focus refetch can also wipe the edits.", "testID": "profile-name-input / profile-save-button", "priority": "MEDIUM"},
+      {"component": "PressScale (src/components/ui.tsx:15-31)", "issue": "testID and the press handler sit on the outer Pressable, but the layout style (including position:absolute) is applied to the inner Animated.View. For drill-back-button (drill/[id].tsx:68) the Pressable box measures 390x0, so Playwright cannot click it. On web the click bubbles up from the child, so it still works there. On Android, touches outside the parent's bounds are dropped, so absolutely positioned PressScale buttons may not respond to taps on device.", "testID": "drill-back-button", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Coach", "issues": ["Prompt chips are 36px tall, below the 44px minimum touch target (coach.tsx:156)", "While a long reply is streaming, the list does not always stay scrolled to the bottom, so the end of the reply is hidden behind the input bar"]},
+      {"screen": "Progress", "issues": ["The 'Top km/h' stat shows the midpoint of the pace band (128 for a 123-133 band), not the top speed. The label is misleading."]},
+      {"screen": "Home/Progress session row", "issues": ["A 'Not A Bowling Clip' session (score 0.0) shows a green risk dot, which suggests it is low risk/healthy. Consider a neutral indicator."]}
+    ],
+    "react_native_issues": [
+      {"component": "expo-router/unstable-native-tabs", "issue": "Expo logs repeatedly warn that `expo-router/unstable-native-tabs` is deprecated; use `expo-router/native-tabs`. Reference: /app/frontend/app/(tabs)/_layout.tsx"},
+      {"component": "PressScale touch area", "issue": "The style is applied to the inner Animated.View instead of the Pressable, so absolutely positioned buttons have a 0-height touchable area. Reference: /app/frontend/src/components/ui.tsx:19-28"}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/create_ui_analysis.py", "/app/backend/tests/seed_ui_progress.py"],
+  "action_items": [
+    "profile.tsx: fill the form from profile.data only once (e.g. a useRef 'initialized' flag, or only while the form is untouched) so a later fetch or refetch cannot overwrite user edits",
+    "backend get_profile: return a stable default (e.g. no random id/updated_at, or upsert the default once) so refetches do not produce a new object every time",
+    "PressScale: put style/testID on the Pressable itself (e.g. Animated.createAnimatedComponent(Pressable) with [style, anim]) so absolutely positioned buttons such as drill-back-button have a real touch area on Android",
+    "Replace expo-router/unstable-native-tabs import with expo-router/native-tabs",
+    "Coach prompt chips: raise the height to 44px or add hitSlop",
+    "Progress: rename 'Top km/h' or compute it from max_kmh"
+  ],
+  "critical_code_review_comments": [
+    "coach.tsx clear(): there is no try/catch around apiSend DELETE. A failure gives an unhandled promise rejection and no error UI.",
+    "streamCoach: on web, if the network drops mid-stream, partial content stays and the error banner shows. That is acceptable, but the half-finished assistant message is not marked as incomplete."
+  ],
+  "updated_files": ["/app/backend/tests/create_ui_analysis.py (new helper)", "/app/backend/tests/seed_ui_progress.py (new helper)"],
+  "success_rate": {"backend": "not re-run (main agent reported 16/16)", "frontend": "95% - every requested flow passed; 1 race-condition bug in Profile (MEDIUM)"},
+  "seed_data_creation": "For test device dev_mwj9ydoi_gs5r5au3: 1 analysis through POST /api/analyses (color bars, is_bowling_video=false) and 2 TEST_seed bowling analyses inserted into Mongo. All 3 were deleted through the UI delete flow. Coach messages were cleared through the UI. Profiles were saved for test devices dev_mwj9ydoi_gs5r5au3 (TEST_Jimmy) and dev_TEST_fresh_1794834471 (TEST_Fresh). There is no profile delete endpoint, so these 2 profile docs remain.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The browser context starts fresh each run. Set localStorage device_id as a JSON string (JSON.stringify('dev_x')) and reload. drill-back-button needs a JS click (the element is 0 height). Use seed_ui_progress.py <device_id> to get bowling data for Progress, then delete the rows through the UI.",
+  "rca_of_issue": "Profile reset: profile.tsx sets the form from profile.data inside useEffect([profile.data]). The profile screen fires its own GET /profile on mount (2 GETs seen before the PUT). If the user edits before that GET returns, or a refetch happens later, the form is reset. For a new device the backend returns a new unsaved Profile object on every call (new id/updated_at), so React Query sees changed data each time and the effect runs again. Captured PUT body in the failing run: name 'Bowler', arm 'Right' despite the user's input."
+}

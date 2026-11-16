@@ -1,0 +1,168 @@
+{
+  "app_name": "PaceSensei",
+  "personality": "7 Dark-First Utility with 6 Glass / Luxe surfaces",
+  "personality_one_liner": "A premium, athletic command center that turns raw bowling footage into high-contrast, actionable data.",
+  "color": {
+    "surface": "#0F1115",
+    "onSurface": "#FFFFFF",
+    "surfaceSecondary": "#1A1D24",
+    "onSurfaceSecondary": "#E2E8F0",
+    "surfaceTertiary": "#252933",
+    "onSurfaceTertiary": "#CBD5E1",
+    "surfaceInverse": "#FFFFFF",
+    "onSurfaceInverse": "#0F1115",
+    "brand": "#FF5A25",
+    "brandPrimary": "#FF5A25",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#FF7E54",
+    "onBrandSecondary": "#000000",
+    "brandTertiary": "rgba(255, 90, 37, 0.15)",
+    "onBrandTertiary": "#FF5A25",
+    "success": "#10B981",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#FFFFFF",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#3B82F6",
+    "onInfo": "#FFFFFF",
+    "border": "#2D3340",
+    "borderStrong": "#3F4759",
+    "divider": "#2D3340",
+    "muted": "#94A3B8",
+    "onBrand": "#FFFFFF"
+  },
+  "typography": {
+    "displayFontFamily": "BarlowCondensed-Medium",
+    "textFontFamily": "Manrope-Medium",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use tight, dashboard-like spacing for data-heavy sections, but generous margins (lg/xl) around hero cards and main layout boundaries. Whitespace isolates important metrics.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 4,
+    "md": 8,
+    "lg": 16,
+    "pill": 999
+  },
+  "shadow_tier": 0,
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use on the bottom tab bar.",
+      "Use on sticky headers over scrolling content.",
+      "Use as an overlay on the hero image in the Home screen for the 'New Analysis' card."
+    ],
+    "dont's": [
+      "Do not use on dense data rows or phase score cards.",
+      "Do not use on form inputs or standard buttons."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "Dashboard showing the latest session overview, quick 'Record/Upload' CTA, and primary faults to focus on.",
+      "states": {
+        "loading": "Centered brand-colored spinner",
+        "empty": "Illustration of a cricket ball with 'No sessions yet. Upload your first delivery.'",
+        "error": "Failed to load dashboard data. Retry button."
+      },
+      "layout": "Header with 'PaceSensei' wordmark and Profile icon. Top section: A large Hero Glass Card displaying the most recent delivery's score over a darkened photo background, with a sticky primary CTA to 'Analyze New Delivery'. Below: 'Focus Areas' (horizontal scroll of fault cards) and 'Recent Sessions' (vertical list)."
+    },
+    {
+      "name": "Analyze",
+      "purpose": "Camera upload flow and the detailed AI Analysis Report of a specific delivery.",
+      "states": {
+        "loading": "Analyzing delivery... (upload progress / skeleton for report)",
+        "empty": "Camera preview or upload placeholder state.",
+        "error": "Analysis failed. Please ensure the video is clear and side-on."
+      },
+      "layout": "Two views. View 1 (Upload/Record): large camera preview area with overlays for framing. View 2 (Report): Video player at the top (sticky), followed by Overall Score (out of 10) in a large condensed font. Below that, a 2-column grid of Phase Scores (Run-up, Load, etc.). Then, highlighted Faults, estimated Pace Band (gauge chart), and an Injury-Risk/Mixed Action indicator pill."
+    },
+    {
+      "name": "Drills",
+      "purpose": "Library of personalized drills targeting the user's specific bowling faults.",
+      "states": {
+        "loading": "Skeleton list of drill cards.",
+        "empty": "No drills assigned yet. Analyze a delivery to get personalized drills.",
+        "error": "Failed to load drills."
+      },
+      "layout": "Filter chips at the top (e.g., 'Run-up', 'Release', 'All'). Vertical list of Drill Cards. Each card has a cover image (with gradient scrim), drill title, duration, and target fault badge."
+    },
+    {
+      "name": "Progress",
+      "purpose": "Charts and historical data tracking pace, score, and injury risk over time.",
+      "states": {
+        "loading": "Skeleton charts.",
+        "empty": "Not enough data to show progress. Keep bowling!",
+        "error": "Could not load progress data."
+      },
+      "layout": "Segmented control (Pace, Score, Faults). A large interactive chart area at the top (using a minimalist aesthetic). Below the chart, a list of 'Session History' grouped by date, showing mini pace-band and score metrics for each recorded delivery."
+    }
+  ],
+  "images": {
+    "home_hero_bg": {
+      "url": "https://images.pexels.com/photos/12732253/pexels-photo-12732253.jpeg",
+      "dark": "https://images.pexels.com/photos/12732253/pexels-photo-12732253.jpeg",
+      "alt": "Cricketer preparing to bowl"
+    },
+    "analyze_thumbnail": {
+      "url": "https://images.pexels.com/photos/34497242/pexels-photo-34497242.jpeg",
+      "dark": "https://images.pexels.com/photos/34497242/pexels-photo-34497242.jpeg",
+      "alt": "Cricketer mid-action bowling"
+    },
+    "drill_agility_ladder": {
+      "url": "https://images.pexels.com/photos/39423291/pexels-photo-39423291.jpeg",
+      "dark": "https://images.pexels.com/photos/39423291/pexels-photo-39423291.jpeg",
+      "alt": "Agility ladder drills"
+    },
+    "drill_cones": {
+      "url": "https://images.pexels.com/photos/13204961/pexels-photo-13204961.jpeg",
+      "dark": "https://images.pexels.com/photos/13204961/pexels-photo-13204961.jpeg",
+      "alt": "Marker cones training"
+    },
+    "progress_chart_bg": {
+      "url": "https://images.unsplash.com/photo-1551288049-bebda4e38f71",
+      "dark": "https://images.unsplash.com/photo-1551288049-bebda4e38f71",
+      "alt": "Performance analytics charts"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Follow the '7 Dark-First Utility' personality strictly. Use the deep obsidian (#0F1115) background and the neon orange (#FF5A25) sparingly for highlights, primary CTAs, and key data points.",
+    "Implement a premium 'Glass / Luxe' feel by applying `expo-blur` (or equivalent fallback) to the bottom tab bar and sticky headers. This provides depth without overwhelming the dark theme.",
+    "For the 'Analyze' screen's report, use a tight, dashboard-style grid for the 6 phase scores (Run-up, Load/gather, Back-foot contact, Front-foot contact, Release, Follow-through). Use `surfaceSecondary` cards with `brandPrimary` text for the scores.",
+    "Ensure the 'Injury-risk/Mixed action' indicator is prominently displayed in the report, using the 'warning' (#F59E0B) or 'error' (#EF4444) token if risk is high.",
+    "All cards containing background images (like the Home hero or Drill cards) MUST use a top-to-bottom linear gradient scrim (transparent to ≥70% surfaceInverse/black) to ensure text readability.",
+    "Do NOT use pure black backgrounds or extreme white text; rely on the provided `surface` and `onSurfaceSecondary` tokens to reduce eye fatigue.",
+    "Mock the AI video analysis flow: uploading a video should show a realistic loading/analyzing state for 2-3 seconds before revealing the mock detailed report.",
+    "Ensure 'BarlowCondensed' or a similar condensed font is loaded and used for large numbers, scores, and primary headings to reinforce the athletic vibe."
+  ]
+}
