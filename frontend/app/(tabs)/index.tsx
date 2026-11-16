@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAnalyses, useProfile } from "@/src/api";
 import { IMAGES, fonts, phaseLabel, radius, space } from "@/src/constants";
 import { SessionRow } from "@/src/components/SessionRow";
-import { EmptyState, ErrorBanner, Ionicons, Loading, Pill, PressScale, PrimaryButton, SectionTitle, riskColor } from "@/src/components/ui";
+import { EmptyState, ErrorBanner, Ionicons, Loading, Pill, PressScale, PrimaryButton, SectionTitle, Wordmark, riskColor } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
 import { useRequirePro, useSubscription } from "@/src/revenuecat";
 import { makeStyles, useTheme } from "@/src/theme";
@@ -30,8 +30,8 @@ export default function Home() {
     <View style={s.screen}>
       <View style={[s.header, { paddingTop: insets.top + space.sm }]}>
         <View>
-          <Text style={s.hello}>Hi {profile.data?.name ?? "Bowler"}</Text>
-          <Text style={s.wordmark} testID="app-wordmark">PACE<Text style={{ color: colors.brandPrimary }}>SENSEI</Text></Text>
+          <Text style={s.hello}>Performance Lab · {profile.data?.name ?? "Bowler"}</Text>
+          <Wordmark />
         </View>
         <PressScale testID="open-profile-button" style={s.iconBtn} onPress={() => router.push("/profile")}>
           <Ionicons name="person" size={20} color={colors.onSurface} />
@@ -40,7 +40,7 @@ export default function Home() {
 
       <ScrollView
         contentContainerStyle={{ padding: space.lg, paddingBottom: bottomChrome + space.xl, gap: space.xl }}
-        refreshControl={<RefreshControl tintColor={colors.brandPrimary} refreshing={analyses.isRefetching} onRefresh={() => { analyses.refetch(); profile.refetch(); }} />}
+        refreshControl={<RefreshControl tintColor={colors.accent} refreshing={analyses.isRefetching} onRefresh={() => { analyses.refetch(); profile.refetch(); }} />}
       >
         <Animated.View entering={FadeInDown.duration(400)} style={s.hero} testID="home-hero-card">
           <Image source={{ uri: IMAGES.hero }} style={s.heroImg} contentFit="cover" transition={300} />
@@ -60,11 +60,11 @@ export default function Home() {
               </>
             ) : (
               <>
-                <Text style={s.heroLabel}>AI BOWLING COACH</Text>
-                <Text style={s.heroTitle}>Film one delivery.{"\n"}Get a pro breakdown.</Text>
+                <Text style={s.heroLabel}>BIOMECHANICS ANALYSIS</Text>
+                <Text style={s.heroTitle}>Precision analysis{"\n"}for fast bowlers.</Text>
               </>
             )}
-            <PrimaryButton testID="home-analyze-cta" label="Analyze New Delivery" icon="videocam" onPress={() => router.push("/analyze")} />
+            <PrimaryButton testID="home-analyze-cta" label="New Analysis" icon="videocam" onPress={() => router.push("/analyze")} />
           </View>
         </Animated.View>
 
@@ -75,20 +75,20 @@ export default function Home() {
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                <Text style={s.coachTitle}>Live Coaching Session</Text>
-                {!isSubscribed ? <Pill label="Pro" color={colors.brandPrimary} /> : null}
+                <Text style={s.coachTitle}>Live Session</Text>
+                {!isSubscribed ? <Pill label="Pro" color={colors.accent} /> : null}
               </View>
-              <Text style={s.coachBody}>Film ball after ball while your AI coach talks you through it</Text>
+              <Text style={s.coachBody}>Ball-by-ball capture with real-time voice feedback</Text>
             </View>
             <Ionicons name="arrow-forward" size={20} color={colors.muted} />
           </PressScale>
           <PressScale testID="home-coach-card" style={s.coach} onPress={() => requirePro(() => router.push("/coach"))}>
             <View style={s.coachIcon}>
-              <Ionicons name="chatbubbles" size={22} color={colors.brandPrimary} />
+              <Ionicons name="chatbubbles" size={22} color={colors.accent} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.coachTitle}>Ask your AI Coach</Text>
-              <Text style={s.coachBody}>ChatGPT-powered advice on pace, action & injury prevention</Text>
+              <Text style={s.coachTitle}>AI Performance Assistant</Text>
+              <Text style={s.coachBody}>ChatGPT-powered insight on pace, action and load management</Text>
             </View>
             <Ionicons name="arrow-forward" size={20} color={colors.muted} />
           </PressScale>
@@ -136,13 +136,13 @@ const useStyles = makeStyles((c) => ({
   heroImg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   heroScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   heroContent: { flex: 1, justifyContent: "flex-end", padding: space.lg, gap: space.md },
-  heroLabel: { fontFamily: fonts.textXBold, fontSize: 12, color: c.brandPrimary, letterSpacing: 1.5 },
+  heroLabel: { fontFamily: fonts.textXBold, fontSize: 12, color: c.accent, letterSpacing: 1.5 },
   heroScoreRow: { flexDirection: "row", alignItems: "flex-end" },
-  heroScore: { fontFamily: fonts.display, fontSize: 84, lineHeight: 84, color: c.onSurface },
+  heroScore: { fontFamily: fonts.displaySemi, fontSize: 72, lineHeight: 80, letterSpacing: -2, color: c.onSurface },
   heroOutOf: { fontFamily: fonts.displaySemi, fontSize: 28, color: c.muted, marginBottom: 10, marginLeft: 4 },
-  heroTitle: { fontFamily: fonts.display, fontSize: 40, lineHeight: 42, color: c.onSurface, textTransform: "uppercase" },
+  heroTitle: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34, color: c.onSurface, letterSpacing: -0.3 },
   coach: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
-  sessionCard: { borderColor: c.brandPrimary },
+  sessionCard: { borderColor: c.accentLine },
   coachIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
   coachTitle: { fontFamily: fonts.textXBold, fontSize: 16, color: c.onSurface },
   coachBody: { fontFamily: fonts.text, fontSize: 12, color: c.muted, marginTop: 2 },

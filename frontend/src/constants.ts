@@ -1,6 +1,7 @@
 export const fonts = {
-  display: "BarlowCondensed-Bold",
-  displaySemi: "BarlowCondensed-SemiBold",
+  display: "Sora-SemiBold",
+  displaySemi: "Sora-Medium",
+  mono: "JetBrainsMono-Medium",
   text: "Manrope-Medium",
   textBold: "Manrope-Bold",
   textXBold: "Manrope-ExtraBold",

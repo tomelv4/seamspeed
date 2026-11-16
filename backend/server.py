@@ -277,7 +277,7 @@ def parse_json(text: str) -> dict:
 # ---------------------------------------------------------------- routes
 @api_router.get("/")
 async def root():
-    return {"message": "PaceSensei API"}
+    return {"message": "PACED API"}
 
 
 @api_router.get("/profile")
@@ -490,7 +490,7 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
     transcript = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in history)
 
     system = (
-        "You are PaceSensei Coach, a world-class fast-bowling coach. Give concise, practical, encouraging advice "
+        "You are PACED Coach, a world-class fast-bowling coach. Give concise, practical, encouraging advice "
         "(max ~150 words, short bullet points when listing). Prioritise injury prevention for young quicks. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. "
         f"Recent analyses: {json.dumps(context)}. "
@@ -639,7 +639,7 @@ async def coach_say(system: str, prompt: str) -> str:
 
 def coach_system(profile: Profile, focus: str) -> str:
     return (
-        "You are PaceSensei, a live fast-bowling net coach speaking out loud to the bowler between deliveries. "
+        "You are PACED, a live fast-bowling net coach speaking out loud to the bowler between deliveries. "
         "Talk like a real coach at the nets: short, punchy, specific, encouraging. Plain spoken English only, no lists, no markdown, no emojis. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. Session focus: {focus}."
     )

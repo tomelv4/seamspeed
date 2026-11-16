@@ -167,7 +167,7 @@ export default function Report() {
                         <Text style={s.body}>{f.description}</Text>
                         {f.fix ? (
                           <View style={s.fixRow}>
-                            <Ionicons name="construct" size={14} color={colors.brandPrimary} />
+                            <Ionicons name="construct" size={14} color={colors.accent} />
                             <Text style={[s.body, { flex: 1, color: colors.onSurface }]}>{f.fix}</Text>
                           </View>
                         ) : null}
@@ -203,7 +203,8 @@ export default function Report() {
             </>
           ) : null}
 
-          <PrimaryButton testID="report-ask-coach-button" label="Ask AI Coach about this" icon="chatbubbles" onPress={() => router.push("/coach")} />
+          <PrimaryButton testID="report-compare-button" label="Compare with another delivery" icon="git-compare" variant="secondary" onPress={() => router.push("/compare")} />
+          <PrimaryButton testID="report-ask-coach-button" label="Ask AI Assistant about this" icon="chatbubbles" onPress={() => router.push("/coach")} />
         </ScrollView>
       )}
     </View>
@@ -213,7 +214,7 @@ export default function Report() {
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.surface },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.lg, paddingBottom: space.sm, borderBottomWidth: 1, borderBottomColor: c.divider },
-  headerTitle: { fontFamily: fonts.display, fontSize: 22, color: c.onSurface, textTransform: "uppercase" },
+  headerTitle: { fontFamily: fonts.display, fontSize: 15, color: c.onSurface, textTransform: "uppercase", letterSpacing: 2.5 },
   iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   confirm: { padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.error, gap: space.md },
   confirmText: { fontFamily: fonts.textBold, fontSize: 15, color: c.onSurface },
@@ -221,7 +222,7 @@ const useStyles = makeStyles((c) => ({
   smallBtnText: { fontFamily: fonts.textBold, fontSize: 14, color: c.onSurface },
   scoreCard: { padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.md },
   kicker: { fontFamily: fonts.textXBold, fontSize: 11, color: c.muted, letterSpacing: 1.5 },
-  bigScore: { fontFamily: fonts.display, fontSize: 96, lineHeight: 96 },
+  bigScore: { fontFamily: fonts.displaySemi, fontSize: 80, lineHeight: 88, letterSpacing: -2 },
   outOf: { fontFamily: fonts.displaySemi, fontSize: 30, color: c.muted, marginBottom: 12, marginLeft: 4 },
   summary: { fontFamily: fonts.text, fontSize: 14, lineHeight: 21, color: c.onSurfaceSecondary },
   metric: { padding: space.md, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: 4 },
@@ -242,7 +243,7 @@ const useStyles = makeStyles((c) => ({
   phaseFeedback: { fontFamily: fonts.text, fontSize: 12, lineHeight: 17, color: c.muted },
   fault: { padding: space.md, borderRadius: radius.md, backgroundColor: c.surfaceSecondary, borderLeftWidth: 3, gap: 6 },
   faultTitle: { flex: 1, fontFamily: fonts.textXBold, fontSize: 15, color: c.onSurface },
-  faultPhase: { fontFamily: fonts.textBold, fontSize: 12, color: c.brandPrimary },
+  faultPhase: { fontFamily: fonts.textBold, fontSize: 12, color: c.accent },
   body: { fontFamily: fonts.text, fontSize: 13, lineHeight: 19, color: c.onSurfaceTertiary },
   fixRow: { flexDirection: "row", gap: space.sm, alignItems: "flex-start", paddingTop: 4 },
   listRow: { flexDirection: "row", gap: space.md, alignItems: "flex-start", marginBottom: space.sm },

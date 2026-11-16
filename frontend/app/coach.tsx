@@ -106,11 +106,11 @@ export default function Coach() {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             history.isLoading ? (
-              <ActivityIndicator color={colors.brandPrimary} />
+              <ActivityIndicator color={colors.accent} />
             ) : (
               <View style={s.empty} testID="coach-empty">
                 <View style={s.emptyIcon}>
-                  <Ionicons name="chatbubbles" size={30} color={colors.brandPrimary} />
+                  <Ionicons name="chatbubbles" size={30} color={colors.accent} />
                 </View>
                 <Text style={s.emptyTitle}>Your fast-bowling coach</Text>
                 <Text style={s.emptyBody}>Ask anything about pace, swing, your action or injury prevention. I know your latest reports.</Text>
@@ -122,7 +122,7 @@ export default function Coach() {
               {item.content ? (
                 <Text style={[s.bubbleText, item.role === "user" && { color: colors.onBrandPrimary }]}>{item.content.replace(/\*\*/g, "").replace(/^#+\s/gm, "")}</Text>
               ) : (
-                <ActivityIndicator size="small" color={colors.brandPrimary} />
+                <ActivityIndicator size="small" color={colors.accent} />
               )}
             </View>
           )}
@@ -160,12 +160,12 @@ export default function Coach() {
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.surface },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.lg, paddingBottom: space.sm, borderBottomWidth: 1, borderBottomColor: c.divider },
-  headerTitle: { fontFamily: fonts.display, fontSize: 22, color: c.onSurface, textTransform: "uppercase" },
+  headerTitle: { fontFamily: fonts.display, fontSize: 15, color: c.onSurface, textTransform: "uppercase", letterSpacing: 2.5 },
   headerSub: { fontFamily: fonts.text, fontSize: 11, color: c.muted },
   iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: space.sm, padding: space.xl },
   emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
-  emptyTitle: { fontFamily: fonts.display, fontSize: 26, color: c.onSurface, textTransform: "uppercase" },
+  emptyTitle: { fontFamily: fonts.display, fontSize: 18, color: c.onSurface, letterSpacing: 0.5 },
   emptyBody: { fontFamily: fonts.text, fontSize: 14, color: c.muted, textAlign: "center", lineHeight: 20 },
   bubble: { maxWidth: "85%", padding: space.md, borderRadius: radius.lg },
   user: { alignSelf: "flex-end", backgroundColor: c.brandPrimary, borderBottomRightRadius: radius.sm },

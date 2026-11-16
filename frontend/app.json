@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "PaceSensei",
+    "name": "PACED",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0F1115",
+    "backgroundColor": "#101312",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.emergent.seamspeed.vajl9h",
@@ -41,7 +41,7 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#0F1115"
+          "backgroundColor": "#101312"
         }
       ],
       "expo-font",

@@ -56,11 +56,24 @@ export function PrimaryButton({
   );
 }
 
+export function Wordmark({ size = 24 }: { size?: number }) {
+  const s = useStyles();
+  return (
+    <View style={s.wordmarkRow} testID="app-wordmark">
+      <View style={s.wordmarkMark}><View style={s.wordmarkCore} /></View>
+      <Text style={[s.wordmark, { fontSize: size }]}>PACED</Text>
+    </View>
+  );
+}
+
 export function SectionTitle({ title, action, onAction, testID }: { title: string; action?: string; onAction?: () => void; testID?: string }) {
   const s = useStyles();
   return (
     <View style={s.sectionRow}>
-      <Text style={s.sectionTitle}>{title}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+        <View style={s.tick} />
+        <Text style={s.sectionTitle}>{title}</Text>
+      </View>
       {action ? (
         <Pressable testID={testID} onPress={onAction} hitSlop={12}>
           <Text style={s.sectionAction}>{action}</Text>
@@ -98,7 +111,7 @@ export function EmptyState({ icon, title, body, children, testID }: { icon: Icon
   return (
     <View testID={testID} style={s.empty}>
       <View style={s.emptyIcon}>
-        <Ionicons name={icon} size={32} color={colors.brandPrimary} />
+        <Ionicons name={icon} size={32} color={colors.accent} />
       </View>
       <Text style={s.emptyTitle}>{title}</Text>
       <Text style={s.emptyBody}>{body}</Text>
@@ -111,7 +124,7 @@ export function Loading({ testID }: { testID?: string }) {
   const { colors } = useTheme();
   return (
     <View testID={testID} style={{ padding: space.xxxl, alignItems: "center" }}>
-      <ActivityIndicator color={colors.brandPrimary} size="large" />
+      <ActivityIndicator color={colors.accent} size="large" />
     </View>
   );
 }
@@ -152,13 +165,18 @@ export function Bars({ data, max, color, height = 140, format }: {
 }
 
 const useStyles = makeStyles((c) => ({
-  btn: { minHeight: 52, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, paddingHorizontal: space.xl },
-  btnPrimary: { backgroundColor: c.brandPrimary },
+  btn: { minHeight: 52, borderRadius: radius.md, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, paddingHorizontal: space.xl },
+  btnPrimary: { backgroundColor: c.brandPrimary, borderWidth: 1, borderColor: c.accentLine },
   btnSecondary: { backgroundColor: c.surfaceTertiary, borderWidth: 1, borderColor: c.border },
-  btnText: { fontFamily: fonts.textXBold, fontSize: 16, letterSpacing: 0.3 },
+  btnText: { fontFamily: fonts.textBold, fontSize: 15, letterSpacing: 0.8 },
   sectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.md },
-  sectionTitle: { fontFamily: fonts.display, fontSize: 22, color: c.onSurface, textTransform: "uppercase", letterSpacing: 0.5 },
-  sectionAction: { fontFamily: fonts.textBold, fontSize: 14, color: c.brandPrimary },
+  sectionTitle: { fontFamily: fonts.displaySemi, fontSize: 13, color: c.onSurfaceTertiary, textTransform: "uppercase", letterSpacing: 2.5 },
+  tick: { width: 3, height: 14, borderRadius: 1, backgroundColor: c.accent },
+  wordmark: { fontFamily: fonts.display, fontSize: 24, color: c.onSurface, letterSpacing: 9 },
+  wordmarkRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  wordmarkMark: { width: 18, height: 18, borderRadius: 3, borderWidth: 1.5, borderColor: c.accent, alignItems: "center", justifyContent: "center" },
+  wordmarkCore: { width: 6, height: 6, backgroundColor: c.accent, borderRadius: 1 },
+  sectionAction: { fontFamily: fonts.textBold, fontSize: 14, color: c.accent },
   pill: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4, alignSelf: "flex-start" },
   pillText: { fontFamily: fonts.textBold, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   empty: { alignItems: "center", padding: space.xl, gap: space.sm, backgroundColor: c.surfaceSecondary, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border },

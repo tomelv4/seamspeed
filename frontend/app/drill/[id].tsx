@@ -37,7 +37,7 @@ export default function DrillDetail() {
         ) : (
           <View style={s.body}>
             <View style={{ flexDirection: "row", gap: space.sm }}>
-              <Pill label={phaseLabel(d.phase)} color={colors.brandPrimary} />
+              <Pill label={phaseLabel(d.phase)} color={colors.accent} />
               <Pill label={d.duration} color={colors.onSurface} icon="time-outline" />
               <Pill label={d.level} color={colors.muted} />
             </View>
@@ -67,10 +67,10 @@ const useStyles = makeStyles((c) => ({
   fill: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   back: { position: "absolute", left: space.lg, width: 44, height: 44, borderRadius: 22, backgroundColor: c.scrim, alignItems: "center", justifyContent: "center" },
   body: { paddingHorizontal: space.lg, gap: space.md, marginTop: -space.xl },
-  title: { fontFamily: fonts.display, fontSize: 36, color: c.onSurface, textTransform: "uppercase" },
+  title: { fontFamily: fonts.display, fontSize: 26, color: c.onSurface, letterSpacing: -0.3 },
   desc: { fontFamily: fonts.text, fontSize: 15, lineHeight: 22, color: c.onSurfaceSecondary },
   kicker: { fontFamily: fonts.textXBold, fontSize: 12, color: c.muted, letterSpacing: 1.5, marginTop: space.md },
   step: { flexDirection: "row", gap: space.md, padding: space.md, borderRadius: radius.md, backgroundColor: c.surfaceSecondary, alignItems: "center" },
-  stepNum: { fontFamily: fonts.display, fontSize: 24, color: c.brandPrimary, width: 24 },
+  stepNum: { fontFamily: fonts.display, fontSize: 24, color: c.accent, width: 24 },
   stepText: { flex: 1, fontFamily: fonts.text, fontSize: 14, color: c.onSurface },
 }));

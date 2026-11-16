@@ -115,7 +115,7 @@ export default function Analyze() {
                 <Ionicons
                   name={i < step ? "checkmark-circle" : i === step ? "ellipse" : "ellipse-outline"}
                   size={20}
-                  color={i <= step ? colors.brandPrimary : colors.borderStrong}
+                  color={i <= step ? colors.accent : colors.borderStrong}
                 />
                 <Text style={[s.stepText, i <= step && { color: colors.onSurface }]}>{label}</Text>
               </View>
@@ -124,7 +124,7 @@ export default function Analyze() {
         ) : video ? (
           <Animated.View entering={FadeInDown} style={s.previewCard} testID="video-selected-card">
             <View style={s.previewIcon}>
-              <Ionicons name="film" size={28} color={colors.brandPrimary} />
+              <Ionicons name="film" size={28} color={colors.accent} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.previewTitle} numberOfLines={1}>{video.name}</Text>
@@ -148,7 +148,7 @@ export default function Analyze() {
 
         {perm !== "idle" && !busy ? (
           <View style={s.permCard} testID="camera-permission-card">
-            <Ionicons name="camera" size={22} color={colors.brandPrimary} />
+            <Ionicons name="camera" size={22} color={colors.accent} />
             <View style={{ flex: 1, gap: space.sm }}>
               <Text style={s.permTitle}>Camera access needed</Text>
               <Text style={s.permBody}>
@@ -180,7 +180,7 @@ export default function Analyze() {
           <View style={{ gap: space.md }}>
             {freeUsed ? (
               <PressScale testID="free-used-banner" style={s.freeBanner} onPress={() => router.push("/paywall")}>
-                <Ionicons name="lock-closed" size={18} color={colors.brandPrimary} />
+                <Ionicons name="lock-closed" size={18} color={colors.accent} />
                 <Text style={s.freeText}>Your free analysis is used. Go Pro for unlimited analyses.</Text>
                 <Ionicons name="chevron-forward" size={18} color={colors.muted} />
               </PressScale>
@@ -219,7 +219,7 @@ export default function Analyze() {
               ["timer", "One delivery per clip, 5-15 seconds"],
             ].map(([icon, text]) => (
               <View key={text} style={s.tipRow}>
-                <Ionicons name={icon as any} size={18} color={colors.brandPrimary} />
+                <Ionicons name={icon as any} size={18} color={colors.accent} />
                 <Text style={s.tipText}>{text}</Text>
               </View>
             ))}
@@ -233,14 +233,14 @@ export default function Analyze() {
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.surface },
   header: { paddingHorizontal: space.lg, paddingBottom: space.md, borderBottomWidth: 1, borderBottomColor: c.divider },
-  title: { fontFamily: fonts.display, fontSize: 32, color: c.onSurface, textTransform: "uppercase" },
+  title: { fontFamily: fonts.display, fontSize: 24, color: c.onSurface, textTransform: "uppercase", letterSpacing: 2 },
   subtitle: { fontFamily: fonts.text, fontSize: 13, color: c.muted },
   drop: { height: 260, borderRadius: radius.lg, overflow: "hidden", backgroundColor: c.surfaceSecondary },
   dropImg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.45 },
   dropOverlay: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.lg, gap: space.md },
-  frame: { width: "70%", height: 150, borderWidth: 2, borderStyle: "dashed", borderColor: c.brandPrimary, borderRadius: radius.md },
+  frame: { width: "70%", height: 150, borderWidth: 2, borderStyle: "dashed", borderColor: c.accentLine, borderRadius: radius.md },
   dropText: { fontFamily: fonts.textBold, fontSize: 13, color: c.onSurface, textAlign: "center" },
-  previewCard: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.brandPrimary },
+  previewCard: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.accentLine },
   previewIcon: { width: 56, height: 56, borderRadius: radius.md, backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
   previewTitle: { fontFamily: fonts.textBold, fontSize: 15, color: c.onSurface },
   previewMeta: { fontFamily: fonts.text, fontSize: 12, color: c.muted, marginTop: 2 },
@@ -259,7 +259,7 @@ const useStyles = makeStyles((c) => ({
   smallBtnGhost: { backgroundColor: c.surfaceTertiary },
   smallBtnText: { fontFamily: fonts.textBold, fontSize: 13, color: c.onBrandPrimary },
   tips: { padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, gap: space.md },
-  freeBanner: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.brandTertiary, borderWidth: 1, borderColor: c.brandPrimary },
+  freeBanner: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.brandTertiary, borderWidth: 1, borderColor: c.accentLine },
   freeText: { flex: 1, fontFamily: fonts.textBold, fontSize: 13, color: c.onSurface },
   freeHint: { fontFamily: fonts.textBold, fontSize: 12, color: c.muted, textAlign: "center" },
   tipsTitle: { fontFamily: fonts.textXBold, fontSize: 12, color: c.muted, letterSpacing: 1.5 },

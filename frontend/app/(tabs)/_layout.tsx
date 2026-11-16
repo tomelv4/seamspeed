@@ -12,7 +12,7 @@ export default function TabsLayout() {
 
   if (usesNativeTabs) {
     return (
-      <NativeTabs tintColor={colors.brandPrimary}>
+      <NativeTabs tintColor={colors.accent}>
         <NativeTabs.Trigger name="index">
           <NativeTabs.Trigger.Icon sf="house.fill" />
           <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
@@ -39,7 +39,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.brandPrimary,
+        tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
         tabBarStyle: {
           backgroundColor: colors.surfaceSecondary,

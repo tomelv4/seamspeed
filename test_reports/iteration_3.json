@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend-only test at 390x844 of the PACED rebrand, Pro Action Overlay, Side-by-Side Compare, the paywall trial and a regression smoke test. Passed: PACED wordmark; no 'PaceSensei'/'Sensei' text on any screen; no #FF5A25 orange anywhere (the only orange-like colour is the intentional warning gold #D4A955 on amber markers and scores); light-green active tab (#8FC9A3). Pro toggle adds a dashed silver ghost (13 dashed SVG elements, stroke #AEB4B6 '6 4') and removes it when toggled off. step-row taps seek and pause the video (FFC 2.15s, shoulder_internal_rotation 2.3s). Player controls fit within 16-374px with no horizontal overflow. report-compare-button goes to /compare. Non-Pro users see compare-locked, and progress-compare-button opens the paywall. Pro compare works: 2+2 pick chips, two players with ghost overlays, 27 step chips, a step card with score and angle deltas, 27 rows, and a step tap seeks both videos to their own step times. Regression passed: tabs, Analyze buttons (both open a file chooser), Drills and Progress locked for non-Pro, Live Session start for Pro (coach message after about 7s, End works), Coach and Drills unlocked for Pro. Main bug: the compare screen's first load does not seek the videos (both stay at 0.00s) while the overlay and badge show step 13 FFC. The 7-day trial does not show because RevenueCat returns trial:null and intro_price:null for pro.annual. No deprecated Expo packages were found (expo-video is used).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Compare initial load", "issue": "On first load of /compare, both videos stay paused at currentTime 0.00 (checked after 2s and 7s, readyState 4), but the step badge and step card show '13. Front-Foot Contact' and the skeleton overlay is drawn at the FFC timestamp (pausedAt). So the video frame does not match the skeleton until the user taps a step chip. Tapping a step chip or row seeks correctly (A 1.98s / B 1.70s).", "testID": "compare-players", "priority": "HIGH"},
+      {"component": "Paywall yearly trial", "issue": "The yearly package subtitle shows '$6.66 / month, billed yearly' and $79.99, with no '7-day free trial'. The RevenueCat products response for pro.annual has trial:null and intro_price:null, so no trial is configured in the Test Store/dashboard. The code also hardcodes '7-day' instead of reading the intro period, and the CTA still says 'Continue' instead of 'Start free trial'.", "testID": "paywall-package-annual", "priority": "MEDIUM"},
+      {"component": "Compare picker", "issue": "The same delivery can be picked as both A and B (for example, tapping the first A chip made A == B). Chip labels are only 'date · score' (both read 'Nov 16 · 6.8'), so two deliveries from the same day are hard to tell apart.", "testID": "compare-pick-a-*", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Compare (compact players ~175px wide)", "issues": ["The 16px angle labels (159°, 88°) and the full skeleton crowd together and overlap on the small side-by-side players. Hide the labels or shrink the font in compact mode.", "The step badge is cut off ('13. Front-Foot Contac…').", "The horizontal step-chip list does not scroll to the selected chip (step 13 is selected, but chips 1-2 are shown)."]},
+      {"screen": "Report player", "issues": ["player-skeleton-toggle is 38px wide (icon only, the label was removed), which is below the 44px touch target. Add a minWidth of 44."]},
+      {"screen": "Progress (Pro)", "issues": ["Recurring-fault counts (×2, ×1) use the green accent, which reads as 'good'. A neutral or warning colour fits better."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/create_ui_analysis.py"],
+  "action_items": [
+    "HIGH: Fix the first seek on the compare screen. In SkeletonPlayer, the seekNonce effect sets player.currentTime before the web video source has loaded, so the seek is lost. Wait for the player's statusChange to 'readyToPlay' (or for duration > 0) and then apply the pending seek. Alternatively, run the seek effect again once the player is ready.",
+    "MEDIUM: Configure a P1W free trial on pro.annual in RevenueCat (the API currently returns trial:null). On web, also check the subscription option's trial and not only product.introPrice. Build the label from the intro period rather than hardcoding '7-day', and change the CTA to 'Start free trial' when the yearly plan with a trial is selected.",
+    "LOW: Stop the same delivery being picked as both A and B (swap or disable it), and add the time to the chip labels.",
+    "LOW: In compact SkeletonPlayer mode, hide the angle labels or use a smaller font, and auto-scroll the compare step chips to the selected one.",
+    "LOW: Give player-skeleton-toggle a minWidth of 44.",
+    "LOW: Clean up the leftover 'PaceSensei' comment in src/theme.ts:1 (not user-visible)."
+  ],
+  "critical_code_review_comments": [
+    "compare.tsx:60 - Picker is defined as a component inside Compare's render, so it is recreated on every render. Its ScrollViews remount, and the horizontal scroll position resets on every step tap. Move it to module scope.",
+    "compare.tsx:129-130 and Delta:164 - A metric value of 0 is treated as missing ('—'), because the code uses truthiness checks instead of '!= null'.",
+    "compare.tsx:121 - Steps are matched by index (A.steps[step] vs B.steps[step]). This is fine while the 27 steps keep a fixed order; matching by key would be safer.",
+    "SkeletonPlayer.tsx:59 - Both compact players autoplay and loop (p.play()) until the first seek. Combined with the lost first seek, the screen opens out of sync."
+  ],
+  "updated_files": ["/app/test_reports/iteration_3.json"],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "~90% (core flows pass; compare first-load seek bug and trial label missing)"},
+  "seed_data_creation": "Created 2 analyses for Pro device TEST_pay_8b3817ff via POST /api/analyses (notes TEST_compare_1/2): ids 6afb0ea55a3108aa70ed4439 and 6afb0ea45a3108aa70ed4437. Kept on purpose so the compare fix can be retested; delete them by id afterwards. Live Session: one test session was created for TEST_pay_8b3817ff.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Pro device TEST_pay_8b3817ff now has 2 video analyses, so it can test compare directly at /compare. Non-Pro device used: TEST_ui_nonpro_it3. The report device dev_mwjb0sq6_aequfxrb is NOT Pro (it sees compare-locked). The orange scan matches #D4A955, the intentional warning gold, which is not a brand-orange regression. The yearly price is $79.99 (known dashboard issue).",
+  "rca_of_issue": "Compare first-load mismatch: when aId/bId are set, the effect at compare.tsx:53-55 bumps the nonce right as the Side players mount. PlayerInner's seek effect (SkeletonPlayer.tsx:81-88) then calls player.pause() and sets player.currentTime = t while the expo-video web source is still loading, so the browser drops the currentTime assignment. pausedAt is still set, so the overlay draws the FFC pose over the frame at 0s. Repro: open /compare on a Pro device with 2+ analyses and read video.currentTime: it is 0.00 while the badge shows step 13. Fix: queue the seek until the player status is readyToPlay or loadedmetadata."
+}

@@ -5,10 +5,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAnalyses, useProgress } from "@/src/api";
 import { PHASES, fonts, radius, space } from "@/src/constants";
 import { SessionRow } from "@/src/components/SessionRow";
-import { Bars, EmptyState, ErrorBanner, Loading, SectionTitle, scoreColor } from "@/src/components/ui";
+import { Bars, EmptyState, ErrorBanner, Ionicons, Loading, SectionTitle, scoreColor } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
 import { ProLocked } from "@/src/components/ProLocked";
-import { useSubscription } from "@/src/revenuecat";
+import { useRequirePro, useSubscription } from "@/src/revenuecat";
+import { useRouter } from "expo-router";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const SEGMENTS = [
@@ -26,6 +27,8 @@ export default function ProgressScreen() {
   const progress = useProgress();
   const analyses = useAnalyses();
   const { isSubscribed } = useSubscription();
+  const requirePro = useRequirePro();
+  const router = useRouter();
   const p = progress.data;
   const last = (p?.points ?? []).slice(-8);
   const label = (d: string) => new Date(d).toLocaleDateString(undefined, { day: "numeric", month: "numeric" });
@@ -33,7 +36,13 @@ export default function ProgressScreen() {
   return (
     <View style={s.screen}>
       <View style={[s.header, { paddingTop: insets.top + space.sm }]}>
-        <Text style={s.title}>Progress</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <Text style={s.title}>Progress</Text>
+          <Pressable testID="progress-compare-button" onPress={() => requirePro(() => router.push("/compare"))} style={s.compareBtn}>
+            <Ionicons name="git-compare" size={16} color={colors.accent} />
+            <Text style={s.compareText}>Compare</Text>
+          </Pressable>
+        </View>
         <View style={s.segment}>
           {SEGMENTS.map((x) => (
             <Pressable key={x.key} testID={`progress-segment-${x.key}`} onPress={() => setSeg(x.key)} style={[s.segBtn, seg === x.key && s.segActive]}>
@@ -44,7 +53,7 @@ export default function ProgressScreen() {
       </View>
       <ScrollView
         contentContainerStyle={{ padding: space.lg, paddingBottom: bottomChrome + space.xl, gap: space.xl }}
-        refreshControl={<RefreshControl tintColor={colors.brandPrimary} refreshing={progress.isRefetching} onRefresh={() => { progress.refetch(); analyses.refetch(); }} />}
+        refreshControl={<RefreshControl tintColor={colors.accent} refreshing={progress.isRefetching} onRefresh={() => { progress.refetch(); analyses.refetch(); }} />}
       >
         {!isSubscribed ? (
           <ProLocked testID="progress-locked" title="Progress is Pro" body="Track pace, scores, phase averages and recurring faults over time." />
@@ -62,7 +71,7 @@ export default function ProgressScreen() {
                 <Text style={s.statLabel}>Deliveries</Text>
               </View>
               <View style={s.stat} testID="stat-best-score">
-                <Text style={[s.statValue, { color: colors.brandPrimary }]}>{p.best_score.toFixed(1)}</Text>
+                <Text style={[s.statValue, { color: colors.accent }]}>{p.best_score.toFixed(1)}</Text>
                 <Text style={s.statLabel}>Best score</Text>
               </View>
               <View style={s.stat} testID="stat-best-pace">
@@ -75,7 +84,7 @@ export default function ProgressScreen() {
               {seg === "score" ? (
                 <>
                   <Text style={s.cardTitle}>Overall score · last {last.length}</Text>
-                  <Bars data={last.map((x) => ({ label: label(x.date), value: x.score }))} max={10} color={colors.brandPrimary} format={(v) => v.toFixed(1)} />
+                  <Bars data={last.map((x) => ({ label: label(x.date), value: x.score }))} max={10} color={colors.accent} format={(v) => v.toFixed(1)} />
                 </>
               ) : seg === "pace" ? (
                 <>
@@ -129,8 +138,10 @@ export default function ProgressScreen() {
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.surface },
   header: { paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.md, borderBottomWidth: 1, borderBottomColor: c.divider },
-  title: { fontFamily: fonts.display, fontSize: 32, color: c.onSurface, textTransform: "uppercase" },
+  title: { fontFamily: fonts.display, fontSize: 24, color: c.onSurface, textTransform: "uppercase", letterSpacing: 2 },
   segment: { flexDirection: "row", backgroundColor: c.surfaceSecondary, borderRadius: radius.pill, padding: 4 },
+  compareBtn: { flexDirection: "row", alignItems: "center", gap: 6, height: 40, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: c.accentLine },
+  compareText: { fontFamily: fonts.textBold, fontSize: 13, color: c.accent },
   segBtn: { flex: 1, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   segActive: { backgroundColor: c.brandPrimary },
   segText: { fontFamily: fonts.textBold, fontSize: 13, color: c.onSurfaceTertiary },
@@ -148,5 +159,5 @@ const useStyles = makeStyles((c) => ({
   faultRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: space.sm },
   divider: { borderTopWidth: 1, borderTopColor: c.divider },
   faultTitle: { flex: 1, fontFamily: fonts.textBold, fontSize: 14, color: c.onSurface },
-  faultCount: { fontFamily: fonts.display, fontSize: 20, color: c.brandPrimary },
+  faultCount: { fontFamily: fonts.mono, fontSize: 18, color: c.warning },
 }));

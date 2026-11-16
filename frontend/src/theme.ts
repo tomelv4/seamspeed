@@ -1,4 +1,4 @@
-// Design tokens for PaceSensei. Dark-first theme (from /app/design_guidelines.json).
+// Design tokens for PACED. Dark-first theme.
 // A plain key is a background, its `on` partner is the text/icon color on top of it.
 
 import { useMemo } from "react";
@@ -7,40 +7,44 @@ import { Appearance, StyleSheet } from "react-native";
 export type ColorScheme = "light" | "dark";
 
 const dark = {
-  surface: "#0F1115",
-  onSurface: "#FFFFFF",
-  surfaceSecondary: "#1A1D24",
-  onSurfaceSecondary: "#E2E8F0",
-  surfaceTertiary: "#252933",
-  onSurfaceTertiary: "#CBD5E1",
-  surfaceInverse: "#FFFFFF",
-  onSurfaceInverse: "#0F1115",
-  muted: "#94A3B8",
+  surface: "#101312",
+  onSurface: "#F2F1EC",
+  surfaceSecondary: "#171B1A",
+  onSurfaceSecondary: "#DCDBD4",
+  surfaceTertiary: "#202523",
+  onSurfaceTertiary: "#B7BCB7",
+  surfaceInverse: "#F2F1EC",
+  onSurfaceInverse: "#101312",
+  muted: "#858C88",
 
-  brand: "#FF5A25",
-  onBrand: "#FFFFFF",
-  brandPrimary: "#FF5A25",
-  onBrandPrimary: "#FFFFFF",
-  brandSecondary: "#FF7E54",
-  onBrandSecondary: "#000000",
-  brandTertiary: "rgba(255, 90, 37, 0.15)",
-  onBrandTertiary: "#FF5A25",
+  brand: "#1B4D36",
+  onBrand: "#F2F1EC",
+  brandPrimary: "#1F5A3F",
+  onBrandPrimary: "#F2F1EC",
+  brandSecondary: "#AEB4B6",
+  onBrandSecondary: "#101312",
+  brandTertiary: "rgba(143, 201, 163, 0.10)",
+  onBrandTertiary: "#8FC9A3",
 
-  success: "#10B981",
-  onSuccess: "#FFFFFF",
-  warning: "#F59E0B",
-  onWarning: "#FFFFFF",
-  error: "#EF4444",
-  onError: "#FFFFFF",
-  info: "#3B82F6",
-  onInfo: "#FFFFFF",
+  accent: "#8FC9A3",
+  accentLine: "#3E7D5E",
+  silver: "#AEB4B6",
 
-  border: "#2D3340",
-  borderStrong: "#3F4759",
-  divider: "#2D3340",
+  success: "#6FBF8E",
+  onSuccess: "#101312",
+  warning: "#D4A955",
+  onWarning: "#101312",
+  error: "#D9645C",
+  onError: "#F2F1EC",
+  info: "#A9BCCB",
+  onInfo: "#101312",
 
-  scrim: "rgba(15, 17, 21, 0.92)",
-  scrimLight: "rgba(15, 17, 21, 0.1)",
+  border: "#262C2A",
+  borderStrong: "#36403C",
+  divider: "#222826",
+
+  scrim: "rgba(16, 19, 18, 0.93)",
+  scrimLight: "rgba(16, 19, 18, 0.15)",
 };
 
 export type ThemeColors = typeof dark;

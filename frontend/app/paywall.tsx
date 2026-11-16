@@ -63,20 +63,29 @@ export default function Paywall() {
   const savePct = (p: PurchasesPackage) =>
     p.packageType === "ANNUAL" && monthly ? Math.round((1 - p.product.price / (monthly.product.price * 12)) * 100) : 0;
 
+  const freeTrial = (p: PurchasesPackage) => {
+    const prod: any = p.product;
+    const phase = prod.introPrice ?? prod.defaultOption?.freePhase ?? prod.trial ?? null;
+    if (!phase) return null;
+    const unit = String(phase.periodUnit ?? phase.period ?? "").toUpperCase();
+    const n = phase.periodNumberOfUnits ?? phase.cycles ?? 1;
+    return unit.includes("W") || unit === "P1W" ? `${n * 7}-day free trial` : unit.includes("D") ? `${n}-day free trial` : "Free trial";
+  };
+
   return (
     <View style={s.screen}>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xl, gap: space.lg }}>
         <PressScale testID="paywall-close-button" style={s.close} onPress={close}>
           <Ionicons name="close" size={22} color={colors.onSurface} />
         </PressScale>
-        <Text style={s.kicker}>PACESENSEI PRO</Text>
-        <Text style={s.title}>Bowl faster.{"\n"}Bowl safer.</Text>
+        <Text style={s.kicker}>PACED PRO</Text>
+        <Text style={s.title}>Engineered{"\n"}for pace.</Text>
         <Text style={s.sub}>Unlock the full AI coaching suite. Your first analysis is free — everything else is Pro.</Text>
 
         <View style={{ gap: space.md }}>
           {FEATURES.map(([icon, text]) => (
             <View key={text} style={s.feature}>
-              <View style={s.featureIcon}><Ionicons name={icon as any} size={18} color={colors.brandPrimary} /></View>
+              <View style={s.featureIcon}><Ionicons name={icon as any} size={18} color={colors.accent} /></View>
               <Text style={s.featureText}>{text}</Text>
             </View>
           ))}
@@ -88,7 +97,7 @@ export default function Paywall() {
             <Text style={s.featureText}>You're Pro. Everything is unlocked.</Text>
           </View>
         ) : isLoading ? (
-          <ActivityIndicator color={colors.brandPrimary} />
+          <ActivityIndicator color={colors.accent} />
         ) : packages.length === 0 ? (
           <ErrorBanner testID="paywall-unavailable" message="Subscription options are unavailable right now. Please try again later." />
         ) : (
@@ -98,10 +107,10 @@ export default function Paywall() {
               const save = savePct(p);
               return (
                 <Pressable key={p.identifier} testID={`paywall-package-${p.packageType.toLowerCase()}`} onPress={() => setSelected(p)} style={[s.pkg, active && s.pkgActive]}>
-                  <Ionicons name={active ? "radio-button-on" : "radio-button-off"} size={22} color={active ? colors.brandPrimary : colors.muted} />
+                  <Ionicons name={active ? "radio-button-on" : "radio-button-off"} size={22} color={active ? colors.accent : colors.muted} />
                   <View style={{ flex: 1 }}>
                     <Text style={s.pkgTitle}>{p.packageType === "ANNUAL" ? "Yearly" : p.packageType === "MONTHLY" ? "Monthly" : p.product.title}</Text>
-                    <Text style={s.pkgSub}>{p.packageType === "ANNUAL" ? `${p.product.pricePerMonthString ?? ""} / month, billed yearly` : "Billed monthly, cancel anytime"}</Text>
+                    <Text style={s.pkgSub}>{p.packageType === "ANNUAL" ? `${freeTrial(p) ? `${freeTrial(p)} · ` : ""}${p.product.pricePerMonthString ?? ""} / month, billed yearly` : "Billed monthly, cancel anytime"}</Text>
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
                     <Text style={s.price}>{p.product.priceString}</Text>
@@ -120,7 +129,7 @@ export default function Paywall() {
         {!isSubscribed && packages.length > 0 ? (
           <PrimaryButton
             testID="paywall-subscribe-button"
-            label="Continue"
+            label={selected && freeTrial(selected) ? "Start free trial" : "Continue"}
             icon="flash"
             disabled={!selected || !identityReady}
             loading={isPurchasing}
@@ -151,15 +160,15 @@ export default function Paywall() {
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.surface },
   close: { alignSelf: "flex-end", width: 44, height: 44, borderRadius: 22, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  kicker: { fontFamily: fonts.textXBold, fontSize: 12, color: c.brandPrimary, letterSpacing: 2 },
-  title: { fontFamily: fonts.display, fontSize: 48, lineHeight: 50, color: c.onSurface, textTransform: "uppercase" },
+  kicker: { fontFamily: fonts.textXBold, fontSize: 12, color: c.accent, letterSpacing: 2 },
+  title: { fontFamily: fonts.display, fontSize: 34, lineHeight: 40, color: c.onSurface, letterSpacing: -0.5 },
   sub: { fontFamily: fonts.text, fontSize: 14, lineHeight: 20, color: c.muted },
   feature: { flexDirection: "row", alignItems: "center", gap: space.md },
   featureIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
   featureText: { flex: 1, fontFamily: fonts.textBold, fontSize: 14, color: c.onSurface },
   proBox: { flexDirection: "row", gap: space.md, alignItems: "center", padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary },
   pkg: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1.5, borderColor: c.border },
-  pkgActive: { borderColor: c.brandPrimary },
+  pkgActive: { borderColor: c.accentLine },
   pkgTitle: { fontFamily: fonts.textXBold, fontSize: 16, color: c.onSurface },
   pkgSub: { fontFamily: fonts.text, fontSize: 12, color: c.muted, marginTop: 2 },
   price: { fontFamily: fonts.display, fontSize: 24, color: c.onSurface },

@@ -29,6 +29,12 @@
 - Live ball-by-ball coaching session: camera (expo-camera) or upload → Gemini watches → GPT-5.5 coach speech → OpenAI TTS (gpt-4o-mini-tts, onyx) via expo-audio; session summary
 - RevenueCat paywall (Emergent managed): 1 free bowling analysis; drills, progress, coach chat, live sessions and further analyses need Pro. Monthly $9.99; yearly requested $59.99 (Test Store still shows $79.99, see revenuecat.md)
 
+## Implemented — iteration 3 (2026-11)
+- Rebrand to PACED: racing-green / charcoal / off-white / silver identity, Sora + Manrope + JetBrains Mono, square-mark wordmark, refined section ticks, squarer buttons
+- Side-by-side Compare screen (/compare): pick 2 deliveries, step-synced skeleton players, score/angle deltas, 27-step table (Pro)
+- Pro Action Overlay: dashed silver elite reference-model skeleton (template per step, anchored to the bowler's hips and torso length, mirrored for direction/arm) toggled on the report player
+- 7-day trial requested on yearly plan via the RevenueCat proxy (Test Store still shows $79.99)
+
 ## Backlog
 - P1: Store videos (Emergent Object Storage) and play the clip back inside the report
 - P1: Side-by-side compare of two deliveries

@@ -177,7 +177,7 @@ export default function LiveSession() {
             </View>
             {canRecord && permission && !permission.granted ? (
               <View style={s.permCard} testID="session-camera-permission">
-                <Ionicons name="camera" size={22} color={colors.brandPrimary} />
+                <Ionicons name="camera" size={22} color={colors.accent} />
                 <View style={{ flex: 1, gap: space.sm }}>
                   <Text style={s.permTitle}>Camera needed to film each ball</Text>
                   <Text style={s.lead}>{permission.canAskAgain ? "Allow the camera so your coach can watch every delivery." : "Camera access is off. Enable it in Settings."}</Text>
@@ -214,7 +214,7 @@ export default function LiveSession() {
 
             {busy === "watching" || busy === "ending" ? (
               <View style={s.coachCard} testID="session-coach-thinking">
-                <ActivityIndicator color={colors.brandPrimary} />
+                <ActivityIndicator color={colors.accent} />
                 <Text style={s.coachText}>{busy === "watching" ? "Coach is watching that ball…" : "Wrapping up your session…"}</Text>
               </View>
             ) : message ? (
@@ -224,7 +224,7 @@ export default function LiveSession() {
                   <Text style={s.coachName}>Coach</Text>
                   {message.audio ? (
                     <Pressable testID="session-replay-voice" hitSlop={12} onPress={() => say(message.audio)} style={s.replay}>
-                      <Ionicons name="volume-high" size={18} color={colors.brandPrimary} />
+                      <Ionicons name="volume-high" size={18} color={colors.accent} />
                     </Pressable>
                   ) : null}
                 </View>
@@ -281,7 +281,7 @@ export default function LiveSession() {
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.surface },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.lg, paddingBottom: space.sm, borderBottomWidth: 1, borderBottomColor: c.divider },
-  headerTitle: { fontFamily: fonts.display, fontSize: 22, color: c.onSurface, textTransform: "uppercase" },
+  headerTitle: { fontFamily: fonts.display, fontSize: 15, color: c.onSurface, textTransform: "uppercase", letterSpacing: 2.5 },
   headerSub: { fontFamily: fonts.text, fontSize: 11, color: c.muted },
   iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   endBtn: { height: 44, paddingHorizontal: space.lg, borderRadius: 22, backgroundColor: c.error, justifyContent: "center" },
@@ -290,7 +290,7 @@ const useStyles = makeStyles((c) => ({
   label: { fontFamily: fonts.textXBold, fontSize: 12, color: c.muted, letterSpacing: 1.5 },
   focusRow: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   chip: { height: 44, paddingHorizontal: space.lg, borderRadius: radius.pill, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceSecondary, justifyContent: "center" },
-  chipActive: { backgroundColor: c.brandPrimary, borderColor: c.brandPrimary },
+  chipActive: { backgroundColor: c.brandPrimary, borderColor: c.accentLine },
   chipText: { fontFamily: fonts.textBold, fontSize: 14, color: c.onSurfaceTertiary },
   permCard: { flexDirection: "row", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.borderStrong },
   permTitle: { fontFamily: fonts.textXBold, fontSize: 15, color: c.onSurface },
@@ -306,7 +306,7 @@ const useStyles = makeStyles((c) => ({
   replay: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   coachText: { fontFamily: fonts.text, fontSize: 15, lineHeight: 22, color: c.onSurfaceSecondary },
   target: { padding: space.md, borderRadius: radius.md, backgroundColor: c.brandTertiary, gap: 4 },
-  targetLabel: { fontFamily: fonts.textXBold, fontSize: 11, color: c.brandPrimary, letterSpacing: 1.5 },
+  targetLabel: { fontFamily: fonts.textXBold, fontSize: 11, color: c.accent, letterSpacing: 1.5 },
   targetText: { fontFamily: fonts.textBold, fontSize: 15, color: c.onSurface },
   actions: { alignItems: "center", gap: space.md },
   recordBtn: { width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: c.onSurface, alignItems: "center", justifyContent: "center" },

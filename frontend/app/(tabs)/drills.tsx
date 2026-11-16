@@ -64,7 +64,7 @@ export default function Drills() {
           data={data}
           keyExtractor={(d) => d.id}
           contentContainerStyle={{ padding: space.lg, paddingBottom: bottomChrome + space.xl, gap: space.md }}
-          refreshControl={<RefreshControl tintColor={colors.brandPrimary} refreshing={drills.isRefetching} onRefresh={() => { drills.refetch(); }} />}
+          refreshControl={<RefreshControl tintColor={colors.accent} refreshing={drills.isRefetching} onRefresh={() => { drills.refetch(); }} />}
           ListEmptyComponent={
             <EmptyState testID="drills-empty" icon="barbell" title="No drills assigned yet" body="Analyze a delivery to get personalised drills for your faults." />
           }
@@ -76,7 +76,7 @@ export default function Drills() {
                 <View style={s.cardBody}>
                   <View style={{ flexDirection: "row", gap: space.sm }}>
                     <Pill label={phaseLabel(item.phase)} color={colors.onSurface} />
-                    {item.recommended ? <Pill label="For you" color={colors.brandPrimary} icon="flash" testID={`drill-recommended-${item.id}`} /> : null}
+                    {item.recommended ? <Pill label="For you" color={colors.accent} icon="flash" testID={`drill-recommended-${item.id}`} /> : null}
                   </View>
                   <Text style={s.cardTitle}>{item.title}</Text>
                   <View style={s.metaRow}>
@@ -98,17 +98,17 @@ export default function Drills() {
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.surface },
   header: { paddingHorizontal: space.lg, paddingBottom: space.sm },
-  title: { fontFamily: fonts.display, fontSize: 32, color: c.onSurface, textTransform: "uppercase" },
+  title: { fontFamily: fonts.display, fontSize: 24, color: c.onSurface, textTransform: "uppercase", letterSpacing: 2 },
   subtitle: { fontFamily: fonts.text, fontSize: 13, color: c.muted },
   chipRow: { height: 56, justifyContent: "center", borderBottomWidth: 1, borderBottomColor: c.divider },
   chipContent: { gap: space.sm, paddingHorizontal: space.lg, alignItems: "center" },
   chip: { height: 36, flexShrink: 0, paddingHorizontal: space.lg, borderRadius: radius.pill, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceSecondary, justifyContent: "center" },
-  chipActive: { backgroundColor: c.brandPrimary, borderColor: c.brandPrimary },
+  chipActive: { backgroundColor: c.brandPrimary, borderColor: c.accentLine },
   chipText: { fontFamily: fonts.textBold, fontSize: 13, color: c.onSurfaceTertiary },
   card: { height: 190, borderRadius: radius.lg, overflow: "hidden", backgroundColor: c.surfaceSecondary },
   cardImg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   cardBody: { flex: 1, justifyContent: "flex-end", padding: space.lg, gap: space.sm },
-  cardTitle: { fontFamily: fonts.display, fontSize: 26, color: c.onSurface, textTransform: "uppercase" },
+  cardTitle: { fontFamily: fonts.display, fontSize: 19, color: c.onSurface, letterSpacing: -0.2 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   meta: { fontFamily: fonts.text, fontSize: 12, color: c.onSurfaceTertiary, marginRight: space.sm },
 }));

@@ -96,13 +96,13 @@ export default function ProfileScreen() {
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.surface },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.lg, paddingBottom: space.sm, borderBottomWidth: 1, borderBottomColor: c.divider },
-  title: { fontFamily: fonts.display, fontSize: 28, color: c.onSurface, textTransform: "uppercase" },
+  title: { fontFamily: fonts.display, fontSize: 18, color: c.onSurface, textTransform: "uppercase", letterSpacing: 2.5 },
   iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   help: { fontFamily: fonts.text, fontSize: 14, color: c.muted, lineHeight: 20 },
   label: { fontFamily: fonts.textBold, fontSize: 13, color: c.onSurfaceTertiary },
   input: { height: 52, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, color: c.onSurface, paddingHorizontal: space.lg, fontFamily: fonts.text, fontSize: 15, borderWidth: 1, borderColor: c.border },
   options: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   chip: { height: 40, paddingHorizontal: space.lg, borderRadius: radius.pill, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceSecondary, justifyContent: "center" },
-  chipActive: { backgroundColor: c.brandPrimary, borderColor: c.brandPrimary },
+  chipActive: { backgroundColor: c.brandPrimary, borderColor: c.accentLine },
   chipText: { fontFamily: fonts.textBold, fontSize: 13, color: c.onSurfaceTertiary },
 }));

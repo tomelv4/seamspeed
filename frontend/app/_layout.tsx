@@ -21,8 +21,9 @@ try {
 
 export default function RootLayout() {
   const [loaded] = useFonts({
-    "BarlowCondensed-Bold": require("../assets/fonts/BarlowCondensed-Bold.ttf"),
-    "BarlowCondensed-SemiBold": require("../assets/fonts/BarlowCondensed-SemiBold.ttf"),
+    "Sora-SemiBold": require("../assets/fonts/Sora-SemiBold.ttf"),
+    "Sora-Medium": require("../assets/fonts/Sora-Medium.ttf"),
+    "JetBrainsMono-Medium": require("../assets/fonts/JetBrainsMono-Medium.ttf"),
     "Manrope-Medium": require("../assets/fonts/Manrope-Medium.ttf"),
     "Manrope-Bold": require("../assets/fonts/Manrope-Bold.ttf"),
     "Manrope-ExtraBold": require("../assets/fonts/Manrope-ExtraBold.ttf"),
@@ -43,6 +44,7 @@ export default function RootLayout() {
               <Stack.Screen name="drill/[id]" />
               <Stack.Screen name="coach" />
               <Stack.Screen name="session" />
+              <Stack.Screen name="compare" />
               <Stack.Screen name="profile" options={{ presentation: "modal" }} />
               <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
             </Stack>
