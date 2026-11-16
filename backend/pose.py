@@ -1,13 +1,22 @@
-"""Server-side body tracking with RTMPose (rtmlib + onnxruntime, COCO 17 keypoints per frame)."""
+"""Server-side body tracking with RTMPose (rtmlib + onnxruntime, COCO 17 keypoints per frame).
+
+Every person in each frame is detected, people are linked into tracks across frames, and the
+bowler is chosen as the track that moves the most (run-up + delivery) while staying large and
+confident. Short gaps are filled and the keypoints are lightly smoothed so the skeleton never
+jumps to the umpire, batter or a fielder.
+"""
 import math
+import os
 import threading
 
 import cv2
+import numpy as np
 
 # COCO-17 indices
 L = {"shoulder": 5, "elbow": 7, "wrist": 9, "hip": 11, "knee": 13, "ankle": 15}
 R = {"shoulder": 6, "elbow": 8, "wrist": 10, "hip": 12, "knee": 14, "ankle": 16}
 
+POSE_MODE = os.environ.get("POSE_MODE", "performance")  # performance | balanced | lightweight
 _lock = threading.Lock()
 _body = None
 
@@ -17,7 +26,7 @@ def _get_body():
     with _lock:
         if _body is None:
             from rtmlib import Body
-            _body = Body(mode="lightweight", backend="onnxruntime", device="cpu")
+            _body = Body(mode=POSE_MODE, backend="onnxruntime", device="cpu")
         return _body
 
 
@@ -33,35 +42,160 @@ def video_meta(path: str) -> dict:
     return {"fps": round(fps, 2), "duration": round(total / fps, 2) if total else 0}
 
 
-def extract_pose(path: str, target_fps: int = 12, max_frames: int = 220) -> dict:
+def _bbox(kp, sc):
+    good = kp[sc > 0.3] if (sc > 0.3).sum() >= 4 else kp
+    x0, y0 = good.min(0)
+    x1, y1 = good.max(0)
+    return np.array([x0, y0, x1, y1], dtype=float)
+
+
+def _iou(a, b):
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _link(dets, diag):
+    """Greedy frame-to-frame association by IoU + centre distance. Returns tracks: {fi: det}."""
+    tracks = []  # each: {"last": fi, "box": bbox, "vel": (dx, dy), "dets": {fi: det}}
+    for fi, people in enumerate(dets):
+        pairs = []
+        for ti, tr in enumerate(tracks):
+            gap = fi - tr["last"]
+            if gap > 8:
+                continue
+            pred = tr["box"] + np.array([*tr["vel"], *tr["vel"]]) * gap
+            pc = ((pred[0] + pred[2]) / 2, (pred[1] + pred[3]) / 2)
+            for pi, d in enumerate(people):
+                c = ((d["box"][0] + d["box"][2]) / 2, (d["box"][1] + d["box"][3]) / 2)
+                dist = math.hypot(c[0] - pc[0], c[1] - pc[1]) / diag
+                iou = _iou(pred, d["box"])
+                if iou > 0.05 or dist < 0.12 * gap:
+                    pairs.append((iou - dist, ti, pi))
+        used_t, used_p = set(), set()
+        for _, ti, pi in sorted(pairs, reverse=True):
+            if ti in used_t or pi in used_p:
+                continue
+            tr, d = tracks[ti], people[pi]
+            gap = fi - tr["last"]
+            oc = (tr["box"][:2] + tr["box"][2:]) / 2
+            nc = (d["box"][:2] + d["box"][2:]) / 2
+            v = (nc - oc) / gap
+            tr["vel"] = (0.6 * v[0] + 0.4 * tr["vel"][0], 0.6 * v[1] + 0.4 * tr["vel"][1])
+            tr["box"], tr["last"] = d["box"], fi
+            tr["dets"][fi] = d
+            used_t.add(ti)
+            used_p.add(pi)
+        for pi, d in enumerate(people):
+            if pi not in used_p:
+                tracks.append({"last": fi, "box": d["box"], "vel": (0.0, 0.0), "dets": {fi: d}})
+    return tracks
+
+
+def _bowler_score(tr, diag):
+    """Bowler = long-lived, large, confident and the most mobile (run-up + whipping arm)."""
+    items = sorted(tr["dets"].items())
+    if len(items) < 3:
+        return 0.0
+    centres = np.array([(d["box"][:2] + d["box"][2:]) / 2 for _, d in items])
+    travel = float(np.abs(np.diff(centres, axis=0)).sum()) / diag
+    limbs = [d["kp"][[7, 8, 9, 10, 13, 14, 15, 16]] for _, d in items]
+    limb_motion = float(np.mean([np.linalg.norm(b - a, axis=1).mean() for a, b in zip(limbs, limbs[1:])])) / diag
+    size = float(np.mean([(d["box"][3] - d["box"][1]) for _, d in items])) / diag
+    conf = float(np.mean([d["sc"].mean() for _, d in items]))
+    return len(items) * conf * (0.4 + size) * (1 + 3 * travel + 25 * limb_motion)
+
+
+def _smooth(kps, scs):
+    """Confidence-weighted 3-frame smoothing that keeps fast arm motion intact."""
+    out = kps.copy()
+    n = len(kps)
+    for i in range(1, n - 1):
+        w = np.stack([scs[i - 1], scs[i] * 2, scs[i + 1]])[..., None]
+        blend = (np.stack([kps[i - 1], kps[i], kps[i + 1]]) * w).sum(0) / np.maximum(w.sum(0), 1e-6)
+        jump = np.linalg.norm(kps[i + 1] - kps[i - 1], axis=1, keepdims=True)
+        # only smooth where motion is small (jitter), keep large motion (the bowling arm) raw
+        alpha = np.clip(1 - jump / 40.0, 0, 1) * 0.6
+        out[i] = kps[i] * (1 - alpha) + blend * alpha
+    return out
+
+
+def extract_pose(path: str, target_fps: int = 24, max_frames: int = 360) -> dict:
     body = _get_body()
     cap = cv2.VideoCapture(path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     step = max(1, round(fps / target_fps))
-    frames, width, height, i = [], 0, 0, 0
+    dets, times, width, height, sw, sh, i = [], [], 0, 0, 1, 1, 0
     while True:
         ok, frame = cap.read()
         if not ok:
             break
         if i % step == 0:
             height, width = frame.shape[:2]
-            scale = 640 / max(width, height)
+            scale = 960 / max(width, height)
             small = cv2.resize(frame, (int(width * scale), int(height * scale))) if scale < 1 else frame
             sh, sw = small.shape[:2]
-            kp = None
             with _lock:
                 keypoints, scores = body(small)
-            if len(keypoints):
-                # pick the largest person (the bowler is usually the nearest)
-                best = max(range(len(keypoints)), key=lambda j: (keypoints[j][:, 1].max() - keypoints[j][:, 1].min()) * float(scores[j].mean()))
-                kp = [[round(float(x) / sw, 4), round(float(y) / sh, 4), round(float(s), 2)] for (x, y), s in zip(keypoints[best], scores[best])]
-                if sum(p[2] for p in kp) / len(kp) < 0.3:
-                    kp = None
-            frames.append({"t": round(i / fps, 3), "k": kp})
-            if len(frames) >= max_frames:
+            people = []
+            for kp, sc in zip(keypoints, scores):
+                kp, sc = np.asarray(kp, float), np.asarray(sc, float)
+                if sc.mean() >= 0.25:
+                    people.append({"kp": kp, "sc": sc, "box": _bbox(kp, sc)})
+            dets.append(people)
+            times.append(round(i / fps, 3))
+            if len(dets) >= max_frames:
                 break
         i += 1
     cap.release()
+
+    diag = math.hypot(sw, sh)
+    tracks = _link(dets, diag)
+    n = len(dets)
+    frames = [{"t": t, "k": None} for t in times]
+    if tracks:
+        bowler = max(tracks, key=lambda tr: _bowler_score(tr, diag))
+        # stitch: re-attach fragments that continue the bowler where his track broke (occlusion)
+        for tr in sorted(tracks, key=lambda tr: min(tr["dets"])):
+            if tr is bowler:
+                continue
+            fr = set(tr["dets"])
+            if fr & set(bowler["dets"]):
+                continue
+            first, last = min(fr), max(fr)
+            before = [f for f in bowler["dets"] if f < first]
+            after = [f for f in bowler["dets"] if f > last]
+            ref = bowler["dets"][max(before)] if before else (bowler["dets"][min(after)] if after else None)
+            gapf = (first - max(before)) if before else (min(after) - last if after else 99)
+            if ref is None or gapf > 12:
+                continue
+            d = tr["dets"][first] if before else tr["dets"][last]
+            rc, dc = (ref["box"][:2] + ref["box"][2:]) / 2, (d["box"][:2] + d["box"][2:]) / 2
+            rh, dh = ref["box"][3] - ref["box"][1], d["box"][3] - d["box"][1]
+            if np.linalg.norm(rc - dc) / diag < 0.06 * gapf + 0.05 and 0.6 < dh / max(rh, 1) < 1.6:
+                bowler["dets"].update(tr["dets"])
+
+        idx = sorted(bowler["dets"])
+        kps = np.zeros((n, 17, 2))
+        scs = np.zeros((n, 17))
+        have = np.zeros(n, bool)
+        for fi in idx:
+            kps[fi], scs[fi], have[fi] = bowler["dets"][fi]["kp"], bowler["dets"][fi]["sc"], True
+        # fill short gaps (<= 4 frames) by linear interpolation between the bowler's poses
+        for a, b in zip(idx, idx[1:]):
+            if 1 < b - a <= 5:
+                for fi in range(a + 1, b):
+                    r = (fi - a) / (b - a)
+                    kps[fi] = kps[a] * (1 - r) + kps[b] * r
+                    scs[fi] = np.minimum(scs[a], scs[b]) * 0.8
+                    have[fi] = True
+        kps = _smooth(kps, scs)
+        for fi in range(n):
+            if have[fi] and scs[fi].mean() >= 0.25:
+                frames[fi]["k"] = [[round(float(x) / sw, 4), round(float(y) / sh, 4), round(float(s), 2)]
+                                   for (x, y), s in zip(kps[fi], scs[fi])]
     return {"width": width, "height": height, "frames": frames, "detected": sum(1 for f in frames if f["k"])}
 
 
@@ -74,15 +208,7 @@ def _angle(a, b, c, w, h) -> int:
     return round(math.degrees(math.acos(max(-1, min(1, (ax * cx + ay * cy) / (na * nc))))))
 
 
-def metrics_at(pose: dict, t, bowling_arm: str) -> dict:
-    """Joint angles at the frame nearest to t. Front leg = opposite side to the bowling arm."""
-    frames = [f for f in pose.get("frames", []) if f["k"]]
-    if not frames or t is None:
-        return {}
-    f = min(frames, key=lambda x: abs(x["t"] - t))
-    if abs(f["t"] - t) > 0.4:
-        return {}
-    k, w, h = f["k"], pose["width"] or 1, pose["height"] or 1
+def _metrics(k, w, h, bowling_arm: str) -> dict:
     arm = R if bowling_arm.lower().startswith("r") else L
     front = L if arm is R else R
     sx, sy = (k[5][0] + k[6][0]) / 2, (k[5][1] + k[6][1]) / 2
@@ -94,3 +220,35 @@ def metrics_at(pose: dict, t, bowling_arm: str) -> dict:
         "bowling_elbow": _angle(k[arm["shoulder"]], k[arm["elbow"]], k[arm["wrist"]], w, h),
         "trunk_lean": round(math.degrees(math.atan2(abs(dx), abs(dy)))) if dy else 0,
     }
+
+
+def metrics_at(pose: dict, t, bowling_arm: str) -> dict:
+    """Joint angles at the frame nearest to t. Front leg = opposite side to the bowling arm."""
+    frames = [f for f in pose.get("frames", []) if f["k"]]
+    if not frames or t is None:
+        return {}
+    f = min(frames, key=lambda x: abs(x["t"] - t))
+    if abs(f["t"] - t) > 0.4:
+        return {}
+    return _metrics(f["k"], pose["width"] or 1, pose["height"] or 1, bowling_arm)
+
+
+def timeline_text(pose: dict, bowling_arm: str, every: float = 0.08) -> str:
+    """Compact measured joint-angle timeline of the tracked bowler, fed to the AI analyst."""
+    frames = [f for f in pose.get("frames", []) if f["k"]]
+    if not frames:
+        return "No skeleton measurements available."
+    w, h = pose["width"] or 1, pose["height"] or 1
+    arm = R if bowling_arm.lower().startswith("r") else L
+    rows, last_t = [], -1.0
+    for f in frames:
+        if f["t"] - last_t < every:
+            continue
+        last_t = f["t"]
+        k = f["k"]
+        m = _metrics(k, w, h, bowling_arm)
+        wrist_y = k[arm["wrist"]][1]
+        head_y = k[0][1]
+        rows.append(f"t={f['t']:.2f} fk={m['front_knee']} bk={m['back_knee']} el={m['bowling_elbow']} "
+                    f"lean={m['trunk_lean']} wrist_above_head={'y' if wrist_y < head_y else 'n'} hip_x={(k[11][0] + k[12][0]) / 2:.2f}")
+    return "\n".join(rows)

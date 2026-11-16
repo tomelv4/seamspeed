@@ -51,7 +51,7 @@ def created_analysis_ids():
 def test_root():
     r = requests.get(f"{BASE_URL}/api/", timeout=15)
     assert r.status_code == 200
-    assert "PaceSensei" in r.json().get("message", "")
+    assert "PACED" in r.json().get("message", "")
 
 
 # ---------------------------------------------------------------- profile

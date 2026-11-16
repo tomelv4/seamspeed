@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 4 tested the workload tracker, the 6-area injury scanner and the full AI coaching session, on both backend and frontend. New pytest file (11 tests): all pass. That covers workload shape and validation (400/422), owner-only delete, the ACWR >1.5 high flag, the streak flag, the Under-16 guide flag, /speak + /tts, and a full session: plan with all blocks, one bowling ball and one test ball each stored with their block, +1 workload per ball (source=session), and end returning achievements and test_result. POST /analyses returns all 5 AI areas plus the server-computed workload area. Regression suite: 39 of 40 tests passed; the one failure was a stale 'PaceSensei' root assertion, which I fixed. Frontend at 390x844: all requested flows pass. Home workload card opens /workload. The workload screen shows status, stats, gauge and chart; logging (day, +/-, intensity) and deleting entries update the numbers. A non-Pro device sees workload-locked. On the report screen the injury scanner shows all 6 rows, which expand and collapse. The full /session flow works: warm-up (items, timer counts down) -> drills -> bowling upload via web file chooser -> test block -> cool-down -> summary with test result, achievements and tips. Ending early with no balls also works. Profile age band chips save and persist. Two real bugs found: workload dates are not normalised, and the 'today' date can differ between client and server. No deprecated Expo packages (uses expo-audio / expo-video).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/workload", "issue": "date is checked with date.fromisoformat but the raw string is stored. Python 3.11 accepts compact ISO ('20261116'), so it is stored as-is and never matches day(i) keys. It is silently left out of acute/chronic/weeks. Reproduced: posted 50 balls with date 20261116 -> acute 0. Fix: store date.fromisoformat(body.date).isoformat()."},
+      {"endpoint": "POST /api/workload", "issue": "Future dates are accepted (2099-01-01 stored, never counted). Reject dates more than about 1 day in the future, and probably older than about 56 days."},
+      {"endpoint": "GET/POST /api/workload, add_balls", "issue": "Timezone mismatch. The client sends the local date (iso(new Date())), but the server uses date.today() (container UTC) for 'today', the acute window and session-ball dates. For users ahead of UTC, an entry logged as 'Today' can be counted as a future day and missed from acute until the server date rolls over. Session balls can also land on a different day than manual entries. Suggest the client sends tz offset or a local 'today' (e.g. a header) and the server uses it."},
+      {"endpoint": "GET/POST/DELETE /api/workload", "issue": "Not Pro-gated on the server; only the client gates it. Low priority if that is intended."},
+      {"endpoint": "PUT /api/profile", "issue": "age_band is a free string, not checked against the WEEKLY_GUIDE keys. An invalid value just disables the guide flag. Use a Literal or enum."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "workload.tsx remove()", "issue": "Delete entry has no try/catch or error state. A failed DELETE is an unhandled promise rejection with no feedback.", "testID": "workload-delete-*", "priority": "low"},
+      {"component": "profile.tsx save()", "issue": "Uses router.back() with no canGoBack fallback. When /profile is opened directly (deep link or web refresh), Save succeeds but the screen does not move. Use the same pattern as the other screens: canGoBack ? back : replace('/').", "testID": "profile-save-button", "priority": "low"}
+    ],
+    "integration_issues": [
+      {"flow": "session -> workload", "issue": "When a session ends, only ['sessions'] is invalidated. ['workload'] (and progress) are not, even though each ball adds workload. It currently refetches on mount, so the impact is low. Invalidate ['workload'] in end() and after each ball.", "affected_testIDs": ["session-end-button", "plan-next-cool_down"]}
+    ],
+    "design_issues": [
+      {"screen": "session (PlanStage)", "issues": ["plan-timer-* pills are 36px high (below the 44px touch target).", "plan-item-* checkbox is 28x28 with hitSlop 8 (44 effective, OK)."]},
+      {"screen": "workload", "issues": ["Weekly chart labels show only the day number ('22', '29', '06'...). Without a month the weeks read ambiguously; consider 'dd MMM' or 'W-1' labels.", "workload-delete-* is 32x32 with hitSlop 10 (OK)."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_workload_sessions.py", "/app/test_reports/pytest/iter4_a.xml", "/app/test_reports/pytest/iter4_b.xml"],
+  "action_items": [
+    "Normalise the workload date on the server (store date.fromisoformat(d).isoformat()) and reject future dates.",
+    "Fix the client/server 'today' mismatch: pass the client's local date or tz offset and use it in workload_summary and add_balls.",
+    "Add try/catch + an error banner to the workload entry delete.",
+    "Profile save: fall back to router.replace('/') when it cannot go back.",
+    "Invalidate the ['workload'] query after session balls and session end.",
+    "Optional: validate age_band against the allowed values; increase plan-timer height to 44."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 970 lines (>700). Split the workload, sessions and analysis routers into modules.",
+    "PlanStage advance(): two quick advances can let an older /speak response replace the newer message's audio (setMessage({text, audio}) with stale text). Guard with a ref to the current stage.",
+    "start_session: if the LLM returns a plan missing keys, the frontend falls back (plan.test?.name ?? ...), but there is no server-side schema validation of the plan."
+  ],
+  "updated_files": ["/app/backend/tests/test_workload_sessions.py (new)", "/app/backend/tests/test_pacesensei_api.py (root assertion PaceSensei -> PACED after rebrand)"],
+  "success_rate": {"backend": "100% (11/11 new; 40/40 regression after the stale assertion fix)", "frontend": "100% of requested flows; 2 low-priority UI bugs"},
+  "seed_data_creation": "Only TEST_wl_* devices (workload entries cleaned up; analysis deleted). Sessions cannot be deleted (no endpoint): 1 TEST_wl_* session plus 2 sessions on TEST_pay_8b3817ff remain. The 2 session-source workload entries added to TEST_pay_8b3817ff were deleted. TEST_wl_d19b9e1e profile age_band was set to 19-22.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with EXPO_PUBLIC_BACKEND_URL exported from frontend/.env; pytest.ini uses xdist. The Pro device is TEST_pay_8b3817ff (set localStorage device_id to the JSON string). Session UI upload on web: page.expect_file_chooser + /tmp/person.mp4, which takes about 30-60s per ball. The coach card looks dim in immediate screenshots because of the FadeInDown animation; that is not a bug.",
+  "rca_of_issue": "Workload date bug: log_workload validates with fromisoformat but stores body.date unchanged. workload_summary looks keys up via (today - i).isoformat(), so non-canonical strings never match."
+}

@@ -50,6 +50,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "coach_messages": [IndexModel([("device_id", ASCENDING), ("created_at", ASCENDING)], name="device_created")],
     "poses": [IndexModel([("analysis_id", ASCENDING)], name="analysis_id")],
     "sessions": [IndexModel([("device_id", ASCENDING), ("created_at", DESCENDING)], name="device_created")],
+    "workload": [IndexModel([("device_id", ASCENDING), ("date", DESCENDING)], name="device_date")],
 }
 
 
@@ -101,6 +102,7 @@ class Profile(BaseDocument):
     bowling_arm: str = "Right"
     bowling_style: str = "Fast"
     level: str = "Club"
+    age_band: str = ""
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -109,7 +111,7 @@ class ProfileIn(BaseModel):
     bowling_arm: str
     bowling_style: str
     level: str
-
+    age_band: str = ""
 
 class Analysis(BaseDocument):
     device_id: str
@@ -233,6 +235,12 @@ The video is {duration} seconds long.
 
 STEP-BY-STEP BIOMECHANICS: assess EVERY one of these 27 chronological steps and give the timestamp (seconds from the start of the video, 2 decimals) where it is best seen:
 {steps}
+INJURY SCANNER - rate each area from what you see:
+- lumbar_spine (spondylolysis): spinal extension + side-bending + twisting under load; mixed action / counter-rotation; higher risk under age 22 (bowler age band: {age}).
+- side_strain: oblique tear on the NON-bowling side from violent trunk stretch/snap (hip-shoulder separation, lateral flexion).
+- front_leg: patellar tendinopathy, tibial stress, ankle impingement from 5-9x bodyweight at FFC (stiff/hyperextended or collapsing knee, heel slam, long stride).
+- shoulder: posterior shoulder / rotator cuff from braking the arm in follow-through (cut-off follow-through, arm not decelerating across body).
+- hamstring_groin: high-speed run-up sprinting and over-striding at the crease.
 For each step return {{"key","t","score" (0-10),"status" ("good"|"ok"|"fault"|"not_visible"),"observation" (what you see, 1-2 sentences),"cue" (one short coaching cue)}}.
 Timestamps must be increasing. Use "not_visible" with t null if the step is out of frame.
 
@@ -253,9 +261,20 @@ Return ONLY valid JSON, no markdown, matching exactly:
  "strengths": ["..."],
  "tips": ["...", "...", "..."],
  "pace_band": {{"label":"Fast-medium","min_kmh":125,"max_kmh":135,"confidence":"medium"}},
- "injury_risk": {{"level":"low|medium|high","mixed_action":false,"counter_rotation":"low|moderate|high","notes":"..."}}
+ "injury_risk": {{"level":"low|medium|high","mixed_action":false,"counter_rotation":"low|moderate|high","notes":"...",
+   "areas": [{{"key":"lumbar_spine|side_strain|front_leg|shoulder|hamstring_groin","level":"low|medium|high","score":0-100,"drivers":"what in THIS video drives the risk (1-2 sentences)","prevention":"one specific prevention action"}}, ... all 5 keys]}}
 }}
 If the video does not show a bowling action, set is_bowling_video to false, overall_score 0 and explain in summary."""
+
+MEASURED_PROMPT = """
+
+MEASURED SKELETON DATA of the tracked bowler (2D pose tracking, angles in degrees; fk=front knee, bk=back knee,
+el=bowling elbow, lean=trunk lean from vertical, hip_x=hip position across the frame 0-1):
+{timeline}
+Use these measurements together with the video: anchor step timestamps to them (e.g. FFC is where the front knee
+angle stops dropping at landing, release is where the bowling wrist is highest above the head), and make your
+observations consistent with the measured angles (quote an angle where it helps). Camera angle can distort 2D
+angles, so trust the video when it clearly disagrees."""
 
 
 def now_iso() -> str:
@@ -287,6 +306,8 @@ async def read_profile(x_device_id: str = Header(...)):
 
 @api_router.put("/profile")
 async def update_profile(body: ProfileIn, x_device_id: str = Header(...)):
+    if body.age_band and body.age_band not in WEEKLY_GUIDE:
+        raise HTTPException(422, "Invalid age band")
     profile = Profile(device_id=x_device_id, **body.model_dump())
     await db.profiles.update_one({"device_id": x_device_id}, {"$set": profile.to_mongo()}, upsert=True)
     return (await get_profile(x_device_id)).public()
@@ -318,25 +339,29 @@ async def create_analysis(
             logger.exception("pose extraction failed")
             return None
 
-    async def run_gemini():
+    async def run_gemini(pose_data):
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"analysis-{uuid.uuid4()}",
             system_message="You are an expert cricket fast-bowling biomechanics analyst. Respond with JSON only.",
-        ).with_model("gemini", "gemini-3-flash-preview")
+        ).with_model("gemini", "gemini-3.1-pro-preview")
         prompt = ANALYSIS_PROMPT.format(
             profile=f"{profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level} level",
             notes=notes or "none",
             duration=meta.get("duration") or "unknown",
             steps=STEP_LIST_TEXT,
+            age=profile.age_band or "unknown",
         )
+        if pose_data and pose_data.get("detected"):
+            prompt += MEASURED_PROMPT.format(timeline=pose_lib.timeline_text(pose_data, profile.bowling_arm))
         response = await chat.send_message(
             UserMessage(text=prompt, file_contents=[FileContentWithMimeType(file_path=path, mime_type=mime)])
         )
         return parse_json(response)
 
     try:
-        pose_data, data = await asyncio.gather(run_pose(), run_gemini())
+        pose_data = await run_pose()
+        data = await run_gemini(pose_data)
     except Exception as exc:
         logger.exception("analysis failed")
         with suppress(OSError):
@@ -372,6 +397,14 @@ async def create_analysis(
     data["video_path"] = video_path
     data["video_meta"] = {**meta, "width": (pose_data or {}).get("width", 0), "height": (pose_data or {}).get("height", 0), "mime": mime}
     data["has_pose"] = bool(pose_data and pose_data.get("detected"))
+    # Workload spikes are non-mechanical: computed from the bowler's logged volume, not the video.
+    wl = await workload_summary(x_device_id, profile)
+    risk = data.get("injury_risk") or {}
+    areas = [a for a in risk.get("areas", []) if isinstance(a, dict) and a.get("key") != "workload"]
+    areas.append({"key": "workload", "level": wl["status"], "score": {"low": 20, "medium": 55, "high": 85}[wl["status"]],
+                  "drivers": wl["headline"], "prevention": wl["advice"]})
+    risk["areas"] = areas
+    data["injury_risk"] = risk
 
     analysis = Analysis(device_id=x_device_id, created_at=now_iso(), notes=notes, **{
         k: data[k] for k in Analysis.model_fields if k in data and k not in ("id", "device_id", "created_at", "notes")
@@ -618,6 +651,117 @@ class Session(BaseDocument):
     summary: str = ""
     summary_audio: str = ""
     ended_at: str = ""
+    plan: dict = {}
+    achievements: List[dict] = []
+    test_result: dict = {}
+
+
+# ---------------------------------------------------------------- workload tracker
+from datetime import date as date_cls, timedelta  # noqa: E402
+
+WEEKLY_GUIDE = {"Under 16": 120, "16-18": 180, "19-22": 240, "23+": 300}
+
+
+class WorkloadIn(BaseModel):
+    date: str  # YYYY-MM-DD
+    balls: int = Field(ge=1, le=300)
+    intensity: int = Field(default=7, ge=1, le=10)
+    note: str = ""
+
+
+async def add_balls(device_id: str, balls: int, source: str, intensity: int = 8, day: Optional[str] = None, note: str = ""):
+    await db.workload.insert_one({"device_id": device_id, "date": day or date_cls.today().isoformat(), "balls": balls,
+                                  "intensity": intensity, "source": source, "note": note, "created_at": now_iso()})
+
+
+async def workload_summary(device_id: str, profile: Profile) -> dict:
+    today = date_cls.today()
+    start = (today - timedelta(days=55)).isoformat()
+    docs = await db.workload.find({"device_id": device_id, "date": {"$gte": start}}).to_list(2000)
+    daily: dict[str, int] = {}
+    for d in docs:
+        daily[d["date"]] = daily.get(d["date"], 0) + int(d["balls"])
+    # Users ahead of UTC log "today" as tomorrow's UTC date - treat that as today.
+    if daily.get((today + timedelta(days=1)).isoformat()):
+        today = today + timedelta(days=1)
+    day = lambda i: (today - timedelta(days=i)).isoformat()
+    acute = sum(daily.get(day(i), 0) for i in range(7))
+    prev_week = sum(daily.get(day(i), 0) for i in range(7, 14))
+    chronic = sum(daily.get(day(i), 0) for i in range(28)) / 4
+    first = min(daily.keys()) if daily else None
+    enough_history = bool(first) and (today - date_cls.fromisoformat(first)).days >= 21
+    acwr = round(acute / chronic, 2) if chronic and enough_history else None
+    rest_days = sum(1 for i in range(7) if not daily.get(day(i)))
+    streak = 0
+    for i in range(0, 30):
+        if daily.get(day(i)):
+            streak += 1
+        elif i > 0:
+            break
+    weeks = [{"label": (today - timedelta(days=7 * w + 6)).strftime("%d %b"),
+              "balls": sum(daily.get(day(7 * w + i), 0) for i in range(7))} for w in range(7, -1, -1)]
+    guide = WEEKLY_GUIDE.get(profile.age_band)
+    flags = []
+    if acwr is not None and acwr > 1.5:
+        flags.append({"level": "high", "text": f"Acute:chronic ratio {acwr} - above the 1.5 danger zone for bone and tendon injury."})
+    elif acwr is not None and acwr > 1.3:
+        flags.append({"level": "medium", "text": f"Acute:chronic ratio {acwr} - edging above the 0.8-1.3 sweet spot."})
+    if prev_week and acute > prev_week * 1.3 and acute - prev_week >= 30:
+        flags.append({"level": "medium" if acute < prev_week * 1.6 else "high", "text": f"Weekly spike: {acute} balls vs {prev_week} last week (+{round((acute / prev_week - 1) * 100)}%)."})
+    if streak >= 4:
+        flags.append({"level": "high" if streak >= 6 else "medium", "text": f"{streak} bowling days in a row - schedule a rest day."})
+    if rest_days < 2 and acute:
+        flags.append({"level": "medium", "text": f"Only {rest_days} rest day(s) in the last 7 days. Aim for at least 2."})
+    if guide and acute > guide:
+        flags.append({"level": "high", "text": f"{acute} balls this week exceeds the ~{guide}/week guide for the {profile.age_band} age band."})
+    status = "high" if any(f["level"] == "high" for f in flags) else "medium" if flags else "low"
+    headline = flags[0]["text"] if flags else (f"{acute} balls this week, {rest_days} rest days - load is well managed." if acute else "No bowling logged in the last 7 days.")
+    advice = {"high": "Cut volume by 30-50% this week, add 2 rest days and avoid max-effort spells.",
+              "medium": "Hold volume steady, keep 2 rest days and build no more than ~10% per week.",
+              "low": "Keep building gradually (max ~10% per week) with 2+ rest days."}[status]
+    return {"acute": acute, "previous_week": prev_week, "chronic_weekly": round(chronic, 1), "acwr": acwr, "rest_days_7": rest_days,
+            "streak": streak, "weeks": weeks, "weekly_guide": guide, "flags": flags, "status": status, "headline": headline,
+            "advice": advice, "today": daily.get(today.isoformat(), 0)}
+
+
+@api_router.get("/workload")
+async def get_workload(x_device_id: str = Header(...)):
+    summary = await workload_summary(x_device_id, await get_profile(x_device_id))
+    docs = await db.workload.find({"device_id": x_device_id}).sort([("date", -1), ("created_at", -1)]).limit(30).to_list(30)
+    summary["entries"] = [{"id": str(d["_id"]), "date": d["date"], "balls": d["balls"], "intensity": d.get("intensity", 7),
+                           "source": d.get("source", "manual"), "note": d.get("note", "")} for d in docs]
+    return summary
+
+
+@api_router.post("/workload")
+async def log_workload(body: WorkloadIn, x_device_id: str = Header(...)):
+    try:
+        parsed = date_cls.fromisoformat(body.date)
+    except ValueError:
+        raise HTTPException(400, "date must be YYYY-MM-DD")
+    if len(body.date) != 10 or parsed > date_cls.today() + timedelta(days=1) or parsed < date_cls.today() - timedelta(days=365):
+        raise HTTPException(400, "date must be YYYY-MM-DD within the last year and not in the future")
+    await add_balls(x_device_id, body.balls, "manual", body.intensity, parsed.isoformat(), body.note)
+    return await get_workload(x_device_id)
+
+
+@api_router.delete("/workload/{entry_id}")
+async def delete_workload(entry_id: str, x_device_id: str = Header(...)):
+    if not ObjectId.is_valid(entry_id):
+        raise HTTPException(404, "Not found")
+    res = await db.workload.delete_one({"_id": ObjectId(entry_id), "device_id": x_device_id})
+    if not res.deleted_count:
+        raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+
+class SpeakIn(BaseModel):
+    text: str = Field(min_length=1, max_length=600)
+
+
+@api_router.post("/speak")
+async def speak_text(body: SpeakIn):
+    return {"audio": await speak(body.text)}
 
 
 class SessionIn(BaseModel):
@@ -659,15 +803,27 @@ async def start_session(body: SessionIn, x_device_id: str = Header(...)):
     profile = await get_profile(x_device_id)
     recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(1).to_list(1)
     faults = [f.get("title") for f in (recent[0].get("faults", []) if recent else [])]
+    wl = await workload_summary(x_device_id, profile)
     try:
-        intro = await coach_say(coach_system(profile, body.focus),
-            f"Start the session. Known faults from their last analysis: {faults or 'none yet'}. "
-            "In under 55 words: greet them, say what we're working on today and give ONE clear target for the first ball. End with 'Bowl when ready.'")
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"plan-{uuid.uuid4()}",
+                       system_message=coach_system(profile, body.focus) + " When asked for JSON, return ONLY valid JSON.").with_model("openai", "gpt-5.5")
+        raw = await chat.send_message(UserMessage(text=(
+            f"Design today's complete fast-bowling net session. Focus: {body.focus}. Known faults: {faults or 'none yet'}. "
+            f"Workload status: {wl['status']} ({wl['headline']}). If workload is high, keep bowling volume low and say why. "
+            "Return JSON: {\"intro\": \"spoken greeting under 50 words that previews the session and ends with 'Let's start the warm-up.'\", "
+            "\"warm_up\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (5 dynamic items: jog, mobility, activation, build-up run-throughs, 3 easy deliveries), "
+            "\"drills\": [{\"name\": \"\", \"reps\": \"3 x 8\", \"cue\": \"\"}] (3 technique drills targeting the faults/focus), "
+            "\"bowling\": {\"balls\": 6-12, \"target\": \"first-ball target\"}, "
+            "\"test\": {\"name\": \"\", \"balls\": 6, \"target\": \"what counts as a success\", \"description\": \"\"}, "
+            "\"cool_down\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (4 items incl. walk, hip flexor/hamstring/lumbar/shoulder stretches), "
+            "\"tips\": [\"\", \"\", \"\"] (recovery, injury prevention and technique)}")))
+        plan = parse_json(raw)
+        intro = str(plan.pop("intro", "")).strip() or "Welcome to your PACED session. Let's start the warm-up."
         audio = await speak(intro)
     except Exception as exc:
         logger.exception("session start failed")
         raise HTTPException(502, f"Coach unavailable: {exc}")
-    session = Session(device_id=x_device_id, created_at=now_iso(), focus=body.focus, intro=intro, intro_audio=audio)
+    session = Session(device_id=x_device_id, created_at=now_iso(), focus=body.focus, intro=intro, intro_audio=audio, plan=plan)
     res = await db.sessions.insert_one(session.to_mongo())
     session.id = str(res.inserted_id)
     return session.public()
@@ -685,12 +841,19 @@ async def get_session(session_id: str, x_device_id: str = Header(...)):
 
 
 @api_router.post("/sessions/{session_id}/balls")
-async def session_ball(session_id: str, video: UploadFile = File(...), x_device_id: str = Header(...)):
+async def session_ball(session_id: str, video: UploadFile = File(...), block: str = Form("bowling"), day: str = Form(""), x_device_id: str = Header(...)):
     session = await _owned_session(session_id, x_device_id)
     if session.status != "active":
         raise HTTPException(400, "Session already ended")
     profile = await get_profile(x_device_id)
-    target = session.balls[-1]["next_target"] if session.balls else session.intro
+    block = "test" if block == "test" else "bowling"
+    block_balls = [b for b in session.balls if b.get("block", "bowling") == block]
+    if block_balls:
+        target = block_balls[-1]["next_target"]
+    elif block == "test":
+        target = (session.plan.get("test") or {}).get("target") or "Hit a good length on off stump"
+    else:
+        target = (session.plan.get("bowling") or {}).get("target") or session.intro
     mime = video.content_type if (video.content_type or "").startswith("video/") else "video/mp4"
     suffix = Path(video.filename or "ball.mp4").suffix or ".mp4"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -725,10 +888,49 @@ async def session_ball(session_id: str, video: UploadFile = File(...), x_device_
         "score": float(obs.get("score") or 0), "pace_kmh": obs.get("pace_kmh"), "hit_target": obs.get("hit_target"),
         "good": obs.get("good", ""), "fault": obs.get("fault", ""), "phase": obs.get("phase", ""),
         "injury_flag": bool(obs.get("injury_flag")), "observation": obs.get("observation", ""),
-        "feedback": feedback, "next_target": next_target, "audio": audio,
+        "feedback": feedback, "next_target": next_target, "audio": audio, "block": block,
     }
     await db.sessions.update_one({"_id": ObjectId(session_id)}, {"$push": {"balls": ball}})
+    if ball["is_bowling"]:
+        local_day = None
+        with suppress(ValueError):
+            parsed = date_cls.fromisoformat(day)
+            if len(day) == 10 and abs((parsed - date_cls.today()).days) <= 1:
+                local_day = parsed.isoformat()
+        await add_balls(x_device_id, 1, "session", 8, local_day)
     return ball
+
+
+def compute_achievements(session: Session, prior_best_pace: float) -> tuple[list, dict]:
+    balls = [b for b in session.balls if b.get("is_bowling", True)]
+    test = [b for b in balls if b.get("block") == "test"]
+    out = []
+    add = lambda key, title, desc: out.append({"key": key, "title": title, "description": desc})
+    if balls:
+        add("session_complete", "Session Complete", f"{len(balls)} deliveries analysed")
+    if len(balls) >= 6:
+        add("full_over", "Full Over", "Bowled at least 6 tracked deliveries")
+    streak = best = 0
+    for b in balls:
+        streak = streak + 1 if b.get("hit_target") else 0
+        best = max(best, streak)
+    if best >= 3:
+        add("on_target", "On Target", f"Hit the coach's target {best} balls in a row")
+    if len(balls) >= 4 and all(b["score"] >= 7 for b in balls):
+        add("consistency", "Consistency", "Every ball scored 7 or higher")
+    if balls and not any(b.get("injury_flag") for b in balls):
+        add("safe_action", "Safe Action", "No injury-risk flags all session")
+    top = max([b.get("pace_kmh") or 0 for b in balls], default=0)
+    if top and top > prior_best_pace:
+        add("personal_best", "Personal Best Pace", f"New top estimate: {top} km/h")
+    result = {}
+    if test:
+        hits = sum(1 for b in test if b.get("hit_target"))
+        result = {"name": (session.plan.get("test") or {}).get("name", "Skills Test"), "balls": len(test), "hits": hits,
+                  "avg_score": round(sum(b["score"] for b in test) / len(test), 1), "top_pace": max([b.get("pace_kmh") or 0 for b in test])}
+        if hits >= max(1, round(len(test) * 0.67)):
+            add("test_passed", "Test Passed", f"{hits}/{len(test)} on target in the {result['name']}")
+    return out, result
 
 
 @api_router.post("/sessions/{session_id}/end")
@@ -737,18 +939,23 @@ async def end_session(session_id: str, x_device_id: str = Header(...)):
     if session.status == "ended":
         return session.public()
     profile = await get_profile(x_device_id)
-    balls = [{"n": b["n"], "score": b["score"], "pace": b.get("pace_kmh"), "fault": b.get("fault"), "good": b.get("good")} for b in session.balls]
+    balls = [{"n": b["n"], "block": b.get("block", "bowling"), "score": b["score"], "pace": b.get("pace_kmh"), "fault": b.get("fault"), "good": b.get("good")} for b in session.balls]
+    prior = await db.sessions.find({"device_id": x_device_id, "status": "ended"}, {"balls.pace_kmh": 1}).to_list(200)
+    prior_best = max([b.get("pace_kmh") or 0 for s_ in prior for b in s_.get("balls", [])], default=0)
+    achievements, test_result = compute_achievements(session, prior_best)
     try:
         summary = await coach_say(coach_system(profile, session.focus),
-            f"The session is over. Balls: {json.dumps(balls)}. In under 80 words, wrap up: overall verdict, the biggest improvement, "
-            "the one thing to work on before next session, and a motivating sign-off." if balls else
+            f"The session is over (warm-up, drills, bowling block, test, cool-down). Balls: {json.dumps(balls)}. Test result: {json.dumps(test_result)}. "
+            f"Achievements unlocked: {[a['title'] for a in achievements]}. In under 80 words, wrap up: overall verdict, the test result, "
+            "the one thing to work on before next session, one recovery tip, and a motivating sign-off." if balls else
             "The bowler ended the session before bowling. In under 25 words, say no problem and invite them back.")
         audio = await speak(summary)
     except Exception as exc:
         logger.exception("session end failed")
         summary, audio = "Session saved. Great work today.", ""
     await db.sessions.update_one({"_id": ObjectId(session_id)}, {"$set": {
-        "status": "ended", "summary": summary, "summary_audio": audio, "ended_at": now_iso()}})
+        "status": "ended", "summary": summary, "summary_audio": audio, "ended_at": now_iso(),
+        "achievements": achievements, "test_result": test_result}})
     return (await _owned_session(session_id, x_device_id)).public()
 
 

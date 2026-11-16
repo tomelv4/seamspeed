@@ -6,6 +6,7 @@ import Purchases, { LOG_LEVEL } from "react-native-purchases";
 import type { CustomerInfo, PurchasesPackage } from "react-native-purchases";
 
 import { getDeviceId } from "@/src/api";
+import { storage } from "@/src/utils/storage";
 
 const REVENUECAT_TEST_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY;
 const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY;
@@ -85,7 +86,19 @@ function useSubscriptionContext() {
 
   const restoreMutation = useMutation({ mutationFn: () => Purchases.restorePurchases() });
 
-  const isSubscribed = customerInfoQuery.data?.entitlements.active?.[REVENUECAT_ENTITLEMENT_IDENTIFIER] !== undefined;
+  // Developer Pro unlock: only exists in development (preview / Expo Go). Store builds compile it out.
+  const [devPro, setDevProState] = useState(false);
+  useEffect(() => {
+    if (__DEV__) storage.getItem<boolean>("dev_pro", false).then(setDevProState);
+  }, []);
+  const setDevPro = useCallback((on: boolean) => {
+    if (!__DEV__) return;
+    setDevProState(on);
+    storage.setItem("dev_pro", on);
+  }, []);
+
+  const paidPro = customerInfoQuery.data?.entitlements.active?.[REVENUECAT_ENTITLEMENT_IDENTIFIER] !== undefined;
+  const isSubscribed = paidPro || (__DEV__ && devPro);
   const originalAppUserId = customerInfoQuery.data?.originalAppUserId;
   const identityReady = !!originalAppUserId && !originalAppUserId.startsWith("$RCAnonymousID:");
 
@@ -94,6 +107,8 @@ function useSubscriptionContext() {
     offerings: offeringsQuery.data,
     offeringsError: offeringsQuery.error,
     isSubscribed,
+    devPro: __DEV__ && devPro,
+    setDevPro,
     identityReady,
     identityError,
     isLoading: !identityBound && !identityError ? true : customerInfoQuery.isLoading || offeringsQuery.isLoading,

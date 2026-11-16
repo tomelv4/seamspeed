@@ -1,7 +1,7 @@
 import Ionicons, { IoniconsIconName } from "@react-native-vector-icons/ionicons";
 import * as Haptics from "expo-haptics";
 import React from "react";
-import { ActivityIndicator, Platform, Pressable, PressableProps, StyleProp, Text, View, ViewStyle } from "react-native";
+import { ActivityIndicator, Image, Platform, Pressable, PressableProps, StyleProp, Text, View, ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 
 import { fonts, radius, space } from "@/src/constants";
@@ -57,12 +57,15 @@ export function PrimaryButton({
 }
 
 export function Wordmark({ size = 24 }: { size?: number }) {
-  const s = useStyles();
+  const h = size * 1.25;
   return (
-    <View style={s.wordmarkRow} testID="app-wordmark">
-      <View style={s.wordmarkMark}><View style={s.wordmarkCore} /></View>
-      <Text style={[s.wordmark, { fontSize: size }]}>PACED</Text>
-    </View>
+    <Image
+      testID="app-wordmark"
+      accessibilityLabel="PACED"
+      source={require("../../assets/images/paced-wordmark.png")}
+      style={{ height: h, width: h * (1362 / 295), borderRadius: 4 }}
+      resizeMode="contain"
+    />
   );
 }
 
@@ -172,10 +175,6 @@ const useStyles = makeStyles((c) => ({
   sectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.md },
   sectionTitle: { fontFamily: fonts.displaySemi, fontSize: 13, color: c.onSurfaceTertiary, textTransform: "uppercase", letterSpacing: 2.5 },
   tick: { width: 3, height: 14, borderRadius: 1, backgroundColor: c.accent },
-  wordmark: { fontFamily: fonts.display, fontSize: 24, color: c.onSurface, letterSpacing: 9 },
-  wordmarkRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  wordmarkMark: { width: 18, height: 18, borderRadius: 3, borderWidth: 1.5, borderColor: c.accent, alignItems: "center", justifyContent: "center" },
-  wordmarkCore: { width: 6, height: 6, backgroundColor: c.accent, borderRadius: 1 },
   sectionAction: { fontFamily: fonts.textBold, fontSize: 14, color: c.accent },
   pill: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4, alignSelf: "flex-start" },
   pillText: { fontFamily: fonts.textBold, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },

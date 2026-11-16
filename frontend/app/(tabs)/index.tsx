@@ -82,6 +82,16 @@ export default function Home() {
             </View>
             <Ionicons name="arrow-forward" size={20} color={colors.muted} />
           </PressScale>
+          <PressScale testID="home-workload-card" style={s.coach} onPress={() => requirePro(() => router.push("/workload"))}>
+            <View style={s.coachIcon}>
+              <Ionicons name="pulse" size={22} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.coachTitle}>Workload Tracker</Text>
+              <Text style={s.coachBody}>Weekly balls, rest days and overuse-risk flags</Text>
+            </View>
+            <Ionicons name="arrow-forward" size={20} color={colors.muted} />
+          </PressScale>
           <PressScale testID="home-coach-card" style={s.coach} onPress={() => requirePro(() => router.push("/coach"))}>
             <View style={s.coachIcon}>
               <Ionicons name="chatbubbles" size={22} color={colors.accent} />

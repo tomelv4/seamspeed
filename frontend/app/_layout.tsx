@@ -45,6 +45,7 @@ export default function RootLayout() {
               <Stack.Screen name="coach" />
               <Stack.Screen name="session" />
               <Stack.Screen name="compare" />
+              <Stack.Screen name="workload" />
               <Stack.Screen name="profile" options={{ presentation: "modal" }} />
               <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
             </Stack>

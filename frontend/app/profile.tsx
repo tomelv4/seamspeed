@@ -1,11 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import { Pressable, Switch, Text, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { apiSend, Profile, useProfile } from "@/src/api";
+import { apiSend, getDeviceId, Profile, useProfile } from "@/src/api";
+import { useSubscription } from "@/src/revenuecat";
 import { fonts, radius, space } from "@/src/constants";
 import { ErrorBanner, Ionicons, PressScale, PrimaryButton } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
@@ -14,6 +16,7 @@ const OPTIONS: { key: keyof Profile; label: string; values: string[] }[] = [
   { key: "bowling_arm", label: "Bowling arm", values: ["Right", "Left"] },
   { key: "bowling_style", label: "Style", values: ["Express", "Fast", "Fast-medium", "Medium"] },
   { key: "level", label: "Level", values: ["Junior", "Club", "Academy", "Pro"] },
+  { key: "age_band", label: "Age (affects back-injury and workload guidance)", values: ["Under 16", "16-18", "19-22", "23+"] },
 ];
 
 export default function ProfileScreen() {
@@ -25,6 +28,11 @@ export default function ProfileScreen() {
   const profile = useProfile();
   const [form, setForm] = useState<Profile>({ name: "", bowling_arm: "Right", bowling_style: "Fast", level: "Club" });
   const [saving, setSaving] = useState(false);
+  const { devPro, setDevPro } = useSubscription();
+  const [deviceId, setDeviceId] = useState("");
+  useEffect(() => {
+    getDeviceId().then(setDeviceId);
+  }, []);
   const [error, setError] = useState<string | null>(null);
 
   const [loaded, setLoaded] = useState(false);
@@ -32,7 +40,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!profile.data || loaded) return;
     setLoaded(true);
-    setForm({ name: profile.data.name, bowling_arm: profile.data.bowling_arm, bowling_style: profile.data.bowling_style, level: profile.data.level });
+    setForm({ name: profile.data.name, bowling_arm: profile.data.bowling_arm, bowling_style: profile.data.bowling_style, level: profile.data.level, age_band: profile.data.age_band ?? "" });
   }, [profile.data, loaded]);
 
   const save = async () => {
@@ -41,7 +49,7 @@ export default function ProfileScreen() {
     try {
       await apiSend("/profile", "PUT", { ...form, name: form.name.trim() || "Bowler" });
       await qc.invalidateQueries({ queryKey: ["profile"] });
-      router.back();
+      router.canGoBack() ? router.back() : router.replace("/");
     } catch (e: any) {
       setError(e?.message ?? "Could not save profile");
     } finally {
@@ -78,7 +86,7 @@ export default function ProfileScreen() {
               {o.values.map((v) => {
                 const active = form[o.key] === v;
                 return (
-                  <Pressable key={v} testID={`profile-${o.key}-${v.toLowerCase()}`} onPress={() => setForm((f) => ({ ...f, [o.key]: v }))} style={[s.chip, active && s.chipActive]}>
+                  <Pressable key={v} testID={`profile-${o.key}-${v.toLowerCase().replace(" ", "-")}`} onPress={() => setForm((f) => ({ ...f, [o.key]: v }))} style={[s.chip, active && s.chipActive]}>
                     <Text style={[s.chipText, active && { color: colors.onBrandPrimary }]}>{v}</Text>
                   </Pressable>
                 );
@@ -88,6 +96,23 @@ export default function ProfileScreen() {
         ))}
         {error ? <ErrorBanner testID="profile-error" message={error} /> : null}
         <PrimaryButton testID="profile-save-button" label="Save Profile" icon="checkmark" onPress={save} loading={saving} />
+        {__DEV__ ? (
+          <View testID="dev-tools" style={s.devCard}>
+            <Text style={s.label}>DEVELOPER (test builds only)</Text>
+            <View style={s.devRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.devTitle}>Unlock Pro for testing</Text>
+                <Text style={s.help}>Free Pro on this device. Not available in the store app.</Text>
+              </View>
+              <Switch testID="dev-pro-switch" value={devPro} onValueChange={setDevPro} trackColor={{ true: colors.brandPrimary, false: colors.border }} thumbColor={colors.onSurface} />
+            </View>
+          </View>
+        ) : null}
+        {deviceId ? (
+          <Pressable testID="profile-device-id" onLongPress={() => Clipboard.setStringAsync(deviceId)}>
+            <Text style={s.help}>Device ID (hold to copy): {deviceId}</Text>
+          </Pressable>
+        ) : null}
       </KeyboardAwareScrollView>
     </View>
   );
@@ -104,5 +129,8 @@ const useStyles = makeStyles((c) => ({
   options: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   chip: { height: 40, paddingHorizontal: space.lg, borderRadius: radius.pill, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceSecondary, justifyContent: "center" },
   chipActive: { backgroundColor: c.brandPrimary, borderColor: c.accentLine },
+  devCard: { marginTop: space.lg, padding: space.lg, gap: space.sm, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceSecondary },
+  devRow: { flexDirection: "row", alignItems: "center", gap: space.md },
+  devTitle: { fontFamily: fonts.textBold, fontSize: 15, color: c.onSurface },
   chipText: { fontFamily: fonts.textBold, fontSize: 13, color: c.onSurfaceTertiary },
 }));

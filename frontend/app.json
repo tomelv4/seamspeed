@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#101511"
       },
       "package": "com.emergent.seamspeed.vajl9h",
       "permissions": [

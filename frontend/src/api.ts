@@ -22,7 +22,7 @@ export type Analysis = {
   strengths: string[];
   tips: string[];
   pace_band: { label?: string; min_kmh?: number; max_kmh?: number; confidence?: string };
-  injury_risk: { level?: string; mixed_action?: boolean; counter_rotation?: string; notes?: string };
+  injury_risk: { level?: string; mixed_action?: boolean; counter_rotation?: string; notes?: string; areas?: InjuryArea[] };
   steps?: Step[];
   video_path?: string;
   video_meta?: { fps?: number; duration?: number; width?: number; height?: number };
@@ -32,7 +32,7 @@ export type Drill = {
   id: string; phase: string; title: string; duration: string; level: string;
   fault_tags: string[]; description: string; steps: string[]; recommended?: boolean;
 };
-export type Profile = { name: string; bowling_arm: string; bowling_style: string; level: string };
+export type Profile = { name: string; bowling_arm: string; bowling_style: string; level: string; age_band?: string };
 export type Progress = {
   points: { id: string; date: string; score: number; pace: number; risk: string; faults: number }[];
   phase_avg: Record<string, number>;
@@ -140,12 +140,28 @@ export type Step = {
 export type PoseData = { width: number; height: number; frames: { t: number; k: number[][] | null }[] };
 export type Ball = {
   n: number; created_at: string; is_bowling: boolean; score: number; pace_kmh?: number | null; hit_target?: boolean;
-  good: string; fault: string; phase: string; injury_flag: boolean; observation: string; feedback: string; next_target: string; audio: string;
+  good: string; fault: string; phase: string; injury_flag: boolean; observation: string; feedback: string; next_target: string; audio: string; block?: "bowling" | "test";
 };
 export type CoachSession = {
   id: string; created_at: string; focus: string; status: "active" | "ended"; intro: string; intro_audio: string;
   balls: Ball[]; summary: string; summary_audio: string;
+  plan?: SessionPlan;
+  achievements?: { key: string; title: string; description: string }[];
+  test_result?: { name?: string; balls?: number; hits?: number; avg_score?: number; top_pace?: number };
 };
+export type PlanItem = { name: string; minutes?: number; reps?: string; cue?: string };
+export type SessionPlan = {
+  warm_up?: PlanItem[]; drills?: PlanItem[]; cool_down?: PlanItem[]; tips?: string[];
+  bowling?: { balls?: number; target?: string }; test?: { name?: string; balls?: number; target?: string; description?: string };
+};
+export type InjuryArea = { key: string; level: string; score: number; drivers: string; prevention: string };
+export type Workload = {
+  acute: number; previous_week: number; chronic_weekly: number; acwr: number | null; rest_days_7: number; streak: number;
+  weeks: { label: string; balls: number }[]; weekly_guide: number | null; flags: { level: string; text: string }[];
+  status: "low" | "medium" | "high"; headline: string; advice: string; today: number;
+  entries: { id: string; date: string; balls: number; intensity: number; source: string; note: string }[];
+};
+export const useWorkload = () => useQuery({ queryKey: ["workload"], queryFn: () => apiGet<Workload>("/workload") });
 
 export function useDeviceId() {
   return useQuery({ queryKey: ["device-id"], queryFn: getDeviceId, staleTime: Infinity }).data;
@@ -157,9 +173,13 @@ export const ttsUrl = (key: string) => `${API}/tts/${key}.mp3`;
 export const usePose = (id: string, enabled: boolean) =>
   useQuery({ queryKey: ["pose", id], queryFn: () => apiGet<PoseData>(`/analyses/${id}/pose`), enabled: !!id && enabled, staleTime: Infinity });
 
-export async function uploadBall(sessionId: string, file: { uri: string; name?: string; mimeType?: string }) {
+export const localDate = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+export async function uploadBall(sessionId: string, file: { uri: string; name?: string; mimeType?: string }, block: "bowling" | "test" = "bowling") {
   const res = await uploadForm(`${API}/sessions/${sessionId}/balls`, {
     files: { video: { uri: file.uri, name: file.name || "ball.mp4", mimeType: file.mimeType || "video/mp4" } },
+    fields: { block, day: localDate() },
     headers: await headers(),
   });
   return handle<Ball>(res as unknown as Response);

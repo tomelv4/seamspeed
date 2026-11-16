@@ -35,7 +35,20 @@
 - Pro Action Overlay: dashed silver elite reference-model skeleton (template per step, anchored to the bowler's hips and torso length, mirrored for direction/arm) toggled on the report player
 - 7-day trial requested on yearly plan via the RevenueCat proxy (Test Store still shows $79.99)
 
+## Implemented — iteration 4 (2026-11)
+- Workload tracker (/workload, Pro): manual ball logs + live-session balls auto-counted; 7-day acute, 4-week chronic, A:C ratio (after 21 days of history), weekly spike, consecutive days, rest days, age-band weekly guide; status low/caution/high
+- Injury Scanner on reports: lumbar spine, side strain, front-leg overload, shoulder/rotator cuff, hamstring/groin (Gemini from the video) + workload spikes (from logged volume)
+- Profile age band (Under 16 / 16-18 / 19-22 / 23+)
+- Full structured live sessions: GPT-5.5 plan → warm-up checklist with timers → technique drills → bowling block → skills test → cool-down; spoken stage transitions (/api/speak); achievements + test result + tips in the summary
+
 ## Backlog
 - P1: Store videos (Emergent Object Storage) and play the clip back inside the report
 - P1: Side-by-side compare of two deliveries
 - P2: Share report card image, pro-action reference library, premium subscription
+
+## Update (Jun 2026)
+- Full analysis uses Gemini 3.1 Pro (gemini-3.1-pro-preview); ball-by-ball live coaching stays on Gemini 3 Flash for speed.
+- Pose: RTMPose-x + YOLOX-x ("performance" mode, env POSE_MODE), 24 fps, 960px, multi-person tracking, picks the bowler (most mobile/large/confident track), stitches broken tracks, fills gaps of up to 4 frames, smooths jitter only. The measured angle timeline is sent to Gemini before it writes the analysis.
+- PACED logo: app icon/adaptive/splash/favicon + in-app wordmark (assets/images/paced-*.png).
+- Dev-only "Unlock Pro for testing" switch in Profile (__DEV__ only); device ID shown for RevenueCat promotional grants.
+- Prices come from the store/RevenueCat products (no hardcoded USD). AUD is set in App Store Connect / Play Console / RevenueCat test store.

@@ -11,6 +11,13 @@ import { apiSend, Ball, CoachSession, ttsUrl, uploadBall } from "@/src/api";
 import { playCoach, stopCoach } from "@/src/coachAudio";
 import { fonts, radius, space } from "@/src/constants";
 import { ProLocked } from "@/src/components/ProLocked";
+import { PlanStage } from "@/src/components/PlanStage";
+
+type Stage = "warm_up" | "drills" | "bowling" | "test" | "cool_down";
+const STAGES: { key: Stage; label: string }[] = [
+  { key: "warm_up", label: "Warm-up" }, { key: "drills", label: "Drills" }, { key: "bowling", label: "Bowling" },
+  { key: "test", label: "Test" }, { key: "cool_down", label: "Cool-down" },
+];
 import { ErrorBanner, Ionicons, PressScale, PrimaryButton, scoreColor } from "@/src/components/ui";
 import { useSubscription } from "@/src/revenuecat";
 import { makeStyles, useTheme } from "@/src/theme";
@@ -33,6 +40,7 @@ export default function LiveSession() {
   const [busy, setBusy] = useState<null | "starting" | "watching" | "ending">(null);
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<Stage>("warm_up");
   const canRecord = Platform.OS !== "web";
 
   useFocusEffect(useCallback(() => () => stopCoach(), []));
@@ -58,6 +66,7 @@ export default function LiveSession() {
       setSession(sess);
       setBalls([]);
       setMessage({ text: sess.intro, audio: sess.intro_audio });
+      setStage("warm_up");
       say(sess.intro_audio);
     } catch (e: any) {
       setError(e?.message ?? "Could not start the session");
@@ -72,8 +81,9 @@ export default function LiveSession() {
     setBusy("watching");
     setError(null);
     try {
-      const ball = await uploadBall(session.id, file);
+      const ball = await uploadBall(session.id, file, stage === "test" ? "test" : "bowling");
       setBalls((b) => [...b, ball]);
+      qc.invalidateQueries({ queryKey: ["workload"] });
       setMessage({ text: ball.feedback, target: ball.next_target, audio: ball.audio });
       say(ball.audio);
     } catch (e: any) {
@@ -121,6 +131,7 @@ export default function LiveSession() {
       setMessage({ text: done.summary, audio: done.summary_audio });
       say(done.summary_audio);
       qc.invalidateQueries({ queryKey: ["sessions"] });
+      qc.invalidateQueries({ queryKey: ["workload"] });
     } catch (e: any) {
       setError(e?.message ?? "Could not end session");
     } finally {
@@ -136,6 +147,26 @@ export default function LiveSession() {
   const avg = balls.length ? balls.reduce((a, b) => a + b.score, 0) / balls.length : 0;
   const topPace = Math.max(0, ...balls.map((b) => b.pace_kmh ?? 0));
   const ended = session?.status === "ended";
+  const plan = session?.plan ?? {};
+  const stageIdx = STAGES.findIndex((x) => x.key === stage);
+  const isBowl = stage === "bowling" || stage === "test";
+  const blockBalls = balls.filter((b) => (b.block ?? "bowling") === (stage === "test" ? "test" : "bowling"));
+
+  const advance = async (next: Stage) => {
+    stopCoach();
+    setStage(next);
+    const text =
+      next === "drills" ? `Warm-up done. Now technique drills: ${(plan.drills ?? []).map((d) => d.name).join(", ")}.`
+      : next === "bowling" ? `Drills done. Bowling block: ${plan.bowling?.balls ?? 6} balls. First target: ${plan.bowling?.target ?? "hit a good length"}. Bowl when ready.`
+      : next === "test" ? `Time for the test: ${plan.test?.name ?? "skills test"}. ${plan.test?.balls ?? 6} balls. Success means ${plan.test?.target ?? "hitting the target"}. Bowl when ready.`
+      : "Great bowling. Let's cool down properly to protect your body.";
+    setMessage({ text });
+    try {
+      const { audio } = await apiSend<{ audio: string }>("/speak", "POST", { text });
+      setMessage({ text, audio });
+      say(audio);
+    } catch {}
+  };
 
   if (!subLoading && !isSubscribed) {
     return (
@@ -194,6 +225,41 @@ export default function LiveSession() {
         ) : (
           <>
             {!ended ? (
+              <View style={s.stageBar} testID="session-stage-bar">
+                {STAGES.map((st, i) => (
+                  <View key={st.key} style={{ flex: 1, gap: 4 }}>
+                    <View style={[s.stageSeg, i <= stageIdx && { backgroundColor: colors.accent }]} />
+                    <Text style={[s.stageLabel, i === stageIdx && { color: colors.onSurface }]} numberOfLines={1}>{st.label}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {!ended && stage === "warm_up" ? (
+              <PlanStage stageKey="warm_up" title="Warm-up" subtitle="Raise temperature and mobilise before any fast bowling." items={plan.warm_up ?? []} nextLabel="Start drills" onNext={() => advance("drills")} />
+            ) : null}
+            {!ended && stage === "drills" ? (
+              <PlanStage stageKey="drills" title="Technique Drills" subtitle={`Targeting today's focus: ${session.focus}.`} items={plan.drills ?? []} nextLabel="Start bowling block" onNext={() => advance("bowling")} />
+            ) : null}
+            {!ended && stage === "cool_down" ? (
+              <PlanStage stageKey="cool_down" title="Cool-down" subtitle="Bring the heart rate down and restore range of motion." items={plan.cool_down ?? []} nextLabel="Finish session" onNext={end} />
+            ) : null}
+            {!ended && isBowl ? (
+              <View style={s.blockCard} testID={`session-block-${stage}`}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.blockTitle}>{stage === "test" ? plan.test?.name ?? "Skills Test" : "Bowling Block"}</Text>
+                  <Text style={s.blockSub}>
+                    {blockBalls.length}/{stage === "test" ? plan.test?.balls ?? 6 : plan.bowling?.balls ?? 6} balls
+                    {stage === "test" && plan.test?.target ? ` · Success: ${plan.test.target}` : ""}
+                  </Text>
+                </View>
+                <Pressable testID="session-finish-block" style={s.blockBtn} disabled={!!busy || recording} onPress={() => advance(stage === "test" ? "cool_down" : "test")}>
+                  <Text style={s.blockBtnText}>{stage === "test" ? "To cool-down" : "To test"}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {!ended && isBowl ? (
               canRecord && permission?.granted ? (
                 <View style={s.camBox}>
                   <CameraView ref={camRef} style={{ flex: 1 }} mode="video" facing="back" mute />
@@ -240,7 +306,7 @@ export default function LiveSession() {
 
             {error ? <ErrorBanner testID="session-error" message={error} /> : null}
 
-            {!ended ? (
+            {!ended && isBowl ? (
               <View style={s.actions}>
                 {canRecord && permission?.granted ? (
                   <Pressable testID="session-record-button" onPress={toggleRecord} disabled={!!busy} style={[s.recordBtn, !!busy && { opacity: 0.4 }]}>
@@ -270,7 +336,39 @@ export default function LiveSession() {
               </View>
             ))}
 
-            {ended ? <PrimaryButton testID="session-done-button" label="Done" icon="checkmark" onPress={back} /> : null}
+            {ended ? (
+              <View style={{ gap: space.md }} testID="session-summary">
+                {session.test_result?.balls ? (
+                  <View style={s.blockCard} testID="session-test-result">
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.blockTitle}>{session.test_result.name}</Text>
+                      <Text style={s.blockSub}>{session.test_result.hits}/{session.test_result.balls} on target · avg {session.test_result.avg_score}{session.test_result.top_pace ? ` · top ~${session.test_result.top_pace} km/h` : ""}</Text>
+                    </View>
+                  </View>
+                ) : null}
+                {(session.achievements ?? []).length ? (
+                  <View style={{ gap: space.sm }}>
+                    <Text style={s.label}>ACHIEVEMENTS</Text>
+                    {session.achievements!.map((a) => (
+                      <View key={a.key} style={s.achievement} testID={`achievement-${a.key}`}>
+                        <View style={s.badge}><Ionicons name="ribbon" size={16} color={colors.accent} /></View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.ballTitle}>{a.title}</Text>
+                          <Text style={s.ballBody}>{a.description}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+                {(plan.tips ?? []).length ? (
+                  <View style={{ gap: space.sm }}>
+                    <Text style={s.label}>TIPS</Text>
+                    {plan.tips!.map((t, i) => <Text key={i} style={s.lead}>• {t}</Text>)}
+                  </View>
+                ) : null}
+                <PrimaryButton testID="session-done-button" label="Done" icon="checkmark" onPress={back} />
+              </View>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -320,4 +418,14 @@ const useStyles = makeStyles((c) => ({
   ballScore: { fontFamily: fonts.display, fontSize: 26, width: 48 },
   ballTitle: { fontFamily: fonts.textBold, fontSize: 14, color: c.onSurface },
   ballBody: { fontFamily: fonts.text, fontSize: 12, color: c.muted },
+  stageBar: { flexDirection: "row", gap: 4 },
+  stageSeg: { height: 3, borderRadius: 2, backgroundColor: c.surfaceTertiary },
+  stageLabel: { fontFamily: fonts.textBold, fontSize: 10, color: c.muted },
+  blockCard: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.accentLine },
+  blockTitle: { fontFamily: fonts.display, fontSize: 16, color: c.onSurface },
+  blockSub: { fontFamily: fonts.mono, fontSize: 12, color: c.onSurfaceTertiary, marginTop: 2 },
+  blockBtn: { height: 44, paddingHorizontal: space.md, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, justifyContent: "center" },
+  blockBtnText: { fontFamily: fonts.textBold, fontSize: 13, color: c.onSurface },
+  achievement: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.md, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
+  badge: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
 }));

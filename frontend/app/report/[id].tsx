@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiSend, useAnalysis, usePose, useProfile } from "@/src/api";
 import { SkeletonPlayer } from "@/src/components/SkeletonPlayer";
 import { StepCard, StepList } from "@/src/components/StepBreakdown";
+import { InjuryScanner } from "@/src/components/InjuryScanner";
 import { fonts, phaseLabel, radius, space } from "@/src/constants";
 import { ErrorBanner, Ionicons, Loading, Pill, PressScale, PrimaryButton, SectionTitle, riskColor, scoreColor } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
@@ -132,6 +133,7 @@ export default function Report() {
                 </View>
               </View>
               {a.injury_risk?.notes ? <Text style={s.note}>{a.injury_risk.notes}</Text> : null}
+              {a.injury_risk?.areas?.length ? <InjuryScanner areas={a.injury_risk.areas} /> : null}
 
               <View>
                 <SectionTitle title="Phase Breakdown" />
