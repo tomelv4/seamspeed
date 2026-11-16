@@ -42,7 +42,7 @@ export default function Analyze() {
   useEffect(() => {
     if (!busy) return;
     setStep(0);
-    const t = setInterval(() => setStep((v) => Math.min(v + 1, STEPS.length - 1)), 4000);
+    const t = setInterval(() => setStep((v) => Math.min(v + 1, STEPS.length - 1)), 40000);
     return () => clearInterval(t);
   }, [busy]);
 
@@ -109,7 +109,7 @@ export default function Analyze() {
         {busy ? (
           <Animated.View entering={FadeIn} style={s.busyCard} testID="analysis-progress">
             <Text style={s.busyTitle}>Analyzing delivery…</Text>
-            <Text style={s.busyBody}>Gemini is reviewing each frame. This usually takes 20-60 seconds.</Text>
+            <Text style={s.busyBody}>Tracking the bowler and running a full Pro AI review. This usually takes 2-4 minutes - keep the app open.</Text>
             {STEPS.map((label, i) => (
               <View key={label} style={s.stepRow}>
                 <Ionicons

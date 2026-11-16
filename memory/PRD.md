@@ -52,3 +52,4 @@
 - PACED logo: app icon/adaptive/splash/favicon + in-app wordmark (assets/images/paced-*.png).
 - Dev-only "Unlock Pro for testing" switch in Profile (__DEV__ only); device ID shown for RevenueCat promotional grants.
 - Prices come from the store/RevenueCat products (no hardcoded USD). AUD is set in App Store Connect / Play Console / RevenueCat test store.
+- Analyses run asynchronously: POST /api/analyses returns {id,status:processing}; the client polls GET /api/analyses/{id}. Analyses still processing at startup are marked failed. Fixes the 502 proxy timeout.

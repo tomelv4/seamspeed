@@ -131,6 +131,8 @@ class Analysis(BaseDocument):
     video_path: str = ""
     video_meta: dict = {}
     has_pose: bool = False
+    status: str = "done"  # processing | done | failed
+    error: str = ""
 
 
 class CoachMessage(BaseDocument):
@@ -330,6 +332,31 @@ async def create_analysis(
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(data_bytes)
         path = tmp.name
+    # Heavy work (pose tracking + Gemini Pro) runs in the background so the upload request returns
+    # instantly instead of hitting the proxy timeout (502). The client polls GET /analyses/{id}.
+    placeholder = Analysis(device_id=x_device_id, created_at=now_iso(), notes=notes, status="processing", is_bowling_video=False)
+    result = await db.analyses.insert_one(placeholder.to_mongo())
+    analysis_id = str(result.inserted_id)
+    task = asyncio.create_task(process_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_device_id, profile))
+    _jobs.add(task)
+    task.add_done_callback(_jobs.discard)
+    return {"id": analysis_id, "status": "processing"}
+
+
+_jobs: set = set()
+
+
+async def process_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_device_id, profile):
+    try:
+        await _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_device_id, profile)
+    except Exception as exc:
+        logger.exception("analysis failed")
+        with suppress(OSError):
+            os.remove(path)
+        await db.analyses.update_one({"_id": ObjectId(analysis_id)}, {"$set": {"status": "failed", "error": f"Analysis failed: {exc}"}})
+
+
+async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_device_id, profile):
     meta = await run_in_threadpool(pose_lib.video_meta, path)
 
     async def run_pose():
@@ -359,14 +386,8 @@ async def create_analysis(
         )
         return parse_json(response)
 
-    try:
-        pose_data = await run_pose()
-        data = await run_gemini(pose_data)
-    except Exception as exc:
-        logger.exception("analysis failed")
-        with suppress(OSError):
-            os.remove(path)
-        raise HTTPException(status_code=502, detail=f"Analysis failed: {exc}")
+    pose_data = await run_pose()
+    data = await run_gemini(pose_data)
 
     # merge the 27 steps with definitions + measured joint angles
     by_key = {s.get("key"): s for s in data.get("steps", []) if isinstance(s, dict)}
@@ -406,19 +427,18 @@ async def create_analysis(
     risk["areas"] = areas
     data["injury_risk"] = risk
 
-    analysis = Analysis(device_id=x_device_id, created_at=now_iso(), notes=notes, **{
-        k: data[k] for k in Analysis.model_fields if k in data and k not in ("id", "device_id", "created_at", "notes")
-    })
-    result = await db.analyses.insert_one(analysis.to_mongo())
-    analysis.id = str(result.inserted_id)
+    fields = {k: data[k] for k in Analysis.model_fields if k in data and k not in ("id", "device_id", "created_at", "notes", "status", "error")}
+    update = Analysis(device_id=x_device_id, created_at="", status="done", **fields).to_mongo()
+    for k in ("device_id", "created_at", "notes"):
+        update.pop(k, None)
     if pose_data:
-        await db.poses.insert_one({"analysis_id": analysis.id, "device_id": x_device_id, **pose_data})
-    return analysis.public()
+        await db.poses.insert_one({"analysis_id": analysis_id, "device_id": x_device_id, **pose_data})
+    await db.analyses.update_one({"_id": ObjectId(analysis_id)}, {"$set": update})
 
 
 @api_router.get("/analyses")
 async def list_analyses(x_device_id: str = Header(...), limit: int = Query(50, ge=1, le=200)):
-    docs = await db.analyses.find({"device_id": x_device_id}).sort("created_at", -1).limit(limit).to_list(limit)
+    docs = await db.analyses.find({"device_id": x_device_id, "status": {"$nin": ["processing", "failed"]}}).sort("created_at", -1).limit(limit).to_list(limit)
     return [Analysis.from_mongo(d).public() for d in docs]
 
 
@@ -976,6 +996,8 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def start_index_build():
     app.state.index_task = asyncio.create_task(ensure_indexes())
+    # background jobs die with the process: anything still "processing" at startup can never finish
+    await db.analyses.update_many({"status": "processing"}, {"$set": {"status": "failed", "error": "The analysis was interrupted. Please upload the clip again."}})
     for fn in (init_storage, pose_lib.warmup):
         asyncio.get_event_loop().run_in_executor(None, _safe_call, fn)
 

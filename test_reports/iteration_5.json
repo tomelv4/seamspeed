@@ -1,0 +1,41 @@
+{
+  "summary": "I tested the fix for the upload 502 and the new async analysis pipeline. 7 of 7 backend pytest tests passed. POST /api/analyses returned in 0.38s with {id, status:'processing'}. GET /api/analyses/{id} moved from processing to done in about 195s and returned 27 steps, phases, injury_risk with a workload area, video_path, and has_pose=true. GET /api/analyses/{id}/pose returned frames. The list excludes the doc while it is processing and includes it once done. Another device id gets 404 on the doc, and a POST with no video gets 422. Frontend: on a fresh device, the Analyze tab flow (upload-video-button, file chooser, video-selected-card, notes, analyze-delivery-button) showed the analysis-progress card. The POST returned 200 and the client polled GET about every 3s (52 polls). After 161s the app went to /report/{id}. No 502 and no error banner appeared, and the skeleton player rendered. The dev-pro-switch works: coach-locked shows before toggling, is gone after toggling on and reloading, and comes back after toggling off. The setting is saved in localStorage as dev_pro. profile-device-id shows the device id, and the app-wordmark image (paced-wordmark.png) renders on Home. No deprecated Expo packages found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/analyses (background task)", "issue": "The job only lives in memory (asyncio.create_task plus the _jobs set). If the backend restarts (uvicorn --reload on any file change in /app/backend, a deploy, or a crash), the doc stays in status 'processing' forever. It is hidden from the list, and the client polls for 6 minutes and then shows 'taking longer than expected'. I saw a reload happen in the logs during testing, triggered by creating a test file under backend/tests."},
+      {"endpoint": "POST /api/analyses", "issue": "The free-analysis limit is only enforced in the client (analyze.tsx freeUsed). The backend accepts unlimited uploads from a non-Pro device."},
+      {"endpoint": "POST /api/analyses", "issue": "The whole upload (up to 80MB) stays in memory as data_bytes until the job finishes, about 3 minutes. Several uploads at once multiply memory use, and pose tracking is CPU-bound on the shared threadpool."},
+      {"endpoint": "Gemini result", "issue": "The same clip, /tmp/person.mp4, scored 4.0 as a bowling video in the API run. In the UI run it scored 0.0 and the summary said the video 'appears to be a static image'. Results are not deterministic between runs."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "uploadDelivery polling", "issue": "Every GET error is swallowed with `continue`, including a 404 if the analysis is deleted or never existed. The user waits the full ~6 minutes instead of seeing an error right away. Only network errors should be retried; a 404 should stop polling.", "affected_testIDs": ["analysis-progress"]}
+    ],
+    "design_issues": [
+      {"screen": "Analyze progress", "issues": ["The copy says 'usually takes 1-3 minutes', but measured times were 161s and 195s. The steps advance every 20s and reach the last step after about 80s, then sit there for 1-2 more minutes. Consider updating the copy to 2-4 minutes or slowing the step timer."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_async_analysis.py", "/app/test_reports/pytest/pytest_async.xml"],
+  "action_items": [
+    "Recover jobs lost when the backend restarts. On startup, mark docs that have been 'processing' longer than about 10 minutes as 'failed' (or re-queue them), or have GET /analyses/{id} return failed when created_at is older than the threshold.",
+    "In uploadDelivery, stop polling and throw an error on a 404 instead of continuing.",
+    "Optional: enforce the free-analysis limit on the server.",
+    "Optional: update the progress copy to reflect the real ~2-4 minute duration."
+  ],
+  "critical_code_review_comments": [
+    "server.py is over 1000 lines and should be split (analysis, sessions, workload, coach routers).",
+    "process_analysis correctly catches exceptions and sets status 'failed' with an error message. The frontend shows that error through analysis-error.",
+    "list_analyses filters with status $nin [processing, failed], so older docs with no status field are still listed. This is correct."
+  ],
+  "updated_files": ["/app/backend/tests/test_async_analysis.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (upload/report flow, dev Pro switch, device id, wordmark)"},
+  "seed_data_creation": "Created test analyses for devices TEST_async_* and the browser device dev_mwjej3bm_ns2rt7oa. All were deleted by id afterwards.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "An analysis takes about 160-200s. Run pytest with `-n 0` (pytest.ini enables xdist) in the foreground with timeout 300. Creating or modifying files under /app/backend triggers a uvicorn reload, which kills in-flight analysis jobs.",
+  "rca_of_issue": "Cause of the 502: the synchronous POST /api/analyses (pose tracking plus Gemini 3.1 Pro) took longer than the ingress proxy timeout. Fix verified: the POST now returns in under 1s and processing runs in the background with client polling."
+}

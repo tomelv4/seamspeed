@@ -89,7 +89,21 @@ export async function uploadDelivery(file: { uri: string; name?: string; mimeTyp
     fields: { notes },
     headers: await headers(),
   });
-  return handle<Analysis>(res as unknown as Response);
+  const { id } = await handle<{ id: string }>(res as unknown as Response);
+  // Analysis runs on the server in the background; poll until it is ready (max ~6 min).
+  for (let i = 0; i < 120; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    let a: Analysis & { status?: string; error?: string };
+    try {
+      a = await apiGet<Analysis & { status?: string; error?: string }>(`/analyses/${id}`);
+    } catch (e: any) {
+      if (/not found|404/i.test(String(e?.message))) throw new Error("This analysis is no longer available. Please upload the clip again.");
+      continue; // brief network blip - keep waiting
+    }
+    if (a.status === "failed") throw new Error(a.error || "Analysis failed. Please try a clearer, side-on clip.");
+    if (a.status !== "processing") return a;
+  }
+  throw new Error("Analysis is taking longer than expected. Check your sessions shortly.");
 }
 
 export async function streamCoach(message: string, onDelta: (t: string) => void) {
