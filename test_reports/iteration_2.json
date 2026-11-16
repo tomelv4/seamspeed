@@ -1,0 +1,58 @@
+{
+  "summary": "Iteration 2 tested the 27-step analysis with pose data, the pose/media/TTS endpoints, live coaching sessions, the RevenueCat paywall gating and purchase, the skeleton player on the report screen, and a live session end to end in the web preview (390x844). Backend: 32/32 pytest passed (16 new, 16 regression). Frontend: almost everything works. Gating works on all screens. The Test Store purchase works and unlocks Drills/Progress/Coach/Session. Restore works. The session flow (start, upload a ball, end with summary) works. The skeleton overlay renders and lines up with the bowler. MAIN BUG: on web, jumping the video to a step (step rows, prev/next buttons, timeline markers) does nothing. The video stays at t=0 and the angle labels never show, because /api/media does not support HTTP Range requests (Starlette 0.37.2 FileResponse). The yearly price is $79.99 in RevenueCat, but the request says $59.99. No deprecated Expo packages were found (no expo-av, expo-barcode-scanner or expo-background-fetch); expo-video is used.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/media/{analysis_id}", "issue": "No HTTP Range / Accept-Ranges support. A 'Range: bytes=0-10' request returns 200 with the full body and no Accept-Ranges/Content-Range, from both localhost:8001 and the public URL. Starlette 0.37.2 FileResponse does not handle Range. Because of this, video.seekable is empty in Chrome, so any currentTime set (by the app, or manually via JS) snaps back to 0. iOS AVPlayer (expo-video) needs byte-range support to play progressive mp4 at all, so playback will probably fail on iOS too.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/analyses, /api/sessions, /api/sessions/{id}/balls, /api/coach/chat, /api/drills, /api/progress", "issue": "Paywall is enforced only in the client. The backend never checks entitlement or the free-analysis count, so anyone with a device id can call the paid AI endpoints (cost exposure). Consider verifying the entitlement server-side with the RevenueCat REST API, keyed by device id."},
+      {"endpoint": "POST /api/sessions/{id}/balls", "issue": "No upload size limit. /api/analyses has an 80MB check, but this endpoint does not."},
+      {"endpoint": "POST /api/analyses", "issue": "Steps with status 'not_visible' still come back with an LLM score (e.g. run_up_acceleration: not_visible, score 7). Score should be 0/null for not_visible steps."},
+      {"endpoint": "/api/sessions", "issue": "There is no DELETE endpoint, so test or abandoned sessions cannot be cleaned up. Sessions left via the back button stay 'active' forever."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SkeletonPlayer step seek", "issue": "Tapping step-row-ffc, player-next-step/prev-step or a timeline marker changes selected-step-card correctly, but the video never seeks (DOM video.currentTime stays 0, seekable.length=0). Because currentTime never reaches step.t, the angle labels on the skeleton (SvgText, atStep) never appear. Root cause: the backend has no Range support. Reference: /app/frontend/src/components/SkeletonPlayer.tsx:76-82 and /app/backend/server.py:541-548", "testID": "step-row-<key>, player-next-step, timeline-marker-<key>", "priority": "HIGH"},
+      {"component": "Timeline markers", "issue": "25 markers sit inside about 1.3s of a 3s clip (2.10-2.33s), so they overlap heavily. Tapping timeline-marker-bfc selected BACK-KNEE COMPRESSION. The dots are about 10px, well under the 44px touch target.", "testID": "timeline-marker-<key>", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "RevenueCat pricing", "issue": "The Test Store annual package is $79.99 ($6.66/mo, SAVE 33%), but the request specifies $59.99/yr. Monthly is $9.99 as specified. Fix the product price in the RevenueCat dashboard.", "affected_testIDs": ["paywall-package-annual"]},
+      {"flow": "Analyze gating race", "issue": "freeUsed = !isSubscribed && analyses>=1. While the subscription is loading, isSubscribed is false, so a Pro user who taps record/upload early can be sent to /paywall. While analyses are loading, a non-Pro user can start a second free analysis. Gate only after both queries have settled. Reference: /app/frontend/app/(tabs)/analyze.tsx:37-40", "affected_testIDs": ["record-video-button", "upload-video-button"]}
+    ],
+    "design_issues": [
+      {"screen": "Paywall", "issues": ["The subtitle always says \"You've used your free analysis\", even when the paywall opens from home-coach-card/home-session-card on a device with 0 analyses.", "Double confirmation: the app's paywall-confirm-modal is followed by RevenueCat's own 'Test Store Purchase' sheet (Test valid purchase / Test failed purchase / Cancel). Consider skipping the custom modal on the Test Store."]},
+      {"screen": "Drills (locked)", "issues": ["The phase filter chips (All/For You/Run-up/...) still show above the drills-locked card for non-Pro users."]},
+      {"screen": "Live session", "issues": ["Header says '1 balls'. Pluralise it.", "The back button during an active session leaves without ending it or confirming."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pose_sessions.py",
+    "/app/backend/tests/test_pacesensei_api.py",
+    "/app/test_reports/pytest/pytest_iter2.xml",
+    "/app/test_reports/pytest/pytest_iter2_regression.xml"
+  ],
+  "action_items": [
+    "HIGH: Add HTTP Range (206 Partial Content + Accept-Ranges: bytes) support to GET /api/media/{id}. Either upgrade starlette/fastapi to a version whose FileResponse handles Range, or write a small StreamingResponse that parses the Range header. Then re-check that step rows and prev/next seek the video and that the angle labels show.",
+    "Set the RevenueCat annual product to $59.99 (it is currently $79.99).",
+    "Consider server-side entitlement and free-analysis enforcement. Today the paywall can be bypassed by calling the API directly.",
+    "Analyze tab: wait for both the subscription and analyses queries to settle before deciding freeUsed.",
+    "Add a size limit to /api/sessions/{id}/balls. Force score 0/null for not_visible steps.",
+    "Paywall subtitle copy should depend on context. Consider dropping the custom confirm modal, since RevenueCat shows its own Test Store sheet.",
+    "Minor: spread out or enlarge timeline markers (44px hit area), pluralise 'balls', confirm or end the session on back."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 768 lines (over 700). Split sessions/TTS/analysis into routers.",
+    "revenuecat.tsx: rcEnabled = Platform.OS !== 'web' || __DEV__. In a production web build RC is disabled, so isSubscribed is always false and the paywall cannot sell. Acceptable if web is preview-only.",
+    "/app/memory/revenuecat.md is in files_of_reference but does not exist.",
+    "The backend err log has an old KeyError: 'EMERGENT_LLM_KEY' traceback from an earlier startup. The current runtime is fine."
+  ],
+  "updated_files": ["/app/backend/tests/test_pose_sessions.py (new)"],
+  "success_rate": {"backend": "100% (32/32 tests; Range support missing on media)", "frontend": "~90% (all gating/purchase/session flows pass; step seek on video fails)"},
+  "seed_data_creation": "Created devices TEST_<hex> (pytest; its analysis was deleted afterwards), TEST_fe_d5b7d2a8, TEST_pay_e0331842 (purchase cancelled), TEST_pay_8b3817ff (RevenueCat Test Store monthly purchase, 2 sessions), TEST_rs_*. Pytest also created test sessions that could not be deleted because there is no delete endpoint. Existing analysis 6afb06526adb8c88e5b8853a was read only.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with EXPO_PUBLIC_BACKEND_URL exported (pytest.ini uses xdist). Device TEST_pay_8b3817ff is Pro in the RevenueCat Test Store. Purchase flow on web: paywall-subscribe-button -> paywall-confirm-buy -> RevenueCat in-page sheet -> click text 'Test valid purchase' -> redirects to /. Session ball upload on web: use page.expect_file_chooser on session-upload-ball with /tmp/person.mp4 (about 20s). To check seeking: document.querySelector('video').currentTime should equal step.t after tapping step-row-ffc (2.15).",
+  "rca_of_issue": "Step seek bug: Starlette 0.37.2 FileResponse ignores the Range header and sends no Accept-Ranges. Chrome then marks the media as non-seekable (video.seekable.length=0), and any currentTime assignment is reset to 0. Repro: open /report/6afb06526adb8c88e5b8853a as dev_mwjb0sq6_aequfxrb, tap step-row-ffc, and read document.querySelector('video').currentTime (stays 0). Mitigation: support Range on /api/media."
+}

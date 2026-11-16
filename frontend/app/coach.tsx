@@ -7,7 +7,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { apiGet, apiSend, CoachMessage, streamCoach } from "@/src/api";
 import { fonts, radius, space } from "@/src/constants";
-import { ErrorBanner, Ionicons, PressScale } from "@/src/components/ui";
+import { ErrorBanner, Ionicons, PressScale, PrimaryButton } from "@/src/components/ui";
+import { ProLocked } from "@/src/components/ProLocked";
+import { useSubscription } from "@/src/revenuecat";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const PROMPTS = [
@@ -31,6 +33,7 @@ export default function Coach() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<FlatList<Msg>>(null);
+  const { isSubscribed, isLoading: subLoading } = useSubscription();
 
   useEffect(() => {
     if (history.data) setMsgs(history.data.map((m) => ({ id: m.id, role: m.role, content: m.content })));
@@ -66,6 +69,15 @@ export default function Coach() {
       setError(e?.message ?? "Could not clear chat");
     }
   };
+
+  if (!subLoading && !isSubscribed) {
+    return (
+      <View style={[s.screen, { padding: space.lg, paddingTop: insets.top + space.lg, justifyContent: "center", gap: space.md }]}>
+        <ProLocked testID="coach-locked" title="AI Coach is Pro" body="Chat with your ChatGPT-powered fast-bowling coach about pace, swing and injury prevention." />
+        <PrimaryButton testID="coach-locked-back" label="Go back" variant="secondary" onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} />
+      </View>
+    );
+  }
 
   return (
     <View style={s.screen}>

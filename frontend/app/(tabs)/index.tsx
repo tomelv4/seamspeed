@@ -10,6 +10,7 @@ import { IMAGES, fonts, phaseLabel, radius, space } from "@/src/constants";
 import { SessionRow } from "@/src/components/SessionRow";
 import { EmptyState, ErrorBanner, Ionicons, Loading, Pill, PressScale, PrimaryButton, SectionTitle, riskColor } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
+import { useRequirePro, useSubscription } from "@/src/revenuecat";
 import { makeStyles, useTheme } from "@/src/theme";
 
 export default function Home() {
@@ -22,6 +23,8 @@ export default function Home() {
   const profile = useProfile();
   const list = analyses.data ?? [];
   const latest = list.find((a) => a.is_bowling_video);
+  const { isSubscribed } = useSubscription();
+  const requirePro = useRequirePro();
 
   return (
     <View style={s.screen}>
@@ -65,8 +68,21 @@ export default function Home() {
           </View>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-          <PressScale testID="home-coach-card" style={s.coach} onPress={() => router.push("/coach")}>
+        <Animated.View entering={FadeInDown.delay(100).duration(400)} style={{ gap: space.md }}>
+          <PressScale testID="home-session-card" style={[s.coach, s.sessionCard]} onPress={() => requirePro(() => router.push("/session"))}>
+            <View style={[s.coachIcon, { backgroundColor: colors.brandPrimary }]}>
+              <Ionicons name="mic" size={22} color={colors.onBrandPrimary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                <Text style={s.coachTitle}>Live Coaching Session</Text>
+                {!isSubscribed ? <Pill label="Pro" color={colors.brandPrimary} /> : null}
+              </View>
+              <Text style={s.coachBody}>Film ball after ball while your AI coach talks you through it</Text>
+            </View>
+            <Ionicons name="arrow-forward" size={20} color={colors.muted} />
+          </PressScale>
+          <PressScale testID="home-coach-card" style={s.coach} onPress={() => requirePro(() => router.push("/coach"))}>
             <View style={s.coachIcon}>
               <Ionicons name="chatbubbles" size={22} color={colors.brandPrimary} />
             </View>
@@ -126,6 +142,7 @@ const useStyles = makeStyles((c) => ({
   heroOutOf: { fontFamily: fonts.displaySemi, fontSize: 28, color: c.muted, marginBottom: 10, marginLeft: 4 },
   heroTitle: { fontFamily: fonts.display, fontSize: 40, lineHeight: 42, color: c.onSurface, textTransform: "uppercase" },
   coach: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
+  sessionCard: { borderColor: c.brandPrimary },
   coachIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
   coachTitle: { fontFamily: fonts.textXBold, fontSize: 16, color: c.onSurface },
   coachBody: { fontFamily: fonts.text, fontSize: 12, color: c.muted, marginTop: 2 },

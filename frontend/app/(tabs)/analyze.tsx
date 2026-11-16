@@ -8,7 +8,8 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { uploadDelivery } from "@/src/api";
+import { uploadDelivery, useAnalyses } from "@/src/api";
+import { useSubscription } from "@/src/revenuecat";
 import { IMAGES, fonts, radius, space } from "@/src/constants";
 import { ErrorBanner, Ionicons, PressScale, PrimaryButton } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
@@ -33,6 +34,10 @@ export default function Analyze() {
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [perm, setPerm] = useState<PermState>("idle");
+  const { isSubscribed, isLoading: subLoading } = useSubscription();
+  const analyses = useAnalyses();
+  const freeUsed = !subLoading && !isSubscribed && (analyses.data ?? []).filter((x) => x.is_bowling_video).length >= 1;
+  const gate = (fn: () => void) => (subLoading || analyses.isLoading ? undefined : freeUsed ? router.push("/paywall") : fn());
 
   useEffect(() => {
     if (!busy) return;
@@ -77,6 +82,7 @@ export default function Analyze() {
 
   const analyze = async () => {
     if (!video) return;
+    if (freeUsed) return router.push("/paywall");
     setBusy(true);
     setError(null);
     try {
@@ -172,8 +178,17 @@ export default function Analyze() {
 
         {!busy && !video ? (
           <View style={{ gap: space.md }}>
-            <PrimaryButton testID="record-video-button" label="Record Delivery" icon="videocam" onPress={recordPressed} />
-            <PrimaryButton testID="upload-video-button" label="Upload from Library" icon="images" variant="secondary" onPress={pickFromLibrary} />
+            {freeUsed ? (
+              <PressScale testID="free-used-banner" style={s.freeBanner} onPress={() => router.push("/paywall")}>
+                <Ionicons name="lock-closed" size={18} color={colors.brandPrimary} />
+                <Text style={s.freeText}>Your free analysis is used. Go Pro for unlimited analyses.</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+              </PressScale>
+            ) : !isSubscribed ? (
+              <Text style={s.freeHint} testID="free-analysis-hint">1 free analysis included · then Pro</Text>
+            ) : null}
+            <PrimaryButton testID="record-video-button" label="Record Delivery" icon="videocam" onPress={() => gate(recordPressed)} />
+            <PrimaryButton testID="upload-video-button" label="Upload from Library" icon="images" variant="secondary" onPress={() => gate(pickFromLibrary)} />
           </View>
         ) : null}
 
@@ -244,6 +259,9 @@ const useStyles = makeStyles((c) => ({
   smallBtnGhost: { backgroundColor: c.surfaceTertiary },
   smallBtnText: { fontFamily: fonts.textBold, fontSize: 13, color: c.onBrandPrimary },
   tips: { padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, gap: space.md },
+  freeBanner: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.brandTertiary, borderWidth: 1, borderColor: c.brandPrimary },
+  freeText: { flex: 1, fontFamily: fonts.textBold, fontSize: 13, color: c.onSurface },
+  freeHint: { fontFamily: fonts.textBold, fontSize: 12, color: c.muted, textAlign: "center" },
   tipsTitle: { fontFamily: fonts.textXBold, fontSize: 12, color: c.muted, letterSpacing: 1.5 },
   tipRow: { flexDirection: "row", alignItems: "center", gap: space.md },
   tipText: { flex: 1, fontFamily: fonts.text, fontSize: 13, color: c.onSurfaceSecondary },

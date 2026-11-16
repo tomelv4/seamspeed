@@ -8,9 +8,16 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { ErrorBoundary } from "@/src/components/error-boundary";
 import { queryClient } from "@/src/query-client";
+import { initializeRevenueCat, SubscriptionProvider } from "@/src/revenuecat";
 import { colors } from "@/src/theme";
 
 LogBox.ignoreAllLogs(true);
+
+try {
+  initializeRevenueCat();
+} catch (err) {
+  console.warn("RevenueCat unavailable:", err);
+}
 
 export default function RootLayout() {
   const [loaded] = useFonts({
@@ -27,6 +34,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={[styles.root, { backgroundColor: colors.surface }]}>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
+          <SubscriptionProvider>
           <KeyboardProvider>
             <StatusBar style="light" />
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
@@ -34,9 +42,12 @@ export default function RootLayout() {
               <Stack.Screen name="report/[id]" />
               <Stack.Screen name="drill/[id]" />
               <Stack.Screen name="coach" />
+              <Stack.Screen name="session" />
               <Stack.Screen name="profile" options={{ presentation: "modal" }} />
+              <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
             </Stack>
           </KeyboardProvider>
+          </SubscriptionProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </GestureHandlerRootView>

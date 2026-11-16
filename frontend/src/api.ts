@@ -23,6 +23,10 @@ export type Analysis = {
   tips: string[];
   pace_band: { label?: string; min_kmh?: number; max_kmh?: number; confidence?: string };
   injury_risk: { level?: string; mixed_action?: boolean; counter_rotation?: string; notes?: string };
+  steps?: Step[];
+  video_path?: string;
+  video_meta?: { fps?: number; duration?: number; width?: number; height?: number };
+  has_pose?: boolean;
 };
 export type Drill = {
   id: string; phase: string; title: string; duration: string; level: string;
@@ -127,3 +131,36 @@ export const useAnalysis = (id: string) =>
 export const useDrills = () => useQuery({ queryKey: ["drills"], queryFn: () => apiGet<Drill[]>("/drills") });
 export const useProgress = () => useQuery({ queryKey: ["progress"], queryFn: () => apiGet<Progress>("/progress") });
 export const useProfile = () => useQuery({ queryKey: ["profile"], queryFn: () => apiGet<Profile>("/profile") });
+
+export type Step = {
+  key: string; name: string; phase: string; description: string; t: number | null; score: number;
+  status: "good" | "ok" | "fault" | "not_visible"; observation: string; cue: string;
+  metrics: { front_knee?: number; back_knee?: number; bowling_elbow?: number; trunk_lean?: number };
+};
+export type PoseData = { width: number; height: number; frames: { t: number; k: number[][] | null }[] };
+export type Ball = {
+  n: number; created_at: string; is_bowling: boolean; score: number; pace_kmh?: number | null; hit_target?: boolean;
+  good: string; fault: string; phase: string; injury_flag: boolean; observation: string; feedback: string; next_target: string; audio: string;
+};
+export type CoachSession = {
+  id: string; created_at: string; focus: string; status: "active" | "ended"; intro: string; intro_audio: string;
+  balls: Ball[]; summary: string; summary_audio: string;
+};
+
+export function useDeviceId() {
+  return useQuery({ queryKey: ["device-id"], queryFn: getDeviceId, staleTime: Infinity }).data;
+}
+
+export const mediaUrl = (analysisId: string, deviceId: string) => `${API}/media/${analysisId}?d=${encodeURIComponent(deviceId)}`;
+export const ttsUrl = (key: string) => `${API}/tts/${key}.mp3`;
+
+export const usePose = (id: string, enabled: boolean) =>
+  useQuery({ queryKey: ["pose", id], queryFn: () => apiGet<PoseData>(`/analyses/${id}/pose`), enabled: !!id && enabled, staleTime: Infinity });
+
+export async function uploadBall(sessionId: string, file: { uri: string; name?: string; mimeType?: string }) {
+  const res = await uploadForm(`${API}/sessions/${sessionId}/balls`, {
+    files: { video: { uri: file.uri, name: file.name || "ball.mp4", mimeType: file.mimeType || "video/mp4" } },
+    headers: await headers(),
+  });
+  return handle<Ball>(res as unknown as Response);
+}

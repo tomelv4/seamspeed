@@ -10,6 +10,8 @@ import { useDrills } from "@/src/api";
 import { IMAGES, PHASES, fonts, phaseLabel, radius, space } from "@/src/constants";
 import { EmptyState, ErrorBanner, Ionicons, Loading, Pill, PressScale } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
+import { ProLocked } from "@/src/components/ProLocked";
+import { useSubscription } from "@/src/revenuecat";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const FILTERS = [{ key: "all", label: "All" }, { key: "for_you", label: "For You" }, ...PHASES];
@@ -22,6 +24,7 @@ export default function Drills() {
   const bottomChrome = usesNativeTabs ? insets.bottom : 0;
   const [filter, setFilter] = useState("all");
   const drills = useDrills();
+  const { isSubscribed } = useSubscription();
   const data = (drills.data ?? []).filter((d) =>
     filter === "all" ? true : filter === "for_you" ? d.recommended : d.phase === filter,
   );
@@ -32,6 +35,7 @@ export default function Drills() {
         <Text style={s.title}>Drills</Text>
         <Text style={s.subtitle}>Personalised to the faults AI finds in your action</Text>
       </View>
+      {isSubscribed ? (
       <View style={s.chipRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipContent}>
           {FILTERS.map((f) => {
@@ -44,7 +48,12 @@ export default function Drills() {
           })}
         </ScrollView>
       </View>
-      {drills.isLoading ? (
+      ) : null}
+      {!isSubscribed ? (
+        <View style={{ padding: space.lg }}>
+          <ProLocked testID="drills-locked" title="Drills are Pro" body="Unlock drills personalised to the faults the AI finds in your action." />
+        </View>
+      ) : drills.isLoading ? (
         <Loading testID="drills-loading" />
       ) : drills.isError ? (
         <View style={{ padding: space.lg }}>

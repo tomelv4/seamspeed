@@ -22,6 +22,13 @@
 - Bowler profile (name, arm, style, level) used in the AI prompts
 - Testing: backend 16/16 pass; frontend iteration 1 passed. Fixed afterwards: profile form reset, PressScale tap area, native-tabs import path, chip touch size, top pace stat, clear-chat error handling
 
+## Implemented — iteration 2 (2026-11)
+- 27-step fast-bowling biomechanics breakdown (Gemini timestamps, score, status, observation, cue per step)
+- Server-side body tracking (rtmlib RTMPose ONNX, 12 fps) → stick-figure skeleton over the replay (react-native-svg), timeline step markers, slow-mo, step jump, measured joint angles (front/back knee, bowling elbow, trunk lean)
+- Videos stored in Emergent Object Storage, streamed with Range support
+- Live ball-by-ball coaching session: camera (expo-camera) or upload → Gemini watches → GPT-5.5 coach speech → OpenAI TTS (gpt-4o-mini-tts, onyx) via expo-audio; session summary
+- RevenueCat paywall (Emergent managed): 1 free bowling analysis; drills, progress, coach chat, live sessions and further analyses need Pro. Monthly $9.99; yearly requested $59.99 (Test Store still shows $79.99, see revenuecat.md)
+
 ## Backlog
 - P1: Store videos (Emergent Object Storage) and play the clip back inside the report
 - P1: Side-by-side compare of two deliveries

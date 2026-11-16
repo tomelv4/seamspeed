@@ -7,6 +7,8 @@ import { PHASES, fonts, radius, space } from "@/src/constants";
 import { SessionRow } from "@/src/components/SessionRow";
 import { Bars, EmptyState, ErrorBanner, Loading, SectionTitle, scoreColor } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
+import { ProLocked } from "@/src/components/ProLocked";
+import { useSubscription } from "@/src/revenuecat";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const SEGMENTS = [
@@ -23,6 +25,7 @@ export default function ProgressScreen() {
   const [seg, setSeg] = useState<(typeof SEGMENTS)[number]["key"]>("score");
   const progress = useProgress();
   const analyses = useAnalyses();
+  const { isSubscribed } = useSubscription();
   const p = progress.data;
   const last = (p?.points ?? []).slice(-8);
   const label = (d: string) => new Date(d).toLocaleDateString(undefined, { day: "numeric", month: "numeric" });
@@ -43,7 +46,9 @@ export default function ProgressScreen() {
         contentContainerStyle={{ padding: space.lg, paddingBottom: bottomChrome + space.xl, gap: space.xl }}
         refreshControl={<RefreshControl tintColor={colors.brandPrimary} refreshing={progress.isRefetching} onRefresh={() => { progress.refetch(); analyses.refetch(); }} />}
       >
-        {progress.isLoading ? (
+        {!isSubscribed ? (
+          <ProLocked testID="progress-locked" title="Progress is Pro" body="Track pace, scores, phase averages and recurring faults over time." />
+        ) : progress.isLoading ? (
           <Loading testID="progress-loading" />
         ) : progress.isError ? (
           <ErrorBanner testID="progress-error" message="Could not load progress data." onRetry={() => progress.refetch()} />

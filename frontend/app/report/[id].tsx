@@ -1,11 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { apiSend, useAnalysis } from "@/src/api";
+import { apiSend, useAnalysis, usePose, useProfile } from "@/src/api";
+import { SkeletonPlayer } from "@/src/components/SkeletonPlayer";
+import { StepCard, StepList } from "@/src/components/StepBreakdown";
 import { fonts, phaseLabel, radius, space } from "@/src/constants";
 import { ErrorBanner, Ionicons, Loading, Pill, PressScale, PrimaryButton, SectionTitle, riskColor, scoreColor } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
@@ -20,6 +22,17 @@ export default function Report() {
   const q = useAnalysis(id);
   const a = q.data;
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [seekNonce, setSeekNonce] = useState(0);
+  const scrollRef = useRef<any>(null);
+  const pose = usePose(id, !!a?.has_pose);
+  const profile = useProfile();
+  const steps = a?.steps ?? [];
+  const selectStep = (i: number, scrollTop = false) => {
+    setSelected(i);
+    setSeekNonce((n) => n + 1);
+    if (scrollTop) scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
 
   const remove = async () => {
     await apiSend(`/analyses/${id}`, "DELETE");
@@ -50,7 +63,7 @@ export default function Report() {
           <ErrorBanner testID="report-error" message="Could not load this report." onRetry={() => q.refetch()} />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: insets.bottom + space.xl, gap: space.xl }}>
+        <ScrollView ref={scrollRef} contentContainerStyle={{ padding: space.lg, paddingBottom: insets.bottom + space.xl, gap: space.xl }}>
           {confirmDelete ? (
             <View style={s.confirm} testID="delete-confirm-card">
               <Text style={s.confirmText}>Delete this report permanently?</Text>
@@ -62,6 +75,24 @@ export default function Report() {
                   <Text style={s.smallBtnText}>Cancel</Text>
                 </PressScale>
               </View>
+            </View>
+          ) : null}
+
+          {a.video_path ? (
+            <View style={{ gap: space.md }}>
+              <SkeletonPlayer
+                analysisId={a.id}
+                meta={a.video_meta ?? {}}
+                steps={steps}
+                pose={pose.data}
+                bowlingArm={profile.data?.bowling_arm ?? "Right"}
+                selected={selected}
+                seekNonce={seekNonce}
+                onSelect={(i) => selectStep(i)}
+              />
+              {selected != null && steps[selected] ? <StepCard step={steps[selected]} index={selected} /> : steps.length ? (
+                <Text style={s.note}>Tap a marker on the timeline or a step below to freeze the video at that moment.</Text>
+              ) : null}
             </View>
           ) : null}
 
@@ -119,6 +150,8 @@ export default function Report() {
                   ))}
                 </View>
               </View>
+
+              {steps.length ? <StepList steps={steps} selected={selected} onSelect={(i) => selectStep(i, true)} /> : null}
 
               {a.faults.length ? (
                 <View>
