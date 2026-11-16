@@ -147,9 +147,9 @@ export const useProgress = () => useQuery({ queryKey: ["progress"], queryFn: () 
 export const useProfile = () => useQuery({ queryKey: ["profile"], queryFn: () => apiGet<Profile>("/profile") });
 
 export type Step = {
-  key: string; name: string; phase: string; description: string; t: number | null; score: number;
+  key: string; name: string; phase: string; description: string; ideal?: string; t: number | null; score: number;
   status: "good" | "ok" | "fault" | "not_visible"; observation: string; cue: string;
-  metrics: { front_knee?: number; back_knee?: number; bowling_elbow?: number; trunk_lean?: number };
+  metrics: Record<string, number>;
 };
 export type PoseData = { width: number; height: number; frames: { t: number; k: number[][] | null }[] };
 export type Ball = {

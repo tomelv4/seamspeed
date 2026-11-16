@@ -89,7 +89,7 @@ function useSubscriptionContext() {
   // Developer Pro unlock: only exists in development (preview / Expo Go). Store builds compile it out.
   const [devPro, setDevProState] = useState(false);
   useEffect(() => {
-    if (__DEV__) storage.getItem<boolean>("dev_pro", false).then(setDevProState);
+    if (__DEV__) storage.getItem<boolean>("dev_pro", false).then((v) => setDevProState(!!v));
   }, []);
   const setDevPro = useCallback((on: boolean) => {
     if (!__DEV__) return;

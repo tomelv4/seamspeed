@@ -53,3 +53,4 @@
 - Dev-only "Unlock Pro for testing" switch in Profile (__DEV__ only); device ID shown for RevenueCat promotional grants.
 - Prices come from the store/RevenueCat products (no hardcoded USD). AUD is set in App Store Connect / Play Console / RevenueCat test store.
 - Analyses run asynchronously: POST /api/analyses returns {id,status:processing}; the client polls GET /api/analyses/{id}. Analyses still processing at startup are marked failed. Fixes the 502 proxy timeout.
+- 27-step timing sync (backend/biomech.py): take-off/BFC/FFC/release detected from the skeleton; each step snapped into its window relative to those events; measured per-step values are only used when the event was really measured; trunk lean is signed (forward/back). Each step carries `ideal` (user-supplied ranges), shown in the step card. The Gemini prompt is now critical and judges every step against those ideals.

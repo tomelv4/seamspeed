@@ -101,3 +101,7 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+## Iteration 6 context (main agent)
+- Step timing sync: backend/biomech.py detects take_off/BFC/FFC/release from tracked skeleton (ankle landings, highest bowling wrist), each of 27 steps snapped into a window relative to those events, monotonic order. Measured values per step (knee angles, stride % height, release height %, elbow extension est, approach speed est) stored in step.metrics. analysis.events saved.
+- Prompt: critical coach, judge vs ideal ranges supplied by user (STEPS now have when + ideal; step.ideal shown in StepCard as IDEAL box).
+- Pose sampling 30fps.

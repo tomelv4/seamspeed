@@ -131,6 +131,7 @@ class Analysis(BaseDocument):
     video_path: str = ""
     video_meta: dict = {}
     has_pose: bool = False
+    events: dict = {}
     status: str = "done"  # processing | done | failed
     error: str = ""
 
@@ -200,36 +201,8 @@ DRILLS: List[dict[str, Any]] = [
      "steps": ["3kg ball, side-on stance", "Drive hips and release overhead", "3 sets of 6 each side"]},
 ]
 
-STEPS = [
-    ("run_up_acceleration", "Run-Up Acceleration", "run_up", "Gradually building stride length and frequency to generate linear momentum."),
-    ("peak_approach_velocity", "Peak Approach Velocity", "run_up", "Reaching maximum controllable running speed (5-7 m/s) while keeping the torso upright and eyes fixed on the target."),
-    ("pre_delivery_stride", "Pre-Delivery Stride Adjustment", "run_up", "Shortening the penultimate stride slightly to prepare the body for takeoff."),
-    ("take_off", "Take-Off (The Bound)", "load", "Pushing off the front foot into a low, forward-moving jump rather than jumping high."),
-    ("gather", "The Gather", "load", "Pulling both hands close to the chest/chin while airborne to centre mass and maintain balance."),
-    ("airborne_alignment", "Airborne Body Alignment", "load", "Coiling the hips and shoulders into a side-on, front-on, or semi-open position."),
-    ("posterior_trunk_tilt", "Posterior Trunk Tilt", "load", "Leaning the upper body slightly backward away from the target to create a longer lever."),
-    ("bfc", "Back-Foot Contact (BFC)", "back_foot", "Landing on the back foot and absorbing ground reaction forces of 2-3x body weight."),
-    ("back_knee_compression", "Back-Knee Compression", "back_foot", "Slight bending of the back knee to absorb shock and load elastic energy like a spring."),
-    ("counter_rotation", "Hip-Shoulder Counter-Rotation", "back_foot", "Locking the hips while slightly rotating the shoulders back to pre-stretch the core."),
-    ("front_arm_elevation", "Front-Arm Elevation", "back_foot", "Raising the non-bowling arm high toward the sky to set up upper-body leverage."),
-    ("delivery_stride", "Delivery Stride Extension", "front_foot", "Driving the front leg forward toward the batter while the bowling arm drops down and back."),
-    ("ffc", "Front-Foot Contact (FFC)", "front_foot", "Planting the front heel firmly into the turf, absorbing peak forces of 5-9x body weight."),
-    ("front_knee_bracing", "Front-Knee Bracing", "front_foot", "Locking or rapidly extending the front knee to abruptly brake the lower body and catapult the upper body forward."),
-    ("pelvic_rotation", "Pelvic Rotation", "front_foot", "Driving the back hip violently forward toward the target while the shoulders remain delayed."),
-    ("hip_shoulder_separation", "Hip-to-Shoulder Separation", "front_foot", "Stretching the oblique, abdominal, and pectoral muscles like a rubber band as the hips outpace the shoulders."),
-    ("front_arm_pull_down", "Front-Arm Pull-Down", "release", "Pulling the non-bowling arm forcefully down toward the front hip to accelerate torso rotation."),
-    ("lateral_trunk_flexion", "Lateral Trunk Flexion", "release", "Bending the torso sideways away from the bowling arm to allow a high release point."),
-    ("forward_trunk_flexion", "Forward Trunk Flexion", "release", "Snapping the chest violently forward and downward over the braced front leg."),
-    ("arm_circumduction", "Bowling Arm Circumduction", "release", "Whipping the bowling arm over the top in a fast vertical arc, keeping elbow extension within the legal 15-degree limit."),
-    ("shoulder_internal_rotation", "Shoulder Internal Rotation", "release", "Rotating the upper arm inward at extreme speed just prior to release."),
-    ("wrist_extension", "Wrist Extension (Cocking)", "release", "Pulling the wrist back slightly at the top of the arc to load the forearm flexors."),
-    ("wrist_snap", "Wrist Snap (Flexion)", "release", "Snapping the wrist violently forward from extension into flexion at the exact point of release."),
-    ("finger_roll_release", "Finger Roll & Ball Release", "release", "Rolling the index and middle fingers straight down the back of the ball to impart maximum backspin and speed."),
-    ("arm_follow_through", "Arm Follow-Through & Deceleration", "follow_through", "Swinging the bowling arm all the way down across the front hip while the rotator cuff slows it down."),
-    ("back_leg_swing", "Back-Leg Swing-Through", "follow_through", "Swinging the back leg forward past the braced front leg to carry remaining momentum down the pitch."),
-    ("deceleration_strides", "Deceleration Strides", "follow_through", "Taking 3-5 balanced, curved running steps off the pitch to safely dissipate remaining forward kinetic energy."),
-]
-STEP_LIST_TEXT = "\n".join(f"{i + 1}. {k} - {n}: {d}" for i, (k, n, _, d) in enumerate(STEPS))
+from biomech import STEPS, STEP_LIST_TEXT  # noqa: E402
+import biomech  # noqa: E402
 
 ANALYSIS_PROMPT = """You are an elite fast-bowling biomechanics coach (like a cricket version of SwingSensei for golf).
 Analyse the attached video of a cricket pace bowler. Profile: {profile}. Extra notes from bowler: {notes}
@@ -244,7 +217,20 @@ INJURY SCANNER - rate each area from what you see:
 - shoulder: posterior shoulder / rotator cuff from braking the arm in follow-through (cut-off follow-through, arm not decelerating across body).
 - hamstring_groin: high-speed run-up sprinting and over-striding at the crease.
 For each step return {{"key","t","score" (0-10),"status" ("good"|"ok"|"fault"|"not_visible"),"observation" (what you see, 1-2 sentences),"cue" (one short coaching cue)}}.
-Timestamps must be increasing. Use "not_visible" with t null if the step is out of frame.
+Timestamps must be increasing and each must be the exact moment described in WHEN (scrub frame by frame around
+back-foot contact, front-foot contact and release). Use "not_visible" with t null if the step is out of frame.
+
+BE A CRITICAL, DEMANDING COACH. Judge every step against its IDEAL numbers, not against "looks fine":
+- In every observation state your estimate of the key number (angle, %, distance, timing) and the ideal range,
+  e.g. "Front knee collapses ~20° after landing (ideal < 10°)".
+- status "good" only when the step is inside the ideal range; "ok" when slightly outside; "fault" when clearly outside
+  or when it creates injury risk. Do not give the benefit of the doubt.
+- Scores: 9-10 international standard, 7-8 strong first-class, 5-6 typical club bowler, 3-4 clear technical
+  problems, 0-2 major breakdown. Most amateur actions should land 4-7.
+- Actively hunt for faults: front-knee collapse, mixed action / counter-rotation > 30°, short or over-long delivery
+  stride, front arm falling away early, falling away at release, low release, elbow flexion near or above 15°,
+  jumping too high in the bound, poor alignment, cut-off follow-through. Report every real fault you find
+  with its measured value; do not invent faults that are not visible.
 
 Break the action into 6 phases: run_up, load (bound/gather), back_foot (back-foot contact), front_foot (front-foot contact / delivery stride), release, follow_through.
 Score each phase 0-10 (one decimal). Identify faults with severity (low|medium|high), linked phase key and a short fix.
@@ -270,13 +256,16 @@ If the video does not show a bowling action, set is_bowling_video to false, over
 
 MEASURED_PROMPT = """
 
-MEASURED SKELETON DATA of the tracked bowler (2D pose tracking, angles in degrees; fk=front knee, bk=back knee,
-el=bowling elbow, lean=trunk lean from vertical, hip_x=hip position across the frame 0-1):
+MEASURED SKELETON DATA of the tracked bowler (2D pose tracking at 30 fps):
+{events}
+
+Frame-by-frame timeline (angles in degrees; fk=front knee, bk=back knee, el=bowling elbow, lean=trunk lean from
+vertical, hip_x=hip position across the frame 0-1):
 {timeline}
-Use these measurements together with the video: anchor step timestamps to them (e.g. FFC is where the front knee
-angle stops dropping at landing, release is where the bowling wrist is highest above the head), and make your
-observations consistent with the measured angles (quote an angle where it helps). Camera angle can distort 2D
-angles, so trust the video when it clearly disagrees."""
+Use the detected events as the anchors for your timestamps (BFC, FFC and release steps MUST use those times when
+they were measured) and place every other step at its correct moment relative to them. Use the measured values
+when judging each step against its ideal and quote them. 2D angles can be distorted by camera angle, so say so when
+the view is not side-on, but do not ignore a measured fault."""
 
 
 def now_iso() -> str:
@@ -380,30 +369,41 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
             age=profile.age_band or "unknown",
         )
         if pose_data and pose_data.get("detected"):
-            prompt += MEASURED_PROMPT.format(timeline=pose_lib.timeline_text(pose_data, profile.bowling_arm))
+            prompt += MEASURED_PROMPT.format(events=pre_text, timeline=pose_lib.timeline_text(pose_data, profile.bowling_arm, every=0.033))
         response = await chat.send_message(
             UserMessage(text=prompt, file_contents=[FileContentWithMimeType(file_path=path, mime_type=mime)])
         )
         return parse_json(response)
 
     pose_data = await run_pose()
+    track = biomech.Track(pose_data or {}, profile.bowling_arm)
+    pose_ev = biomech.detect_events(track)
+    pre_ev = biomech.merge_events(pose_ev, [], meta.get("duration"))
+    pre_text = biomech.measured_text(pre_ev, biomech.measured(track, pre_ev)) if pre_ev else "Key events could not be detected from the skeleton."
     data = await run_gemini(pose_data)
 
-    # merge the 27 steps with definitions + measured joint angles
-    by_key = {s.get("key"): s for s in data.get("steps", []) if isinstance(s, dict)}
+    # sync every step to its biomechanical moment (measured events first, AI timestamps as fallback)
+    ai_steps = data.get("steps", [])
+    by_key = {s.get("key"): s for s in ai_steps if isinstance(s, dict)}
+    ev = biomech.merge_events(pose_ev, ai_steps, meta.get("duration"))
+    times = biomech.sync_times(ai_steps, ev) if ev else {}
+    meas = biomech.measured(track, ev) if ev else {}
     steps = []
-    for key, name, phase, desc in STEPS:
+    for key, name, phase, when, ideal in STEPS:
         s = by_key.get(key, {})
-        t = s.get("t")
-        t = float(t) if isinstance(t, (int, float)) else None
         status = s.get("status", "not_visible")
+        t = times.get(key)
+        if t is None:
+            t = s.get("t") if isinstance(s.get("t"), (int, float)) else None
         steps.append({
-            "key": key, "name": name, "phase": phase, "description": desc, "t": t,
+            "key": key, "name": name, "phase": phase, "description": when, "ideal": ideal, "t": t,
             "score": 0 if status == "not_visible" else s.get("score", 0), "status": status,
             "observation": s.get("observation", ""), "cue": s.get("cue", ""),
-            "metrics": pose_lib.metrics_at(pose_data, t, profile.bowling_arm) if pose_data else {},
+            "metrics": meas.get(key, {}),
         })
     data["steps"] = steps
+    if ev:
+        data["events"] = {k: round(ev[k], 3) for k in ("take_off", "bfc", "ffc", "release")} | {"measured": ev["measured"]}
 
     video_path = f"{APP_NAME}/uploads/{x_device_id}/{uuid.uuid4()}{suffix}"
     try:

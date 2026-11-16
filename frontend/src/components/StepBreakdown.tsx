@@ -6,7 +6,14 @@ import { Pill, SectionTitle, scoreColor } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const STATUS_LABEL: Record<string, string> = { good: "Good", ok: "Work on", fault: "Fault", not_visible: "Not visible" };
-const METRIC_LABEL: Record<string, string> = { front_knee: "Front knee", back_knee: "Back knee", bowling_elbow: "Bowling elbow", trunk_lean: "Trunk lean" };
+const METRIC_LABEL: Record<string, [string, string]> = {
+  front_knee: ["Front knee", "°"], back_knee: ["Back knee", "°"], bowling_elbow: ["Bowling elbow", "°"], trunk_lean: ["Trunk lean", "°"],
+  back_knee_min: ["Back knee min", "°"], knee_flex_after_bfc: ["Knee flex after BFC", "°"], stride_pct_height: ["Stride", "% height"],
+  front_knee_ffc: ["Knee at FFC", "°"], front_knee_release: ["Knee at release", "°"], knee_flex_after_ffc: ["Knee flex after FFC", "°"],
+  front_arm_elevation: ["Front arm", "°"], release_height_pct: ["Release", "% height"], forward_lean_max: ["Forward lean", "°"], backward_lean: ["Backward lean", "°"],
+  elbow_at_horizontal: ["Elbow at horizontal", "°"], elbow_at_release: ["Elbow at release", "°"], elbow_extension_est: ["Elbow extension (est)", "°"],
+  approach_speed_ms: ["Approach (est)", " m/s"],
+};
 
 function useStatusColor() {
   const { colors } = useTheme();
@@ -18,7 +25,7 @@ export function StepCard({ step, index }: { step: Step; index: number }) {
   const s = useStyles();
   const { colors } = useTheme();
   const statusColor = useStatusColor();
-  const metrics = Object.entries(step.metrics || {}).filter(([, v]) => v != null && v > 0);
+  const metrics = Object.entries(step.metrics || {}).filter(([, v]) => v != null);
   return (
     <View style={s.card} testID="selected-step-card">
       <View style={s.headRow}>
@@ -31,6 +38,12 @@ export function StepCard({ step, index }: { step: Step; index: number }) {
       </View>
       <Pill label={STATUS_LABEL[step.status] ?? step.status} color={statusColor(step.status)} />
       <Text style={s.desc}>{step.description}</Text>
+      {step.ideal ? (
+        <View style={s.ideal} testID="selected-step-ideal">
+          <Text style={s.cueLabel}>IDEAL</Text>
+          <Text style={s.idealText}>{step.ideal}</Text>
+        </View>
+      ) : null}
       {step.observation ? <Text style={s.body}>{step.observation}</Text> : null}
       {step.cue ? (
         <View style={s.cue}>
@@ -42,8 +55,8 @@ export function StepCard({ step, index }: { step: Step; index: number }) {
         <View style={s.metrics}>
           {metrics.map(([k, v]) => (
             <View key={k} style={s.metric} testID={`step-metric-${k}`}>
-              <Text style={s.metricValue}>{v}°</Text>
-              <Text style={s.metricLabel}>{METRIC_LABEL[k] ?? k}</Text>
+              <Text style={s.metricValue}>{v}{METRIC_LABEL[k]?.[1] ?? "°"}</Text>
+              <Text style={s.metricLabel}>{METRIC_LABEL[k]?.[0] ?? k}</Text>
             </View>
           ))}
         </View>
@@ -89,6 +102,8 @@ const useStyles = makeStyles((c) => ({
   score: { fontFamily: fonts.display, fontSize: 36 },
   desc: { fontFamily: fonts.text, fontSize: 13, lineHeight: 19, color: c.muted, fontStyle: "italic" },
   body: { fontFamily: fonts.text, fontSize: 14, lineHeight: 21, color: c.onSurfaceSecondary },
+  ideal: { gap: 4, padding: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: c.border },
+  idealText: { fontFamily: fonts.text, fontSize: 13, lineHeight: 19, color: c.onSurfaceTertiary },
   cue: { flexDirection: "row", gap: space.sm, alignItems: "center", padding: space.md, borderRadius: radius.md, backgroundColor: c.brandTertiary },
   cueLabel: { fontFamily: fonts.textXBold, fontSize: 11, color: c.accent, letterSpacing: 1 },
   cueText: { flex: 1, fontFamily: fonts.textBold, fontSize: 14, color: c.onSurface },

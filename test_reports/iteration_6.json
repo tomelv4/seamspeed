@@ -1,0 +1,63 @@
+{
+  "summary": "Iteration 6: 27-step timing/critical-analysis work. Backend: real upload of /tmp/person.mp4 via POST /api/analyses -> polled to done in ~150s (no 500s). Clip is a freeze-frame so Gemini returned is_bowling_video=false, all 27 steps not_visible, t=null, events={} (has_pose=true but no wrist peak). Structure verified (27 canonical steps, description+ideal on each, no _id). To exercise the timing pipeline end-to-end, ran server._run_analysis in-process with a synthetic right-arm skeleton + mocked Gemini: measured events take_off 0.833/BFC 1.1/FFC 1.367/release 1.5 detected exactly, bfc/ffc/finger_roll_release/take_off steps snapped to events even when the AI's timestamps drifted, times non-decreasing, MEASURED prompt contains events, pose failure (exception/None) -> analysis still done with events from AI timestamps (measured=[]). Unit tests biomech: 17/18 pass; 1 real bug: steps can get t beyond the video duration. Frontend: seeded TEST_ report opened at /report/{id}; tapping step rows shows StepCard with IDEAL box (selected-step-ideal) + metrics with units, video seeks exactly to step t (1.1, 1.367, 1.5, 1.444, 0.833, 1.92 checked via video.currentTime), overlay label updates, no page errors. Non-bowling report renders without crash. No deprecated Expo packages found (expo-video used).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "biomech.step_window / sync_times", "issue": "When release is near clip end, step_window clamps the window END to ev['end'] but not the START, so follow-through steps get t > duration (release 2.45 in a 2.5s clip -> back_leg_swing 2.55, deceleration_strides 2.75). Video seeks past the end. Fix: start = min(max(ev['start'], start), ev['end'])."},
+      {"endpoint": "biomech.measured", "issue": "trunk_lean is abs(atan2) so it cannot tell backward from forward lean: posterior_trunk_tilt (ideal 10-15° BACKWARD) takes max abs lean, so forward lean is reported as posterior tilt. lateral_trunk_flexion uses the same sagittal 2D lean from a side camera (not lateral). Values are misleading for judging against ideals."},
+      {"endpoint": "biomech.measured / server pre_text", "issue": "measured values are computed and sent to the AI as 'MEASURED SKELETON DATA' even when bfc/ffc/take_off are fallback typical-gap estimates (not measured). Only the measured list notes it; per-step values should be omitted or labelled estimated when their anchor event was not measured."},
+      {"endpoint": "biomech.sync_times", "issue": "t = max(t, last) can push a step outside its window (e.g. AI front_arm_pull_down=release -> wrist_extension/shoulder_internal_rotation forced to release, beyond their release-0.01/-0.0 window). Order kept, timing slightly wrong."},
+      {"endpoint": "biomech.detect_events", "issue": "Only wrist confidence is checked; ankle keypoint confidence is ignored for FFC/BFC/take-off and ground = max y in window assumes a static side-on camera. Front-on/panning clips likely mis-detect. Consider a confidence gate and leaving the event unmeasured when ankles are low-confidence."},
+      {"endpoint": "server startup (line ~1000)", "issue": "On every startup all 'processing' analyses are marked failed. Any backend hot reload (even editing a file in /app/backend/tests) kills in-flight uploads - observed in this run (job 6afb2480... failed 'interrupted')."},
+      {"endpoint": "GET /api/analyses/{id}", "issue": "has_pose=true but events={} when release cannot be detected and AI gives null t (non-bowling clip). Acceptable, but the review spec expects events whenever has_pose is true."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "StepCard metrics", "issue": "metrics filtered with v > 0, so 0 values are hidden - e.g. knee_flex_after_ffc=0, elbow_extension_est=0, trunk_lean=0. These are often the main numbers judged against the ideal (front knee <10° bend). Filter only null/undefined. Reference: src/components/StepBreakdown.tsx:28", "testID": "step-metric-knee_flex_after_ffc", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Report - SkeletonPlayer timeline", "issues": ["Markers are 10x10 px (hitSlop 8). With the new event-anchored timing ~10 steps fall inside FFC->release (~0.13s), so the markers overlap and can't be tapped one by one. Prev/next buttons help. Consider grouping clustered markers or relying on the list."]},
+      {"screen": "Report - StepCard", "issues": ["Generic front_knee/back_knee/bowling_elbow chips from metrics_at appear on every step, including irrelevant ones (deceleration strides, take-off), and duplicate step metrics (Front knee 164° next to Knee at FFC 164°). Show only the metrics relevant to each step."]},
+      {"screen": "Report (non-bowling video)", "issues": ["The action type pill ('MIXED ACTION') still shows when is_bowling_video=false and the score is 0."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_biomech_unit.py",
+    "/app/backend/tests/test_run_analysis_sim.py",
+    "/app/backend/tests/test_step_timing_api.py",
+    "/app/backend/tests/run_upload_bg.py",
+    "/app/backend/tests/seed_ui_step_report.py",
+    "/app/test_reports/pytest/iteration_6_unit.xml",
+    "/app/test_reports/pytest/step_timing_api.xml"
+  ],
+  "action_items": [
+    "Clamp step window start to ev['end'] in biomech.step_window so no step t is past the video duration (test_release_at_end_of_clip_stays_within_duration fails now)",
+    "StepBreakdown.tsx:28 - show metric values of 0 (filter null/undefined only)",
+    "Use signed trunk lean (with facing direction) for posterior_trunk_tilt / forward_trunk_flexion; don't label sagittal lean as lateral flexion",
+    "Don't present per-step measured values as MEASURED when their anchor event is an estimate; add an ankle confidence gate in detect_events",
+    "Make timeline markers usable when steps cluster (group or bigger targets); show only step-relevant metric chips",
+    "Optional: hide action_type pill when is_bowling_video=false; consider not failing in-flight jobs on dev hot reload"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1017 lines (>700) - split analysis pipeline/prompts into a module",
+    "measured(): wrist_snap gets release_height_pct (duplicate of finger_roll_release, not a wrist metric)",
+    "approach_speed_ms assumes a 1.80 m bowler and a static camera; label as rough or use the profile height",
+    "No deprecated Expo packages found (expo-av / expo-barcode-scanner / expo-background-fetch not present)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_biomech_unit.py (new)",
+    "/app/backend/tests/test_run_analysis_sim.py (new)",
+    "/app/backend/tests/test_step_timing_api.py (new)",
+    "/app/backend/tests/run_upload_bg.py (new)",
+    "/app/backend/tests/seed_ui_step_report.py (new)"
+  ],
+  "success_rate": {"backend": "95% (20/21 unit+sim, 9/9 API on seeded report; 1 expected-skip/fail on non-bowling clip events)", "frontend": "100% of tested flows (step tap, IDEAL box, metrics, video seek)"},
+  "seed_data_creation": "Created and then deleted by id: analyses 6afb24801c03e5b5b5209395, 6afb2561b38dd0e27467a2c6 (device TEST_iter6_bg) and 6afb2663bd89b16c7068d528 (device TEST_iter6_ui, synthetic pose + mocked AI, via seed_ui_step_report.py). The DELETE endpoint also removes their poses. No other data touched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "/tmp/person.mp4 is a freeze-frame of a bowler (Gemini says static image) so a real upload yields no events. Use tests/seed_ui_step_report.py (runs server._run_analysis with synthetic skeleton + mocked Gemini into the real DB, device TEST_iter6_ui) for UI tests, then DELETE by id. Run pytest with PYTHONDONTWRITEBYTECODE=1 -p no:cacheprovider -n 0. Do NOT edit files under /app/backend while an upload is processing: uvicorn reload marks it failed. In Playwright, set localStorage device_id = JSON.stringify('<id>') via add_init_script.",
+  "rca_of_issue": "t beyond duration: step_window computes start = max(ev['start'], anchor+offset) and end = min(ev['end'], ...), then returns (start, max(start, end)). When anchor+offset > ev['end'], both values exceed the clip length. Repro: merge_events({'release':2.45,'ffc':2.3,'bfc':2.1,'take_off':1.8}, [], 2.5) -> sync_times gives deceleration_strides 2.75."
+}
