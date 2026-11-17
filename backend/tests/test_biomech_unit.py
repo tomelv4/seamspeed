@@ -498,13 +498,10 @@ class TestMeasured:
     def test_back_knee_compression_is_omitted_with_only_one_valid_window_frame(self):
         track = biomech.Track(synth_pose("right"), "right")
         ev = biomech.merge_events(biomech.detect_events(track), [], 2.5)
-        ids = track.range(ev["bfc"] + 0.02, ev["bfc"] + 0.15)
+        ids = track.range(ev["bfc"] + 0.02, ev["bfc"] + 0.12)
         assert len(ids) >= 2
         side = track.arm
-        i_bfc = track.idx(ev["bfc"])
-        for i in ids:
-            if i == i_bfc:
-                continue
+        for i in ids[1:]:
             for joint in (side["hip"], side["knee"], side["ankle"]):
                 track.c[i, joint] = 0.0
 
@@ -515,8 +512,8 @@ class TestMeasured:
     def test_window_measurement_is_omitted_across_long_pose_tracking_gap(self):
         track = biomech.Track(synth_pose("right"), "right")
         ev = biomech.merge_events(biomech.detect_events(track), [], 2.5)
-        ids = track.range(ev["bfc"], ev["bfc"] + 0.15)
-        assert len(ids) >= 4
+        ids = track.range(ev["bfc"] + 0.02, ev["bfc"] + 0.12)
+        assert len(ids) >= 2
         side = track.arm
         for i in ids[1:-1]:
             for joint in (side["hip"], side["knee"], side["ankle"]):
