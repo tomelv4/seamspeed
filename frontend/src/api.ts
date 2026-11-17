@@ -30,12 +30,16 @@ export type Analysis = {
   injury_risk: { level?: string; mixed_action?: boolean | null; counter_rotation?: string; notes?: string; areas?: InjuryArea[] };
   steps?: Step[];
   video_path?: string;
-  video_meta?: { fps?: number; duration?: number; width?: number; height?: number };
+  video_meta?: {
+    fps?: number; duration?: number; width?: number; height?: number;
+    quality?: { rating?: string; flags?: string[]; samples?: number; mean_luminance?: number | null; median_sharpness?: number | null; method?: string };
+  };
   has_pose?: boolean;
   analysis_quality?: {
     score_confidence?: string; assessable_steps?: number; step_coverage?: number;
     camera_view?: string; camera_view_confidence?: string;
     pose?: { rating?: string; frame_coverage?: number; critical_joint_coverage?: number; mean_joint_confidence?: number; interpolated_frames?: number };
+    video?: { rating?: string; flags?: string[]; samples?: number; mean_luminance?: number | null; median_sharpness?: number | null; method?: string };
     event_methods?: Record<string, string>;
     event_confidence?: Record<string, number>;
     limitations?: string[];
