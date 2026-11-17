@@ -70,9 +70,10 @@ def test_normalise_produces_all_27_steps_and_sanitises_faults():
 def test_overall_and_phase_scores_are_derived_from_step_evidence():
     payload = valid_payload()
     payload["overall_score"] = 10
+    phase_by_key = {key: phase for key, _name, phase, *_rest in biomech.STEPS}
     for step in payload["steps"]:
         step["score"] = 5
-        if step["phase"] == "run_up":
+        if phase_by_key[step["key"]] == "run_up":
             step["score"] = 9
     result = normalise_model_payload(payload, duration=4.0)
     run_up = next(phase for phase in result["phases"] if phase["key"] == "run_up")
