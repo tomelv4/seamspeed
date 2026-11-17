@@ -1057,7 +1057,7 @@ async def session_ball(session_id: str, video: UploadFile = File(...), block: st
     return ball
 
 
-def compute_achievements(session: Session, prior_best_pace: float) -> tuple[list, dict]:
+def compute_achievements(session: Session) -> tuple[list, dict]:
     balls = [b for b in session.balls if b.get("is_bowling", True)]
     test = [b for b in balls if b.get("block") == "test"]
     out = []
@@ -1078,8 +1078,10 @@ def compute_achievements(session: Session, prior_best_pace: float) -> tuple[list
     result = {}
     if test:
         hits = sum(1 for b in test if b.get("hit_target"))
+        measured_paces = [b["pace_kmh"] for b in test if isinstance(b.get("pace_kmh"), (int, float)) and b["pace_kmh"] > 0]
         result = {"name": (session.plan.get("test") or {}).get("name", "Skills Test"), "balls": len(test), "hits": hits,
-                  "avg_score": round(sum(b["score"] for b in test) / len(test), 1), "top_pace": max([b.get("pace_kmh") or 0 for b in test])}
+                  "avg_score": round(sum(b["score"] for b in test) / len(test), 1),
+                  "top_pace": max(measured_paces) if measured_paces else None}
         if hits >= max(1, round(len(test) * 0.67)):
             add("test_passed", "Test Passed", f"{hits}/{len(test)} on target in the {result['name']}")
     return out, result
@@ -1092,9 +1094,7 @@ async def end_session(session_id: str, x_device_id: str = Header(...)):
         return session.public()
     profile = await get_profile(x_device_id)
     balls = [{"n": b["n"], "block": b.get("block", "bowling"), "score": b["score"], "pace": b.get("pace_kmh"), "fault": b.get("fault"), "good": b.get("good")} for b in session.balls]
-    prior = await db.sessions.find({"device_id": x_device_id, "status": "ended"}, {"balls.pace_kmh": 1}).to_list(200)
-    prior_best = max([b.get("pace_kmh") or 0 for s_ in prior for b in s_.get("balls", [])], default=0)
-    achievements, test_result = compute_achievements(session, prior_best)
+    achievements, test_result = compute_achievements(session)
     try:
         summary = await coach_say(coach_system(profile, session.focus),
             f"The session is over (warm-up, drills, bowling block, test, cool-down). Balls: {json.dumps(balls)}. Test result: {json.dumps(test_result)}. "
