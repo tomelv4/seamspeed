@@ -337,9 +337,16 @@ def _angle(a, b, c, w, h, min_segment_px=1e-6):
 
 
 def _joint_confident(k, *indices, threshold: float = 0.45) -> bool:
-    """A metric is valid only when every keypoint it depends on was confidently observed."""
+    """A metric is valid only when every keypoint is finite and confidently observed."""
     try:
-        return all(len(k[index]) >= 3 and float(k[index][2]) >= threshold for index in indices)
+        return all(
+            len(k[index]) >= 3
+            and math.isfinite(float(k[index][0]))
+            and math.isfinite(float(k[index][1]))
+            and math.isfinite(float(k[index][2]))
+            and float(k[index][2]) >= threshold
+            for index in indices
+        )
     except (IndexError, TypeError, ValueError):
         return False
 
