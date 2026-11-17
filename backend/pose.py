@@ -173,6 +173,33 @@ def _bowler_score(tr, diag):
     return len(items) * conf * (0.4 + size) * (1 + 3 * travel + 25 * limb_motion)
 
 
+def _subject_selection_confidence(tracks, selected, diag) -> dict:
+    """Flag clips where another simultaneously visible person competes with the selected bowler track."""
+    if not selected or not selected.get("dets"):
+        return {"confidence": "low", "competing_tracks": 0}
+    selected_frames = set(selected["dets"])
+    selected_start, selected_end = min(selected_frames), max(selected_frames)
+    selected_span = max(1, selected_end - selected_start + 1)
+    selected_score = _bowler_score(selected, diag)
+    strongest_ratio, competitors = 0.0, 0
+
+    for track in tracks:
+        if track is selected or not track.get("dets"):
+            continue
+        frames = set(track["dets"])
+        start, end = min(frames), max(frames)
+        overlap = max(0, min(selected_end, end) - max(selected_start, start) + 1)
+        overlap_ratio = overlap / max(1, min(selected_span, end - start + 1))
+        if overlap_ratio < 0.4:
+            continue
+        competitors += 1
+        ratio = _bowler_score(track, diag) / max(selected_score, 1e-6)
+        strongest_ratio = max(strongest_ratio, ratio)
+
+    confidence = "low" if strongest_ratio >= 0.85 else "medium" if strongest_ratio >= 0.65 else "high"
+    return {"confidence": confidence, "competing_tracks": competitors}
+
+
 def _smooth(kps, scs):
     """Confidence-weighted 3-frame smoothing that keeps fast arm motion intact."""
     out = kps.copy()
@@ -222,8 +249,10 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dic
     n = len(dets)
     frames = [{"t": t, "k": None} for t in times]
     observed = np.zeros(n, bool)
+    selection_quality = {"confidence": "low", "competing_tracks": 0}
     if tracks:
         bowler = max(tracks, key=lambda tr: _bowler_score(tr, diag))
+        selection_quality = _subject_selection_confidence(tracks, bowler, diag)
         # stitch: re-attach fragments that continue the bowler where his track broke (occlusion)
         for tr in sorted(tracks, key=lambda tr: min(tr["dets"])):
             if tr is bowler:
@@ -279,6 +308,10 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dic
     quality = "good" if coverage >= 0.80 and joint_coverage >= 0.70 and mean_confidence >= 0.55 else (
         "usable" if coverage >= 0.50 and joint_coverage >= 0.45 and mean_confidence >= 0.40 else "limited"
     )
+    if selection_quality["confidence"] == "low":
+        quality = "limited"
+    elif selection_quality["confidence"] == "medium" and quality == "good":
+        quality = "usable"
     return {
         "width": width, "height": height, "frames": frames, "detected": detected,
         "source_fps": round(float(fps), 2), "sampled_fps": round(float(fps / step), 2),
@@ -287,6 +320,8 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dic
             "interpolated_frames": interpolated_frames, "frame_coverage": round(coverage, 3),
             "critical_joint_coverage": round(joint_coverage, 3),
             "mean_joint_confidence": round(mean_confidence, 3),
+            "subject_selection_confidence": selection_quality["confidence"],
+            "competing_tracks": selection_quality["competing_tracks"],
         },
     }
 
