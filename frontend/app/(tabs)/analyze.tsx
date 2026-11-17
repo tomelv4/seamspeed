@@ -8,7 +8,7 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AnalysisProgress, uploadDelivery, useAnalyses } from "@/src/api";
+import { uploadDelivery, useAnalyses, type AnalysisProgress } from "@/src/api";
 import { useSubscription } from "@/src/revenuecat";
 import { IMAGES, fonts, radius, space } from "@/src/constants";
 import { ErrorBanner, Ionicons, PressScale, PrimaryButton } from "@/src/components/ui";
