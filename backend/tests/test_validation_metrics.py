@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from validation_metrics import evaluate_event_times
+from validation_metrics import aggregate_event_reports, evaluate_event_times
 
 
 def test_evaluate_event_times_reports_error_and_tolerance():
@@ -35,3 +35,22 @@ def test_custom_tolerance_can_be_set_per_event():
     result = evaluate_event_times({"release": 1.08}, {"release": 1.0}, fps=60,
                                   tolerances={"release": 0.1})
     assert result["within_tolerance"] == 1
+
+
+
+def test_aggregate_event_reports_includes_misses_and_reports_median_error():
+    reports = [
+        evaluate_event_times({"bfc": 1.02}, {"bfc": 1.0}, fps=30),
+        evaluate_event_times({"bfc": 1.10}, {"bfc": 1.0}, fps=30),
+        evaluate_event_times({}, {"bfc": 1.0}, fps=30),
+    ]
+    result = aggregate_event_reports(reports)
+    bfc = result["per_event"]["bfc"]
+    assert result["clips_evaluated"] == 3
+    assert bfc["labelled_events"] == 3
+    assert bfc["detected_events"] == 2
+    assert bfc["missed_events"] == 1
+    assert bfc["within_tolerance"] == 1
+    assert bfc["within_tolerance_rate"] == 0.333
+    assert bfc["mean_absolute_error_s"] == 0.06
+    assert bfc["median_absolute_error_s"] == 0.06
