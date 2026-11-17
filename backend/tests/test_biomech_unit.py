@@ -375,6 +375,19 @@ class TestMeasured:
         metrics = biomech.measured(track, ev)
         assert metrics["front_arm_elevation"]["front_arm_elevation"] == 0
 
+    def test_stride_uses_horizontal_projection_not_airborne_foot_height(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        ev = biomech.merge_events(biomech.detect_events(track), [], 2.5)
+        i_ffc = track.idx(ev["ffc"])
+        front_ankle, back_ankle = track.front["ankle"], track.arm["ankle"]
+        track.xy[i_ffc, front_ankle] = [900.0, 900.0]
+        track.xy[i_ffc, back_ankle] = [700.0, 500.0]
+
+        metrics = biomech.measured(track, ev)
+
+        expected = 200.0 / track.height_px * 100
+        assert metrics["delivery_stride"]["stride_pct_height"] == round(expected)
+
     def test_back_knee_compression_is_omitted_with_only_one_valid_window_frame(self):
         track = biomech.Track(synth_pose("right"), "right")
         ev = biomech.merge_events(biomech.detect_events(track), [], 2.5)
