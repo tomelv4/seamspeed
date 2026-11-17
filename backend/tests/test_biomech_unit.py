@@ -94,6 +94,18 @@ class TestDetectEvents:
         assert pose_lib.metrics_at(p, 1.0, None)
         assert "t=" in pose_lib.timeline_text(p, "unrecognised", every=0.5)
 
+    def test_low_confidence_joint_is_not_measured(self):
+        p = synth_pose("right")
+        p["frames"][0]["k"][14][2] = 0.1
+        track = biomech.Track(p, "right")
+        assert track.knee(0, track.front) is None
+
+    def test_low_confidence_bowling_wrist_prevents_release_detection(self):
+        p = synth_pose("right")
+        for frame in p["frames"]:
+            frame["k"][10][2] = 0.1
+        assert biomech.detect_events(biomech.Track(p, "right")) == {}
+
     def test_empty_and_none_pose(self):
         for p in ({}, {"width": 0, "height": 0, "frames": []}, {"frames": [{"t": 0, "k": []}]}):
             tr = biomech.Track(p, "right")
@@ -174,11 +186,14 @@ class TestMeasured:
         m = biomech.measured(tr, ev)
         print("measured", m)
         for k in ("bfc", "back_knee_compression", "posterior_trunk_tilt", "ffc", "delivery_stride",
-                  "finger_roll_release", "peak_approach_velocity"):
+                  "finger_roll_release"):
             assert k in m, k
         assert set(m) <= set(KEYS)
         txt = biomech.measured_text(ev, m)
         assert "BFC=" in txt and "release=" in txt
         assert "skeleton-detected" in txt
-        assert "wrist_snap" not in m
+        assert "wrist_apex_proxy" in txt
+        assert "wrist_height_at_apex_pct" in m["finger_roll_release"]
+        assert "peak_approach_velocity" not in m
+        assert "arm_circumduction" not in m
         assert pose_lib.metrics_at(p, ev["release"], "right")["front_knee"] >= 0
