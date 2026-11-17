@@ -31,6 +31,19 @@ def _finite_number(value: Any, minimum: float, maximum: float) -> float | None:
     return max(minimum, min(maximum, number))
 
 
+def _valid_timestamp(value: Any, duration: float | None, previous: float) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    timestamp = float(value)
+    if not math.isfinite(timestamp) or timestamp < 0:
+        return None
+    if duration is not None and timestamp > duration:
+        return None
+    if timestamp < previous:
+        return None
+    return timestamp
+
+
 def parse_model_json(raw: str) -> dict:
     """Decode the first JSON object even when the model adds fences or a short preamble."""
     if not isinstance(raw, str):
@@ -106,16 +119,14 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         if status not in VALID_STATUSES or score is None or (status != "not_visible" and not observation.strip()):
             status = "not_visible"
         raw_time = source.get("t")
-        timestamp = _finite_number(raw_time, 0, duration_limit if duration_limit is not None else float("inf"))
+        timestamp = _valid_timestamp(raw_time, duration_limit, last_time)
         if status == "not_visible":
             timestamp = None
             score = 0.0
             observation = observation.strip() or "Not enough clear visual evidence to assess this movement."
             cue = ""
-        elif timestamp is not None and timestamp >= last_time:
+        elif timestamp is not None:
             last_time = timestamp
-        else:
-            timestamp = None
         if status != "not_visible":
             assessable_count += 1
         steps.append({
