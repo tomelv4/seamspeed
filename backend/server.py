@@ -598,15 +598,19 @@ async def progress(x_device_id: str = Header(...)):
     points = [{
         "id": a.id,
         "date": a.created_at,
-        "score": a.overall_score,
+        "score": a.overall_score if a.overall_score_assessable else None,
         "pace": ((a.pace_band.get("min_kmh") or 0) + (a.pace_band.get("max_kmh") or 0)) / 2 if a.pace_band else 0,
-        "risk": a.injury_risk.get("level", "low"),
+        "risk": a.injury_risk.get("level", "not_assessed"),
         "faults": len(a.faults),
     } for a in items]
     phase_avg = {}
     for key in PHASES:
-        scores = [p.get("score", 0) for a in items for p in a.phases if p.get("key") == key]
-        phase_avg[key] = round(sum(scores) / len(scores), 1) if scores else 0
+        scores = [
+            p.get("score") for a in items for p in a.phases
+            if p.get("key") == key and p.get("assessable", True)
+            and isinstance(p.get("score"), (int, float)) and math.isfinite(float(p.get("score")))
+        ]
+        phase_avg[key] = round(sum(scores) / len(scores), 1) if scores else None
     fault_counts: dict[str, int] = {}
     for a in items:
         for f in a.faults:
@@ -616,7 +620,7 @@ async def progress(x_device_id: str = Header(...)):
         "points": points,
         "phase_avg": phase_avg,
         "top_faults": [{"title": t, "count": c} for t, c in top_faults],
-        "best_score": max((p["score"] for p in points), default=0),
+        "best_score": max((p["score"] for p in points if p["score"] is not None), default=0),
         "best_pace": max(((a.pace_band or {}).get("max_kmh") or 0 for a in items), default=0),
         "total": len(points),
     }
