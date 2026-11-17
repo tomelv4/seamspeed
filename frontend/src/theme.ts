@@ -65,11 +65,11 @@ export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
   return { scheme: "dark", colors: dark };
 }
 
-export function makeStyles<T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<any>>(
-  factory: (colors: ThemeColors) => T & StyleSheet.NamedStyles<any>,
+export function makeStyles<T extends Record<string, any>>(
+  factory: (colors: ThemeColors) => T,
 ): () => T {
   return function useStyles(): T {
     const { colors: c } = useTheme();
-    return useMemo(() => StyleSheet.create(factory(c)), [c]);
+    return useMemo(() => StyleSheet.create(factory(c) as any) as T, [c]);
   };
 }
