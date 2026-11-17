@@ -179,8 +179,6 @@ def _subject_selection_confidence(tracks, selected, diag) -> dict:
     if not selected or not selected.get("dets"):
         return {"confidence": "low", "competing_tracks": 0}
     selected_frames = set(selected["dets"])
-    selected_start, selected_end = min(selected_frames), max(selected_frames)
-    selected_span = max(1, selected_end - selected_start + 1)
     selected_score = _bowler_score(selected, diag)
     strongest_ratio, competitors = 0.0, 0
 
