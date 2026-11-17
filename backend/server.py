@@ -403,7 +403,10 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         })
     data["steps"] = steps
     if ev:
-        data["events"] = {k: round(ev[k], 3) for k in ("take_off", "bfc", "ffc", "release")} | {"measured": ev["measured"]}
+        data["events"] = (
+            {k: round(ev[k], 3) for k in ("take_off", "bfc", "ffc", "release")}
+            | {"measured": ev["measured"], "estimated": ev.get("estimated", []), "sources": ev.get("sources", {})}
+        )
 
     video_path = f"{APP_NAME}/uploads/{x_device_id}/{uuid.uuid4()}{suffix}"
     try:
