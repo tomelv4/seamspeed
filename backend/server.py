@@ -231,8 +231,10 @@ EVIDENCE AND SCORING RULES:
 - Quote a number only when it is explicitly supplied by measured skeleton data or is a clearly labelled visual estimate.
 - A 2D skeleton value is a camera-plane estimate, not a 3D biomechanical measurement. Do not infer rotation, joint loading,
   legal elbow extension, ball speed, spin or injury probability from a single uncalibrated view.
-- The bowling wrist's highest point is NOT proof of ball release. If ball separation is not clearly visible, describe
-  the release moment as uncertain and do not call a wrist-apex proxy a confirmed release.
+- Actual ball release is the moment the ball visibly separates from the fingers. A wrist apex is not ball release.
+  If separation is not clearly visible, mark finger_roll_release as not_visible with t null and score 0.
+  Return release_evidence.ball_separation_visible=true only when the ball leaving the hand is clearly visible;
+  also return confidence (high|medium|low) and a short note. If uncertain, return false and low confidence.
 - Mark a step "not_visible" when the relevant body part or event cannot be judged reliably. Do not force a score.
 - For 3D rotation, ground-reaction force, angular velocity, ball spin, elbow legality or close-up finger/wrist mechanics,
   use "not_visible" unless the supplied footage and measurements genuinely support that assessment.
@@ -259,6 +261,7 @@ Return ONLY valid JSON, no markdown, matching exactly:
  "action_type": "semi-open",
  "camera_view": "side_on|rear|front_on|oblique|unknown",
  "camera_view_confidence": "high|medium|low",
+ "release_evidence": {"ball_separation_visible": false, "confidence": "low", "notes": "Ball separation not clearly visible"},
  "phases": [{{"key":"run_up","name":"Run-up","score":7.5,"feedback":"..."}}, ... all 6 in order],
  "steps": [{{"key":"run_up_acceleration","t":0.4,"score":7,"status":"good","observation":"...","cue":"..."}}, ... all 27 in order],
  "faults": [{{"title":"Collapsing front knee","phase":"front_foot","severity":"medium","description":"...","fix":"..."}}],
