@@ -89,6 +89,11 @@ class TestDetectEvents:
         track = biomech.Track(synth_pose("right"), arm)
         assert track.arm is (biomech.LA if arm == "Left" else biomech.RA)
 
+    def test_pose_helpers_accept_missing_or_unrecognised_arm(self):
+        p = synth_pose("right")
+        assert pose_lib.metrics_at(p, 1.0, None)
+        assert "t=" in pose_lib.timeline_text(p, "unrecognised", every=0.5)
+
     def test_empty_and_none_pose(self):
         for p in ({}, {"width": 0, "height": 0, "frames": []}, {"frames": [{"t": 0, "k": []}]}):
             tr = biomech.Track(p, "right")
@@ -117,6 +122,17 @@ class TestMergeAndSync:
         assert ev["end"] == pytest.approx(3.5)
         assert ev["sources"] == {"release": "ai", "ffc": "template", "bfc": "template", "take_off": "template"}
         assert ev["measured"] == []
+
+    def test_merge_rejects_out_of_clip_release(self):
+        assert biomech.merge_events({}, ai_steps_from({"finger_roll_release": 4.0}), 2.5) is None
+
+    def test_merge_rejects_out_of_clip_secondary_events(self):
+        ai = ai_steps_from({"finger_roll_release": 1.5, "ffc": 2.4, "bfc": 1.2, "take_off": 0.8})
+        ev = biomech.merge_events({}, ai, 2.5)
+        assert ev["sources"]["release"] == "ai"
+        assert ev["sources"]["ffc"] == "template"
+        assert ev["ffc"] == pytest.approx(1.37)
+        assert all(0 <= ev[k] <= 2.5 for k in ("release", "ffc", "bfc", "take_off"))
 
     def test_merge_none_when_no_release(self):
         assert biomech.merge_events({}, [], 3.0) is None
