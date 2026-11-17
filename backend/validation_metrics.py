@@ -1,7 +1,7 @@
 """Evaluate automatic bowling event times against manually annotated reference frames.
 
 Run from the repository root:
-  python backend/evaluate_validation.py --pose pose.json --annotation annotation.json
+  python backend/validation_metrics.py --pose pose.json --annotation annotation.json
 """
 import argparse
 import json
