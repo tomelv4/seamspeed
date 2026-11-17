@@ -524,7 +524,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     video_quality = meta.get("quality", {})
     capture_needs_review = video_quality.get("rating") != "good"
     score_confidence = (
-        "low" if assessable_steps < 10 or pose_quality.get("rating") == "limited" or capture_needs_review
+        "low" if not data.get("overall_score_assessable", False) or pose_quality.get("rating") == "limited" or capture_needs_review
         else "medium" if assessable_steps < 19 or pose_quality.get("rating") != "good"
         else "high"
     )
