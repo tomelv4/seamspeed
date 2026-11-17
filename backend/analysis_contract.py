@@ -146,7 +146,6 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
             "observation": observation.strip(), "cue": cue.strip(),
         })
 
-    assessable_step_phases = {step["phase"] for step in steps if step["status"] != "not_visible"}
     for phase in phases:
         phase_steps = [
             step["score"] for step in steps
