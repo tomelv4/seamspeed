@@ -333,6 +333,19 @@ class TestMeasured:
         assert "wrist_height_at_release_pct" in metrics["finger_roll_release"]
         assert "wrist_height_at_apex_pct" not in metrics["finger_roll_release"]
 
+    def test_ai_timed_release_can_anchor_pose_derived_wrist_height(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
+
+        metrics = biomech.measured(track, ev)
+
+        assert ev["sources"]["release"] == "ai"
+        assert ev["measured"] == []
+        assert "wrist_height_at_release_pct" in metrics["finger_roll_release"]
+        assert "bfc" not in metrics
+        assert "ffc" not in metrics
+        assert "delivery_stride" not in metrics
+
 
     @pytest.mark.parametrize("hidden_ankle", [15, 16])
     def test_release_wrist_height_survives_single_ankle_occlusion(self, hidden_ankle):
