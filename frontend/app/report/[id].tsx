@@ -115,7 +115,7 @@ export default function Report() {
               <Text style={s.note}>Single-camera 2D coaching estimates only. These are not 3D biomechanical measurements or medical assessments.</Text>
               <Text style={s.note}>
                 {a.analysis_quality.release_evidence?.ball_separation_visible
-                  ? `Ball separation visually identified · AI release estimate · ${a.analysis_quality.release_evidence.confidence ?? "low"} confidence.`
+                  ? `Ball separation visually identified by AI · AI-reported ${a.analysis_quality.release_evidence.confidence ?? "low"} confidence · not sensor-confirmed.`
                   : "Ball separation was not clearly visible; actual ball release is unconfirmed. A wrist-apex proxy is not a confirmed release."}
               </Text>
             </View>
