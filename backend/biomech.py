@@ -548,8 +548,8 @@ def measured(track, ev):
         # not a meaningful negative release height.
         if math.isfinite(rel_h) and rel_h >= 0:
             m["finger_roll_release"] = {"wrist_height_at_release_pct": round(rel_h)}
-        post = track.range(ev["release"], ev["release"] + 0.15)
-        leans = _window_values(track, post, track.trunk_lean)
+        pre_release = track.range(ev["release"] - 0.04, ev["release"])
+        leans = _window_values(track, pre_release, track.trunk_lean)
         if leans:
             m["forward_trunk_flexion"] = {"forward_lean_max_2d_est": round(max(0, max(leans)))}
     # A single 2D view cannot establish elbow-extension legality or calibrated bowling speed.
