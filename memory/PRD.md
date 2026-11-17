@@ -5,7 +5,7 @@
 
 ## User choices
 - AI video analysis (Gemini 3 Flash `gemini-3-flash-preview`, Emergent LLM key)
-- Session history + progress charts, personalized drills, pace band + injury-risk / mixed action indicators
+- Session history + progress charts, personalized drills, calibrated pace when a trusted measurement source exists, and evidence-based technique/load observations
 - No accounts: one profile per device (X-Device-Id header, device_id in local storage)
 - Dark, athletic, premium style
 - ChatGPT (OpenAI `gpt-5.5`) AI Coach chat with streaming (SSE)
@@ -15,8 +15,8 @@
 - Frontend: Expo Router. Tabs are Home / Analyze / Drills / Progress (native tabs on iOS 26+). Stack screens: report/[id], drill/[id], coach, profile (modal).
 
 ## Implemented (2026-06)
-- Record or upload a clip, get a Gemini report: overall score, 6 phase scores, faults with fixes, strengths, tips, pace band gauge, injury risk / mixed action
-- Session history, delete report, progress stats and charts (score/pace/phases), recurring faults
+- Record or upload a clip, get a Gemini report: assessable movement scores, six phase summaries, ranked faults with video links, strengths, tips, capture quality and evidence provenance. Pace is unavailable without calibration; video does not predict injury
+- Session history, delete report, progress stats and charts (assessable score/phases; pace only when calibrated), recurring faults
 - 12-drill library with phase filters and a "For You" filter based on the latest faults
 - AI Coach chat (GPT-5.5, streaming, saved history, knows the latest 3 reports)
 - Bowler profile (name, arm, style, level) used in the AI prompts
@@ -37,7 +37,7 @@
 
 ## Implemented — iteration 4 (2026-11)
 - Workload tracker (/workload, Pro): manual ball logs + live-session balls auto-counted; 7-day acute, 4-week chronic, A:C ratio (after 21 days of history), weekly spike, consecutive days, rest days, age-band weekly guide; status low/caution/high
-- Injury Scanner on reports: lumbar spine, side strain, front-leg overload, shoulder/rotator cuff, hamstring/groin (Gemini from the video) + workload spikes (from logged volume)
+- Technique & Workload Observations: visible movement patterns are coaching observations only; workload flags describe logged volume and recovery trends. No injury diagnosis or injury-probability score is produced from video
 - Profile age band (Under 16 / 16-18 / 19-22 / 23+)
 - Full structured live sessions: GPT-5.5 plan → warm-up checklist with timers → technique drills → bowling block → skills test → cool-down; spoken stage transitions (/api/speak); achievements + test result + tips in the summary
 
