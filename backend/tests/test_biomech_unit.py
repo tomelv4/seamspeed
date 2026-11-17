@@ -197,6 +197,20 @@ class TestDetectEvents:
         track.xy[0, side["ankle"]] = [102.0, 100.0]
         assert track.knee(0, side) is None
 
+    def test_collapsed_torso_is_not_measured_as_trunk_lean(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        track.xy[0, 5] = [500.0, 500.0]
+        track.xy[0, 6] = [500.0, 500.0]
+        track.xy[0, 11] = [501.0, 500.0]
+        track.xy[0, 12] = [501.0, 500.0]
+        assert track.trunk_lean(0) is None
+
+        pose = synth_pose("right")
+        for joint, point in ((5, [0.5, 0.5]), (6, [0.5, 0.5]),
+                             (11, [0.501, 0.5]), (12, [0.501, 0.5])):
+            pose["frames"][0]["k"][joint][:2] = point
+        assert pose_lib.metrics_at(pose, 0.0, "right")["trunk_lean"] is None
+
     def test_low_confidence_bowling_wrist_prevents_release_detection(self):
         p = synth_pose("right")
         for frame in p["frames"]:
