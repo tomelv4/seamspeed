@@ -352,3 +352,16 @@ class TestMeasured:
         assert "knee_flex_after_ffc" in metrics["front_knee_bracing"]
         assert "front_knee_release" not in metrics["front_knee_bracing"]
 
+    def test_zero_degree_front_arm_elevation_is_not_treated_as_missing(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        ev = biomech.detect_events(track)
+        pre = track.range(ev["ffc"] - 0.12, ev["ffc"])
+        assert len(pre) > 0
+        front = track.front
+        for i in pre:
+            shoulder = track.xy[i, front["shoulder"]].copy()
+            track.xy[i, front["hip"]] = shoulder + [0.0, 10.0]
+            track.xy[i, front["elbow"]] = shoulder + [0.0, 20.0]
+        metrics = biomech.measured(track, ev)
+        assert metrics["front_arm_elevation"]["front_arm_elevation"] == 0
+
