@@ -392,6 +392,8 @@ def _metrics(k, w, h, bowling_arm: str) -> dict:
 
 def metrics_at(pose: dict, t, bowling_arm: str) -> dict:
     """Confidence-gated 2D joint angles only near the requested timestamp."""
+    if isinstance(t, bool):
+        return {}
     try:
         target_t = float(t)
     except (TypeError, ValueError):
