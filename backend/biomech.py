@@ -291,10 +291,10 @@ def merge_events(pose_ev, ai_steps, duration):
     pose_ev = pose_ev if isinstance(pose_ev, dict) else {}
     ai = {}
     for step in ai_steps or []:
-        if isinstance(step, dict):
+        if isinstance(step, dict) and step.get("status") in {"good", "ok", "fault"}:
             value = _valid_event_time(step.get("t"), limit)
-            if value is not None:
-                ai[step.get("key")] = value
+            if value is not None and isinstance(step.get("key"), str):
+                ai[step["key"]] = value
 
     ev, sources, methods, confidences = {}, {}, {}, {}
     pose_methods = pose_ev.get("event_methods", {})
@@ -356,7 +356,10 @@ def step_window(key, ev):
 
 def sync_times(ai_steps, ev):
     """Use event windows only when their anchors are genuinely detected; never invent missing step times."""
-    by_key = {s.get("key"): s for s in (ai_steps or []) if isinstance(s, dict)}
+    by_key = {
+        s.get("key"): s for s in (ai_steps or [])
+        if isinstance(s, dict) and s.get("status") in {"good", "ok", "fault"} and isinstance(s.get("key"), str)
+    }
     sources = ev.get("sources", {})
     methods = ev.get("event_methods", {})
     out, last = {}, 0.0
