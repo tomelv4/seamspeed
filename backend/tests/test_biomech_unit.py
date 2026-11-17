@@ -279,6 +279,9 @@ class TestMeasured:
         assert "BFC=" in txt and "release=" in txt
         assert "pose-derived" in txt
         assert ev["event_methods"]["release"] == "wrist_apex_proxy"
+        assert ev["joint_confidence"]["release"] is not None
+        assert ev["joint_confidence"]["ffc"] is not None
+        assert "event_confidence" not in ev
         assert "not confirmed ball release" in txt
         assert "finger_roll_release" not in m
         assert "forward_trunk_flexion" not in m
