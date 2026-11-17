@@ -16,6 +16,13 @@ import numpy as np
 L = {"shoulder": 5, "elbow": 7, "wrist": 9, "hip": 11, "knee": 13, "ankle": 15}
 R = {"shoulder": 6, "elbow": 8, "wrist": 10, "hip": 12, "knee": 14, "ankle": 16}
 
+
+def _normalise_bowling_arm(bowling_arm):
+    """Use a safe right-arm default for missing or unrecognised profile values."""
+    label = str(bowling_arm or "right").strip().lower()
+    return "right" if label.startswith("r") or not label.startswith("l") else "left"
+
+
 POSE_MODE = os.environ.get("POSE_MODE", "performance")  # performance | balanced | lightweight
 _lock = threading.Lock()
 _body = None
@@ -209,7 +216,7 @@ def _angle(a, b, c, w, h) -> int:
 
 
 def _metrics(k, w, h, bowling_arm: str) -> dict:
-    arm = R if bowling_arm.lower().startswith("r") else L
+    arm = R if _normalise_bowling_arm(bowling_arm) == "right" else L
     front = L if arm is R else R
     sx, sy = (k[5][0] + k[6][0]) / 2, (k[5][1] + k[6][1]) / 2
     hx, hy = (k[11][0] + k[12][0]) / 2, (k[11][1] + k[12][1]) / 2
@@ -239,7 +246,7 @@ def timeline_text(pose: dict, bowling_arm: str, every: float = 0.08) -> str:
     if not frames:
         return "No skeleton measurements available."
     w, h = pose["width"] or 1, pose["height"] or 1
-    arm = R if bowling_arm.lower().startswith("r") else L
+    arm = R if _normalise_bowling_arm(bowling_arm) == "right" else L
     rows, last_t = [], -1.0
     for f in frames:
         if f["t"] - last_t < every:
