@@ -79,6 +79,19 @@ export default function Report() {
             </View>
           ) : null}
 
+          {a.analysis_quality?.pose ? (
+            <View style={s.qualityCard} testID="analysis-quality-panel">
+              <Text style={s.kicker}>ANALYSIS QUALITY · {String(a.analysis_quality.pose.rating ?? "unknown").toUpperCase()}</Text>
+              <Text style={s.note}>
+                Pose coverage {Math.round((a.analysis_quality.pose.frame_coverage ?? 0) * 100)}% ·
+                critical-joint coverage {Math.round((a.analysis_quality.pose.critical_joint_coverage ?? 0) * 100)}%
+              </Text>
+              <Text style={s.note}>Single-camera 2D coaching estimates only. These are not 3D biomechanical measurements or medical assessments.</Text>
+              {a.analysis_quality.event_methods?.release === "wrist_apex_proxy" ? (
+                <Text style={s.note}>Release timing uses the wrist's highest point as a visual proxy; it does not confirm when the ball left the hand.</Text>
+              ) : null}
+            </View>
+          ) : null}
           {a.video_path ? (
             <View style={{ gap: space.md }}>
               <SkeletonPlayer
@@ -222,6 +235,7 @@ const useStyles = makeStyles((c) => ({
   confirmText: { fontFamily: fonts.textBold, fontSize: 15, color: c.onSurface },
   smallBtn: { minHeight: 44, paddingHorizontal: space.xl, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   smallBtnText: { fontFamily: fonts.textBold, fontSize: 14, color: c.onSurface },
+  qualityCard: { padding: space.md, borderRadius: radius.md, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.xs },
   scoreCard: { padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.md },
   kicker: { fontFamily: fonts.textXBold, fontSize: 11, color: c.muted, letterSpacing: 1.5 },
   bigScore: { fontFamily: fonts.displaySemi, fontSize: 80, lineHeight: 88, letterSpacing: -2 },
