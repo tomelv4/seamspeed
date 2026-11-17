@@ -35,11 +35,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: yarn
-          cache-dependency-path: frontend/yarn.lock
       - name: Install frontend dependencies
         working-directory: frontend
-        run: yarn install --frozen-lockfile --ignore-scripts
+        run: yarn install --ignore-scripts --non-interactive
       - name: Type-check frontend
         working-directory: frontend
         run: yarn tsc --noEmit
