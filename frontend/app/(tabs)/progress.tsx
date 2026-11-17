@@ -58,13 +58,13 @@ export default function ProgressScreen() {
         refreshControl={<RefreshControl tintColor={colors.accent} refreshing={progress.isRefetching} onRefresh={() => { progress.refetch(); analyses.refetch(); }} />}
       >
         {!isSubscribed ? (
-          <ProLocked testID="progress-locked" title="Progress is Pro" body="Track pace, scores, phase averages and recurring faults over time." />
+          <ProLocked testID="progress-locked" title="Progress is Pro" body="Track scores, phase averages and recurring technique faults over time." />
         ) : progress.isLoading ? (
           <Loading testID="progress-loading" />
         ) : progress.isError ? (
           <ErrorBanner testID="progress-error" message="Could not load progress data." onRetry={() => progress.refetch()} />
         ) : !p || p.total === 0 ? (
-          <EmptyState testID="progress-empty" icon="trending-up" title="Not enough data yet" body="Analyze a few deliveries and your pace, scores and faults will be charted here." />
+          <EmptyState testID="progress-empty" icon="trending-up" title="Not enough data yet" body="Analyze a few deliveries and your scores, phases and technique trends will be charted here." />
         ) : (
           <>
             <View style={s.stats}>
