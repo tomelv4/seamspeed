@@ -7,11 +7,11 @@ import { Ionicons, SectionTitle, riskColor } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const AREAS: Record<string, { name: string; detail: string; icon: string }> = {
-  lumbar_spine: { name: "Lumbar Spine", detail: "Stress fractures (spondylolysis) from extension + side-bend + twist under load. Highest risk in mixed actions and bowlers under 22.", icon: "git-commit" },
-  side_strain: { name: "Abdominal Side Strain", detail: "Oblique tears on the non-bowling side from violent torso stretch and snap at delivery.", icon: "resize" },
-  front_leg: { name: "Front-Leg Overload", detail: "Patellar tendinopathy, tibial stress fractures and ankle impingement from 5–9x bodyweight at FFC.", icon: "footsteps" },
-  shoulder: { name: "Shoulder & Rotator Cuff", detail: "Posterior shoulder tendinopathy and impingement from braking the arm in follow-through.", icon: "sync" },
-  hamstring_groin: { name: "Hamstring & Groin", detail: "Soft-tissue strains from high-speed run-ups and over-striding at the crease.", icon: "flash" },
+  lumbar_spine: { name: "Trunk & Spine Mechanics", detail: "Visible trunk position and movement only. A single video cannot measure spinal loading or predict a stress injury.", icon: "git-commit" },
+  side_strain: { name: "Lateral Trunk Movement", detail: "Visible side-bending only. This is not evidence of a muscle tear or a prediction of side-strain injury.", icon: "resize" },
+  front_leg: { name: "Front-Leg Mechanics", detail: "Visible knee and foot positions only. Ground-reaction forces and tendon loading cannot be measured from this clip.", icon: "footsteps" },
+  shoulder: { name: "Shoulder Movement", detail: "Visible arm path and follow-through only. The video cannot assess rotator-cuff health or internal shoulder loading.", icon: "sync" },
+  hamstring_groin: { name: "Run-Up & Leg Movement", detail: "Visible running and stride mechanics only. This is not a hamstring or groin injury prediction.", icon: "flash" },
   workload: { name: "Workload Spikes", detail: "Sudden jumps in weekly balls without recovery days — the leading non-mechanical trigger for bone and tendon injury.", icon: "calendar" },
 };
 
@@ -23,22 +23,24 @@ export function InjuryScanner({ areas }: { areas: InjuryArea[] }) {
   const sorted = [...areas].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
   return (
     <View testID="injury-scanner">
-      <SectionTitle title="Injury Scanner" />
+      <SectionTitle title="Technique & Workload Observations" />
       <View style={s.card}>
         {sorted.map((a, i) => {
           const meta = AREAS[a.key] ?? { name: a.key, detail: "", icon: "alert" };
-          const color = riskColor(a.level, colors);
+          const color = a.level === "not_assessed" ? colors.muted : riskColor(a.level, colors);
           const expanded = open === a.key;
           return (
             <Pressable key={a.key} testID={`injury-area-${a.key}`} onPress={() => setOpen(expanded ? null : a.key)} style={[s.row, i > 0 && s.divider]}>
               <View style={s.head}>
                 <Ionicons name={meta.icon as any} size={16} color={color} />
                 <Text style={s.name}>{meta.name}</Text>
-                <Text style={[s.level, { color }]}>{(a.level || "low").toUpperCase()}</Text>
+                <Text style={[s.level, { color }]}>{a.key === "workload" ? (a.level || "unknown").toUpperCase() : "OBSERVATION ONLY"}</Text>
               </View>
-              <View style={s.track}>
-                <View style={[s.fill, { width: `${Math.max(4, Math.min(100, Number(a.score) || 0))}%`, backgroundColor: color }]} />
-              </View>
+              {a.key === "workload" ? (
+                <View style={s.track}>
+                  <View style={[s.fill, { width: `${Math.max(4, Math.min(100, Number(a.score) || 0))}%`, backgroundColor: color }]} />
+                </View>
+              ) : null}
               {expanded ? (
                 <View style={{ gap: space.sm, marginTop: space.sm }}>
                   <Text style={s.detail}>{meta.detail}</Text>
@@ -50,7 +52,7 @@ export function InjuryScanner({ areas }: { areas: InjuryArea[] }) {
           );
         })}
       </View>
-      <Text style={s.disclaimer}>Screening guidance only — not a medical diagnosis. See a physio for any pain.</Text>
+      <Text style={s.disclaimer}>Video observations are not an injury diagnosis or prediction. Workload reflects logged bowling volume only. See a qualified clinician about pain or injury concerns.</Text>
     </View>
   );
 }
