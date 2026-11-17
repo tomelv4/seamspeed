@@ -138,6 +138,7 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
 
     faults = []
     raw_faults = payload.get("faults") if isinstance(payload.get("faults"), list) else []
+    assessable_phase_keys = {phase["key"] for phase in phases if phase["assessable"]}
     phase_keys = {key for key, _ in PHASES}
     for fault in raw_faults:
         if not isinstance(fault, dict):
@@ -146,7 +147,7 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         phase = fault.get("phase")
         severity = fault.get("severity")
         description = fault.get("description")
-        if (not isinstance(title, str) or not title.strip() or phase not in phase_keys
+        if (not isinstance(title, str) or not title.strip() or phase not in phase_keys or phase not in assessable_phase_keys
                 or severity not in {"low", "medium", "high"}
                 or not isinstance(description, str) or not description.strip()):
             continue
@@ -155,6 +156,8 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
             "title": title.strip(), "phase": phase, "severity": severity,
             "description": description.strip(), "fix": fix.strip(),
         })
+
+    faults.sort(key=lambda fault: {"high": 0, "medium": 1, "low": 2}[fault["severity"]])
 
     def text_list(value):
         if not isinstance(value, list):
