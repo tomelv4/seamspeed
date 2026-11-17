@@ -88,7 +88,7 @@ export default function Home() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.coachTitle}>Workload Tracker</Text>
-              <Text style={s.coachBody}>Weekly balls, rest days and overuse-risk flags</Text>
+              <Text style={s.coachBody}>Weekly balls, recovery days and workload trends</Text>
             </View>
             <Ionicons name="arrow-forward" size={20} color={colors.muted} />
           </PressScale>
@@ -98,7 +98,7 @@ export default function Home() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.coachTitle}>AI Performance Assistant</Text>
-              <Text style={s.coachBody}>ChatGPT-powered insight on pace, action and load management</Text>
+              <Text style={s.coachBody}>ChatGPT-powered insight on action mechanics and workload management</Text>
             </View>
             <Ionicons name="arrow-forward" size={20} color={colors.muted} />
           </PressScale>
