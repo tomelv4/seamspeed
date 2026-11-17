@@ -217,9 +217,9 @@ export default function Report() {
                           <View style={s.fixRow}>
                             <Ionicons name="construct" size={14} color={colors.accent} />
                             <Text style={[s.body, { flex: 1, color: colors.onSurface }]}>{f.fix}</Text>
-                          </PressScale>
+                          </View>
                         ) : null}
-                      </View>
+                      </PressScale>
                     ))}
                   </View>
                 </View>
