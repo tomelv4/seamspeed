@@ -485,7 +485,7 @@ def measured_text(ev, meas):
     source_text = ", ".join(
         f"{key}={source_labels.get(sources.get(key), 'unavailable')} / "
         f"{method_labels.get(methods.get(key), methods.get(key, 'unavailable'))} "
-        f"(keypoint confidence {confidence.get(key, 0):.2f})"
+        f"(keypoint confidence {confidence[key]:.2f})" if isinstance(confidence.get(key), (int, float)) else "(keypoint confidence unavailable)"
         for key in ("take_off", "bfc", "ffc", "release")
     )
     lines = [f"Event timings (s): take_off={ev['take_off']:.2f}, BFC={ev['bfc']:.2f}, FFC={ev['ffc']:.2f}, release={ev['release']:.2f}"
