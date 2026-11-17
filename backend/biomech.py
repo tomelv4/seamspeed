@@ -474,7 +474,7 @@ def measured(track, ev):
         pre = track.range(ev["ffc"] - 0.12, ev["ffc"])
         if len(pre):
             el = [track.joint(i, front["hip"], front["shoulder"], front["elbow"]) for i in pre]
-            el = [v for v in el if v]
+            el = [v for v in el if v is not None]
             if el:
                 m["front_arm_elevation"] = {"front_arm_elevation": round(max(el))}
     if i_rel is not None and H > 0 and track.joints_confident(i_rel, arm["wrist"]):
