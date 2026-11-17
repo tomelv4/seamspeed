@@ -127,9 +127,9 @@ export default function Report() {
             <>
               <View style={{ flexDirection: "row", gap: space.md }}>
                 <View style={[s.metric, { flex: 1 }]} testID="report-pace-band">
-                  <Text style={s.kicker}>PACE BAND</Text>
+                  <Text style={s.kicker}>BOWLING SPEED</Text>
                   <Text style={s.metricValue}>{min && max ? `${min}-${max}` : "—"}</Text>
-                  <Text style={s.metricSub}>{a.pace_band?.label ?? ""} km/h</Text>
+                  <Text style={s.metricSub}>{min && max ? `${a.pace_band?.label ?? "Estimated"} km/h` : "Unavailable without calibrated radar or ball tracking"}</Text>
                   <View style={s.gauge}>
                     {min && max ? <View style={[s.gaugeFill, { left: pct(min), right: `${100 - parseFloat(pct(max))}%` }]} /> : null}
                   </View>
@@ -139,10 +139,10 @@ export default function Report() {
                   </View>
                 </View>
                 <View style={[s.metric, { flex: 1, borderColor: riskColor(a.injury_risk?.level, colors) }]} testID="report-injury-risk">
-                  <Text style={s.kicker}>INJURY RISK</Text>
-                  <Text style={[s.metricValue, { color: riskColor(a.injury_risk?.level, colors), textTransform: "uppercase" }]}>{a.injury_risk?.level ?? "low"}</Text>
-                  <Text style={s.metricSub}>{a.injury_risk?.mixed_action ? "Mixed action detected" : "No mixed action"}</Text>
-                  <Text style={s.metricSub}>Counter-rotation: {a.injury_risk?.counter_rotation ?? "—"}</Text>
+                  <Text style={s.kicker}>INJURY PREDICTION</Text>
+                  <Text style={[s.metricValue, { color: a.injury_risk?.level === "not_assessed" ? colors.muted : riskColor(a.injury_risk?.level, colors), textTransform: "uppercase" }]}>{a.injury_risk?.level === "not_assessed" ? "Not assessed" : (a.injury_risk?.level ?? "—")}</Text>
+                  <Text style={s.metricSub}>{a.injury_risk?.mixed_action == null ? "Cannot be predicted from one 2D video" : a.injury_risk.mixed_action ? "Mixed action detected" : "No mixed action"}</Text>
+                  <Text style={s.metricSub}>Counter-rotation: {a.injury_risk?.counter_rotation === "not_assessed" ? "Not assessed from this view" : (a.injury_risk?.counter_rotation ?? "—")}</Text>
                 </View>
               </View>
               {a.injury_risk?.notes ? <Text style={s.note}>{a.injury_risk.notes}</Text> : null}
