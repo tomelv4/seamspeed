@@ -211,12 +211,11 @@ The video is {duration} seconds long.
 
 STEP-BY-STEP BIOMECHANICS: assess EVERY one of these 27 chronological steps and give the timestamp (seconds from the start of the video, 2 decimals) where it is best seen:
 {steps}
-INJURY SCANNER - rate each area from what you see:
-- lumbar_spine (spondylolysis): spinal extension + side-bending + twisting under load; mixed action / counter-rotation; higher risk under age 22 (bowler age band: {age}).
-- side_strain: oblique tear on the NON-bowling side from violent trunk stretch/snap (hip-shoulder separation, lateral flexion).
-- front_leg: patellar tendinopathy, tibial stress, ankle impingement from 5-9x bodyweight at FFC (stiff/hyperextended or collapsing knee, heel slam, long stride).
-- shoulder: posterior shoulder / rotator cuff from braking the arm in follow-through (cut-off follow-through, arm not decelerating across body).
-- hamstring_groin: high-speed run-up sprinting and over-striding at the crease.
+TECHNIQUE & LOAD OBSERVATIONS (not injury prediction):
+- Describe only visible movement patterns that may be relevant to coaching. Do not diagnose tissue damage, infer internal forces,
+  or predict injury probability from a single video.
+- Do not infer spinal loading, side-strain risk, tendon loading, shoulder pathology or hamstring injury likelihood from 2D joint positions.
+- If an area cannot be assessed from this camera angle, say so. Workload can only be assessed from the separately logged workload history.
 For each step return {{"key","t","score" (0-10),"status" ("good"|"ok"|"fault"|"not_visible"),"observation" (what you see, 1-2 sentences),"cue" (one short coaching cue)}}.
 Timestamps must be increasing and each must be the exact moment described in WHEN (scrub frame by frame around
 back-foot contact, front-foot contact and release). Use "not_visible" with t null if the step is out of frame.
@@ -240,8 +239,8 @@ EVIDENCE AND SCORING RULES:
 
 Break the action into 6 phases: run_up, load (bound/gather), back_foot (back-foot contact), front_foot (front-foot contact / delivery stride), release, follow_through.
 Score each phase 0-10 (one decimal). Identify faults with severity (low|medium|high), linked phase key and a short fix.
-Classify the action type: side-on, front-on, semi-open, or mixed. Mixed actions (hip/shoulder mismatch, counter-rotation >30 deg) raise lumbar injury risk.
-Estimate the pace band from approach speed, arm speed and ball flight (e.g. "125-135 km/h"). Be honest if uncertain.
+Classify the visible action type as side-on, front-on, semi-open, mixed or unknown only when the view supports it. Do not infer 3D counter-rotation from a single 2D camera view.
+Do not estimate bowling speed from run-up movement, arm speed or ball flight. A calibrated radar or ball-tracking measurement is required.
 
 Return ONLY valid JSON, no markdown, matching exactly:
 {{
@@ -254,9 +253,9 @@ Return ONLY valid JSON, no markdown, matching exactly:
  "faults": [{{"title":"Collapsing front knee","phase":"front_foot","severity":"medium","description":"...","fix":"..."}}],
  "strengths": ["..."],
  "tips": ["...", "...", "..."],
- "pace_band": {{"label":"Fast-medium","min_kmh":125,"max_kmh":135,"confidence":"medium"}},
- "injury_risk": {{"level":"low|medium|high","mixed_action":false,"counter_rotation":"low|moderate|high","notes":"...",
-   "areas": [{{"key":"lumbar_spine|side_strain|front_leg|shoulder|hamstring_groin","level":"low|medium|high","score":0-100,"drivers":"what in THIS video drives the risk (1-2 sentences)","prevention":"one specific prevention action"}}, ... all 5 keys]}}
+ "pace_band": {{"label":"Unavailable","min_kmh":null,"max_kmh":null,"confidence":"unavailable"}},
+ "injury_risk": {{"level":"not_assessed","mixed_action":null,"counter_rotation":"not_assessed","notes":"A single video cannot predict injury likelihood.",
+   "areas": [{{"key":"lumbar_spine|side_strain|front_leg|shoulder|hamstring_groin","level":"not_assessed","score":0,"drivers":"visible coaching observation only, or insufficient evidence","prevention":"general training guidance, not medical advice"}}, ... all 5 keys]}}
 }}
 If the video does not show a bowling action, set is_bowling_video to false, overall_score 0 and explain in summary."""
 
@@ -388,6 +387,25 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     pre_text = biomech.measured_text(pre_ev, biomech.measured(track, pre_ev)) if pre_ev else "Key events could not be detected from the skeleton."
     pose_quality = (pose_data or {}).get("quality", {"rating": "limited", "frame_coverage": 0.0, "critical_joint_coverage": 0.0, "mean_joint_confidence": 0.0})
     data = await run_gemini(pose_data)
+
+    # Never publish uncalibrated AI guesses as bowling speed or injury probability.
+    data["pace_band"] = {
+        "label": "Unavailable — calibrated speed measurement required",
+        "min_kmh": None, "max_kmh": None, "confidence": "unavailable",
+    }
+    risk = data.get("injury_risk") if isinstance(data.get("injury_risk"), dict) else {}
+    risk["level"] = "not_assessed"
+    risk["mixed_action"] = None
+    risk["counter_rotation"] = "not_assessed"
+    risk["notes"] = (
+        "A single-camera video cannot predict injury likelihood or diagnose a condition. "
+        "Only visible coaching observations are shown; recorded workload is assessed separately."
+    )
+    risk["areas"] = [
+        {**area, "level": "not_assessed", "score": 0}
+        for area in risk.get("areas", []) if isinstance(area, dict)
+    ]
+    data["injury_risk"] = risk
 
     # sync every step to its biomechanical moment (measured events first, AI timestamps as fallback)
     ai_steps = data.get("steps", [])
