@@ -494,7 +494,7 @@ def measured(track, ev):
         bk = track.knee(i_bfc, arm)
         if bk is not None:
             m.setdefault("bfc", {})["back_knee"] = round(bk)
-        ids = track.range(ev["bfc"], ev["bfc"] + 0.15)
+        ids = track.range(ev["bfc"] + 0.02, ev["bfc"] + 0.12)
         vals = _window_values(track, ids, lambda i: track.knee(i, arm))
         if vals:
             m["back_knee_compression"] = {"back_knee_min": round(min(vals))}
@@ -522,18 +522,17 @@ def measured(track, ev):
         if ffc_values:
             m["ffc"] = ffc_values
         if i_rel is not None and i_rel >= i_ffc and fk is not None:
-            knee_ids = range(i_ffc, i_rel + 1)
+            knee_ids = track.range(ev["ffc"] + 0.02, ev["release"])
             vals = _window_values(track, knee_ids, lambda i: track.knee(i, front))
+            bracing = {"front_knee_ffc": round(fk)}
             if vals:
-                bracing = {
-                    "front_knee_ffc": round(fk),
-                    "knee_flex_after_ffc": round(max(0, fk - min(vals))),
-                }
-                # Only label an angle as the release value when the knee is
-                # actually visible and measurable in the release frame.
-                release_knee = track.knee(i_rel, front)
-                if release_knee is not None:
-                    bracing["front_knee_release"] = round(release_knee)
+                bracing["knee_flex_after_ffc"] = round(max(0, fk - min(vals)))
+            # Only label an angle as the release value when the knee is
+            # actually visible and measurable in the release frame.
+            release_knee = track.knee(i_rel, front)
+            if release_knee is not None:
+                bracing["front_knee_release"] = round(release_knee)
+            if len(bracing) > 1:
                 m["front_knee_bracing"] = bracing
         pre = track.range(ev["ffc"] - 0.12, ev["ffc"])
         if len(pre):
