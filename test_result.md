@@ -164,3 +164,10 @@
 - Added camera-view classification confidence. Side-plane measurements are only exposed for high-confidence side-on footage; other views are limited to visual assessment.
 - Hardened report assembly: invalid statuses are downgraded to not_visible, scores are finite and clamped, and raw AI timestamps are only accepted when there are no event anchors and the time is in-clip and monotonic.
 - Added 20-second/60fps pose capacity and interpolated frames are excluded from measured confidence.
+
+
+## Iteration 7 CI checkpoint 5
+- GitHub Actions run 44090235338: backend compilation passed; 33/33 backend unit tests passed; frontend TypeScript check passed.
+- The current code then removed the unvalidated take-off pose heuristic entirely. Take-off now comes from AI visual estimation or remains an explicitly marked typical-gap estimate; it is no longer presented as pose-detected. Tests updated accordingly.
+- The server now preserves pose_detected as a distinct event list while retaining the legacy measured field for compatibility.
+- Latest take-off/provenance commits require one final CI rerun.
