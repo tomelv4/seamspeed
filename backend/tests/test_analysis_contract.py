@@ -89,6 +89,16 @@ def test_normalise_clamps_scores_and_rejects_out_of_clip_or_nonmonotonic_times()
     assert result["steps"][2]["t"] is None
 
 
+def test_non_bowling_video_is_not_scored_or_faulted():
+    payload = valid_payload()
+    payload["is_bowling_video"] = False
+    result = normalise_model_payload(payload, duration=4.0)
+    assert result["overall_score_assessable"] is False
+    assert all(step["status"] == "not_visible" for step in result["steps"])
+    assert all(phase["assessable"] is False for phase in result["phases"])
+    assert result["faults"] == []
+
+
 def test_normalise_missing_phase_is_explicitly_unassessable():
     payload = valid_payload()
     payload["phases"] = [p for p in payload["phases"] if p["key"] != "release"]
