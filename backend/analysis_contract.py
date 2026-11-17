@@ -48,6 +48,8 @@ def parse_model_json(raw: str) -> dict:
     """Decode the first JSON object even when the model adds fences or a short preamble."""
     if not isinstance(raw, str):
         raise ValueError("The analysis model returned a non-text response.")
+    if raw.lstrip().startswith("["):
+        raise ValueError("The analysis model response must be a JSON object, not an array.")
     start = raw.find("{")
     if start < 0:
         raise ValueError("The analysis model did not return a JSON object.")
