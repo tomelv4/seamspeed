@@ -21,7 +21,7 @@ export type Analysis = {
   faults: Fault[];
   strengths: string[];
   tips: string[];
-  pace_band: { label?: string; min_kmh?: number; max_kmh?: number; confidence?: string };
+  pace_band: { label?: string; min_kmh?: number | null; max_kmh?: number | null; confidence?: string };
   injury_risk: { level?: string; mixed_action?: boolean | null; counter_rotation?: string; notes?: string; areas?: InjuryArea[] };
   steps?: Step[];
   video_path?: string;
