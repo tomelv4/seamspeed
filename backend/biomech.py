@@ -463,7 +463,10 @@ def measured(track, ev):
         fk = track.knee(i_ffc, front)
         stride = None
         if track.joints_confident(i_ffc, front["ankle"], arm["ankle"]) and H > 0:
-            stride = np.linalg.norm(track.p(i_ffc, front["ankle"]) - track.p(i_ffc, arm["ankle"])) / H * 100
+            # Side-on stride extension is the projected horizontal separation.
+            # Euclidean foot-to-foot distance inflates the result when the rear
+            # foot is airborne at front-foot contact.
+            stride = abs(track.p(i_ffc, front["ankle"])[0] - track.p(i_ffc, arm["ankle"])[0]) / H * 100
         ffc_values = {}
         if fk is not None:
             ffc_values["front_knee"] = round(fk)
