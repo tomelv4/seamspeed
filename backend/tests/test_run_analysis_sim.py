@@ -19,6 +19,7 @@ KEYS = [s[0] for s in biomech.STEPS]
 
 def fake_ai(times):
     return json.dumps({"is_bowling_video": True, "overall_score": 6, "summary": "x", "action_type": "semi-open",
+                       "release_evidence": {"ball_separation_visible": True, "confidence": "high", "notes": "Ball separation is visible."},
                        "phases": [], "faults": [], "strengths": [], "tips": [],
                        "steps": [{"key": k, "t": times.get(k), "score": 6, "status": "ok", "observation": "o", "cue": "c"} for k in KEYS],
                        "injury_risk": {"level": "low", "areas": []}})
@@ -82,14 +83,20 @@ def test_measured_events_anchor_steps(monkeypatch):
     assert [s["key"] for s in steps] == KEYS
     ev = upd["events"]
     print("events", ev)
-    assert ev["measured"] == ["bfc", "ffc", "release", "take_off"]
+    assert ev["pose_detected"] == ["bfc", "ffc"]
+    assert ev["measured"] == ["bfc", "ffc"]
+    assert ev["sources"]["release"] == "ai"
+    assert ev["event_methods"]["release"] == "ai_visual_estimate"
+    assert ev["sources"]["take_off"] == "template"
     by = {s["key"]: s for s in steps}
     assert by["bfc"]["t"] == ev["bfc"] and by["ffc"]["t"] == ev["ffc"] and by["finger_roll_release"]["t"] == ev["release"]
-    ts = [s["t"] for s in steps]
+    ts = [s["t"] for s in steps if s["t"] is not None]
     assert ts == sorted(ts)
     assert all(s["ideal"] and s["description"] for s in steps)
-    assert "stride_pct_height" in by["ffc"]["metrics"] and "release_height_pct" in by["finger_roll_release"]["metrics"]
-    assert "Detected events" in prompt and "BFC=1.10" in prompt
+    assert "stride_pct_height" in by["ffc"]["metrics"]
+    assert "release_height_pct" not in by["finger_roll_release"]["metrics"]
+    assert "wrist_height_at_apex_pct" not in by["finger_roll_release"]["metrics"]
+    assert "Detected events" in prompt and "BFC=1.10" in prompt and "wrist_apex_proxy" in prompt
     assert upd["has_pose"] is True
     print({s["key"]: s["t"] for s in steps})
 
