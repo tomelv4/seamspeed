@@ -41,6 +41,14 @@ def warmup():
     _get_body()
 
 
+def _safe_fps(value, default: float = 30.0) -> float:
+    try:
+        fps = float(value)
+    except (TypeError, ValueError):
+        return default
+    return fps if math.isfinite(fps) and fps > 0 else default
+
+
 def assess_video_quality(frames, fps: float, width: int, height: int) -> dict:
     """Screen capture quality with transparent heuristics; this is not a calibrated quality score."""
     flags = []
@@ -80,9 +88,7 @@ def assess_video_quality(frames, fps: float, width: int, height: int) -> dict:
 
 def video_meta(path: str) -> dict:
     cap = cv2.VideoCapture(path)
-    fps = float(cap.get(cv2.CAP_PROP_FPS) or 30)
-    if not math.isfinite(fps) or fps <= 0:
-        fps = 30.0
+    fps = _safe_fps(cap.get(cv2.CAP_PROP_FPS))
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
@@ -184,7 +190,8 @@ def _smooth(kps, scs):
 def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dict:
     body = _get_body()
     cap = cv2.VideoCapture(path)
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    fps = _safe_fps(cap.get(cv2.CAP_PROP_FPS))
+    target_fps = max(1, int(target_fps or 60))
     step = max(1, round(fps / target_fps))
     dets, times, width, height, sw, sh, i = [], [], 0, 0, 1, 1, 0
     while True:
