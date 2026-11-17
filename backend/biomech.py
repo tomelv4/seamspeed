@@ -202,7 +202,9 @@ class Track:
         sh = (self.xy[i, 5] + self.xy[i, 6]) / 2
         hp = (self.xy[i, 11] + self.xy[i, 12]) / 2
         d = sh - hp
-        return math.degrees(math.atan2(d[0] * self.dir, abs(d[1]))) if d[1] else None
+        if np.linalg.norm(d) < max(2.0, 0.05 * self.height_px) or not d[1]:
+            return None
+        return math.degrees(math.atan2(d[0] * self.dir, abs(d[1])))
 
     def _segments_visible(self, i, *pairs):
         # Very short limbs are usually collapsed/noisy keypoint estimates; their
