@@ -152,7 +152,9 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
             step["score"] for step in steps
             if step["phase"] == phase["key"] and step["status"] != "not_visible"
         ]
-        phase["assessable"] = bool(is_bowling and phase_steps and phase["key"] in assessable_step_phases)
+        phase["assessable"] = bool(is_bowling and phase_steps)
+        if phase["assessable"] and phase["feedback"] == "Not enough clear visual evidence to assess this phase.":
+            phase["feedback"] = "Phase score is calculated from the assessable movement steps."
         phase["score"] = round(sum(phase_steps) / len(phase_steps), 1) if phase["assessable"] else 0.0
     assessable_phase_count = sum(1 for phase in phases if phase["assessable"])
     overall_assessable = is_bowling and assessable_count >= 10 and assessable_phase_count >= 4
