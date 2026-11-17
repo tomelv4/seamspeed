@@ -336,7 +336,12 @@ def merge_events(pose_ev, ai_steps, duration):
     ev["sources"] = sources
     ev["event_methods"] = methods
     ev["joint_confidence"] = confidences
-    ev["pose_detected"] = sorted(k for k, source in sources.items() if source == "skeleton")
+    # A wrist-height apex is a pose-derived proxy, not a detected ball-release event.
+    # Keep its provenance in event_methods, but do not count it as a measured event.
+    ev["pose_detected"] = sorted(
+        k for k, source in sources.items()
+        if source == "skeleton" and not (k == "release" and methods.get(k) == "wrist_apex_proxy")
+    )
     ev["measured"] = ev["pose_detected"]  # legacy alias for older report consumers
     ev["estimated"] = sorted(k for k, source in sources.items() if source != "skeleton")
     return ev
