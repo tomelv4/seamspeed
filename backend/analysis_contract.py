@@ -116,6 +116,8 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         score = _finite_number(source.get("score"), 0, 10)
         observation = source.get("observation") if isinstance(source.get("observation"), str) else ""
         cue = source.get("cue") if isinstance(source.get("cue"), str) else ""
+        if key == "finger_roll_release" and not ball_separation_visible:
+            status = "not_visible"
         if (not is_bowling or status not in VALID_STATUSES or score is None
                 or (status != "not_visible" and not observation.strip())):
             status = "not_visible"
@@ -169,6 +171,17 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
             return []
         return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
+    raw_release = payload.get("release_evidence") if isinstance(payload.get("release_evidence"), dict) else {}
+    release_confidence = raw_release.get("confidence")
+    if release_confidence not in VALID_CONFIDENCE:
+        release_confidence = "low"
+    ball_separation_visible = raw_release.get("ball_separation_visible") is True and release_confidence in {"high", "medium"}
+    release_evidence = {
+        "ball_separation_visible": ball_separation_visible,
+        "confidence": release_confidence,
+        "notes": raw_release.get("notes").strip() if isinstance(raw_release.get("notes"), str) else "",
+    }
+
     camera_view = payload.get("camera_view")
     if camera_view not in VALID_CAMERA_VIEWS:
         camera_view = "unknown"
@@ -185,6 +198,7 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         "action_type": payload.get("action_type") if isinstance(payload.get("action_type"), str) else "unknown",
         "camera_view": camera_view,
         "camera_view_confidence": camera_confidence,
+        "release_evidence": release_evidence,
         "phases": phases,
         "steps": steps,
         "faults": faults,
