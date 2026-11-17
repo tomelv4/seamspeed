@@ -94,6 +94,22 @@ class TestDetectEvents:
         assert pose_lib.metrics_at(p, 1.0, None)
         assert "t=" in pose_lib.timeline_text(p, "unrecognised", every=0.5)
 
+    def test_pose_metrics_reject_low_confidence_joints(self):
+        p = synth_pose("right")
+        front_knee = biomech.LA["knee"]
+        p["frames"][0]["k"][front_knee][2] = 0.1
+        p["frames"][0]["k"][biomech.RA["elbow"]][2] = 0.1
+
+        metrics = pose_lib.metrics_at(p, 0.0, "right")
+        assert metrics["front_knee"] is None
+        assert metrics["bowling_elbow"] is None
+        assert metrics["back_knee"] is not None
+
+        timeline = pose_lib.timeline_text(p, "right", every=0.5)
+        first = timeline.splitlines()[0]
+        assert "fk=na" in first
+        assert "el=na" in first
+
     def test_low_confidence_joint_is_not_measured(self):
         p = synth_pose("right")
         track = biomech.Track(p, "right")
