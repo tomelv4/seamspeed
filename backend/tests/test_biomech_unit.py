@@ -365,3 +365,31 @@ class TestMeasured:
         metrics = biomech.measured(track, ev)
         assert metrics["front_arm_elevation"]["front_arm_elevation"] == 0
 
+    def test_back_knee_compression_is_omitted_with_only_one_valid_window_frame(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        ev = biomech.merge_events(biomech.detect_events(track), [], 2.5)
+        ids = track.range(ev["bfc"] + 0.02, ev["bfc"] + 0.15)
+        assert len(ids) >= 2
+        side = track.arm
+        for i in ids[1:]:
+            for joint in (side["hip"], side["knee"], side["ankle"]):
+                track.c[i, joint] = 0.0
+
+        metrics = biomech.measured(track, ev)
+
+        assert "back_knee_compression" not in metrics
+
+    def test_front_arm_elevation_is_omitted_with_only_one_valid_window_frame(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        ev = biomech.merge_events(biomech.detect_events(track), [], 2.5)
+        ids = track.range(ev["ffc"] - 0.12, ev["ffc"])
+        assert len(ids) >= 2
+        side = track.front
+        for i in ids[1:]:
+            for joint in (side["hip"], side["shoulder"], side["elbow"]):
+                track.c[i, joint] = 0.0
+
+        metrics = biomech.measured(track, ev)
+
+        assert "front_arm_elevation" not in metrics
+
