@@ -544,7 +544,10 @@ def measured(track, ev):
         # Use a clip-wide ankle-ground reference. The feet may both be airborne
         # at release, so their instantaneous positions are not a ground plane.
         rel_h = (track.ground_y - track.xy[i_rel, arm["wrist"], 1]) / H * 100
-        m["finger_roll_release"] = {"wrist_height_at_release_pct": round(rel_h)}
+        # A wrist below the estimated ground plane is a tracking/cropping error,
+        # not a meaningful negative release height.
+        if math.isfinite(rel_h) and rel_h >= 0:
+            m["finger_roll_release"] = {"wrist_height_at_release_pct": round(rel_h)}
         post = track.range(ev["release"], ev["release"] + 0.15)
         leans = _window_values(track, post, track.trunk_lean)
         if leans:
