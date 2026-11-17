@@ -37,10 +37,14 @@ export function StepCard({ step, index }: { step: Step; index: number }) {
         {step.status !== "not_visible" ? <Text style={[s.score, { color: scoreColor(step.score, colors) }]}>{Number(step.score).toFixed(0)}</Text> : null}
       </View>
       <Pill label={STATUS_LABEL[step.status] ?? step.status} color={statusColor(step.status)} />
+      <Text style={s.evidence}>
+        {step.evidence_level === "pose_estimate" ? "2D POSE ESTIMATE" :
+          step.evidence_level === "visual_assessment" ? "AI VISUAL ASSESSMENT" : "INSUFFICIENT EVIDENCE"}
+      </Text>
       <Text style={s.desc}>{step.description}</Text>
       {step.ideal ? (
         <View style={s.ideal} testID="selected-step-ideal">
-          <Text style={s.cueLabel}>IDEAL</Text>
+          <Text style={s.cueLabel}>COACHING REFERENCE</Text>
           <Text style={s.idealText}>{step.ideal}</Text>
         </View>
       ) : null}
@@ -103,6 +107,7 @@ const useStyles = makeStyles((c) => ({
   name: { fontFamily: fonts.display, fontSize: 22, color: c.onSurface, textTransform: "uppercase" },
   meta: { fontFamily: fonts.text, fontSize: 12, color: c.muted },
   score: { fontFamily: fonts.display, fontSize: 36 },
+  evidence: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 0.8, color: c.muted },
   desc: { fontFamily: fonts.text, fontSize: 13, lineHeight: 19, color: c.muted, fontStyle: "italic" },
   body: { fontFamily: fonts.text, fontSize: 14, lineHeight: 21, color: c.onSurfaceSecondary },
   ideal: { gap: 4, padding: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: c.border },
