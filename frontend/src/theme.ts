@@ -2,7 +2,7 @@
 // A plain key is a background, its `on` partner is the text/icon color on top of it.
 
 import { useMemo } from "react";
-import { Appearance, StyleSheet } from "react-native";
+import { Appearance, StyleSheet, type ImageStyle, type TextStyle, type ViewStyle } from "react-native";
 
 export type ColorScheme = "light" | "dark";
 
@@ -65,7 +65,9 @@ export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
   return { scheme: "dark", colors: dark };
 }
 
-export function makeStyles<T extends Record<string, any>>(
+type NamedStyles<T> = { [K in keyof T]: ViewStyle | TextStyle | ImageStyle };
+
+export function makeStyles<T extends NamedStyles<T>>(
   factory: (colors: ThemeColors) => T,
 ): () => T {
   return function useStyles(): T {
