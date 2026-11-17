@@ -392,15 +392,24 @@ def _metrics(k, w, h, bowling_arm: str) -> dict:
 
 def metrics_at(pose: dict, t, bowling_arm: str) -> dict:
     """Confidence-gated 2D joint angles only near the requested timestamp."""
-    frames = [f for f in pose.get("frames", []) if f.get("k")]
-    if not frames or t is None:
+    try:
+        target_t = float(t)
+    except (TypeError, ValueError):
         return {}
-    f = min(frames, key=lambda x: abs(x["t"] - t))
+    if not math.isfinite(target_t):
+        return {}
+    frames = [
+        f for f in pose.get("frames", [])
+        if f.get("k") and isinstance(f.get("t"), (int, float)) and math.isfinite(float(f["t"]))
+    ]
+    if not frames:
+        return {}
+    f = min(frames, key=lambda x: abs(float(x["t"]) - target_t))
     times = np.array([float(frame["t"]) for frame in frames], dtype=float)
     intervals = np.diff(times)
     intervals = intervals[intervals > 0]
     tolerance = min(0.2, max(0.04, 1.5 * float(np.median(intervals)))) if len(intervals) else 0.04
-    if abs(float(f["t"]) - float(t)) > tolerance:
+    if abs(float(f["t"]) - target_t) > tolerance:
         return {}
     return _metrics(f["k"], pose.get("width") or 1, pose.get("height") or 1, bowling_arm)
 
