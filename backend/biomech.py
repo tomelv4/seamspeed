@@ -429,14 +429,14 @@ def measured(track, ev):
     i_bfc, i_ffc, i_rel = [at(ev.get(k)) if k in real else None for k in ("bfc", "ffc", "release")]
     if i_bfc is not None:
         bk = track.knee(i_bfc, arm)
-        if bk:
+        if bk is not None:
             m.setdefault("bfc", {})["back_knee"] = round(bk)
         ids = track.range(ev["bfc"], ev["bfc"] + 0.15)
         vals = [track.knee(i, arm) for i in ids]
-        vals = [v for v in vals if v]
+        vals = [v for v in vals if v is not None]
         if vals:
             m["back_knee_compression"] = {"back_knee_min": round(min(vals))}
-            if bk:
+            if bk is not None:
                 m["back_knee_compression"]["knee_flex_after_bfc"] = round(max(0, bk - min(vals)))
         pre = track.range(ev["bfc"] - 0.12, ev["bfc"])
         if len(pre):
@@ -457,12 +457,20 @@ def measured(track, ev):
             m["delivery_stride"] = {"stride_pct_height": round(stride)}
         if ffc_values:
             m["ffc"] = ffc_values
-        if i_rel is not None and i_rel >= i_ffc:
+        if i_rel is not None and i_rel >= i_ffc and fk is not None:
             vals = [track.knee(i, front) for i in range(i_ffc, i_rel + 1)]
-            vals = [v for v in vals if v]
-            if vals and fk:
-                m["front_knee_bracing"] = {"front_knee_ffc": round(fk), "front_knee_release": round(vals[-1]),
-                                           "knee_flex_after_ffc": round(max(0, fk - min(vals)))}
+            vals = [v for v in vals if v is not None]
+            if vals:
+                bracing = {
+                    "front_knee_ffc": round(fk),
+                    "knee_flex_after_ffc": round(max(0, fk - min(vals))),
+                }
+                # Only label an angle as the release value when the knee is
+                # actually visible and measurable in the release frame.
+                release_knee = track.knee(i_rel, front)
+                if release_knee is not None:
+                    bracing["front_knee_release"] = round(release_knee)
+                m["front_knee_bracing"] = bracing
         pre = track.range(ev["ffc"] - 0.12, ev["ffc"])
         if len(pre):
             el = [track.joint(i, front["hip"], front["shoulder"], front["elbow"]) for i in pre]
