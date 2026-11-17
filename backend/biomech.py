@@ -256,20 +256,20 @@ def detect_events(track):
     ev = {
         "release": float(track.t[i_rel]),
         "event_methods": {"release": "wrist_apex_proxy"},
-        "event_confidence": {"release": round(float(min(track.c[i_rel, arm["wrist"]], track.c[i_rel, 5], track.c[i_rel, 6])), 2)},
+        "joint_confidence": {"release": round(float(min(track.c[i_rel, arm["wrist"]], track.c[i_rel, 5], track.c[i_rel, 6])), 2)},
     }
     ffc = _landing(track, track.front["ankle"], ev["release"] - 0.45, ev["release"] - 0.02)
     if ffc is not None:
         ev["ffc"] = ffc
         i_ffc = track.idx(ffc)
         ev["event_methods"]["ffc"] = "ankle_ground_contact_heuristic"
-        ev["event_confidence"]["ffc"] = round(float(track.c[i_ffc, track.front["ankle"]]), 2)
+        ev["joint_confidence"]["ffc"] = round(float(track.c[i_ffc, track.front["ankle"]]), 2)
         bfc = _landing(track, arm["ankle"], ffc - 0.5, ffc - 0.06)
         if bfc is not None:
             ev["bfc"] = bfc
             i_bfc = track.idx(bfc)
             ev["event_methods"]["bfc"] = "ankle_ground_contact_heuristic"
-            ev["event_confidence"]["bfc"] = round(float(track.c[i_bfc, arm["ankle"]]), 2)
+            ev["joint_confidence"]["bfc"] = round(float(track.c[i_bfc, arm["ankle"]]), 2)
     return ev
 
 
@@ -299,7 +299,7 @@ def merge_events(pose_ev, ai_steps, duration):
 
     ev, sources, methods, confidences = {}, {}, {}, {}
     pose_methods = pose_ev.get("event_methods", {})
-    pose_confidence = pose_ev.get("event_confidence", {})
+    pose_confidence = pose_ev.get("joint_confidence", {})
     for key, ai_key in (("release", "finger_roll_release"), ("ffc", "ffc"),
                         ("bfc", "bfc"), ("take_off", "take_off")):
         pose_time = _valid_event_time(pose_ev.get(key), limit)
@@ -310,32 +310,32 @@ def merge_events(pose_ev, ai_steps, duration):
             confidences[key] = float(pose_confidence.get(key, 0.0))
         elif ai_time is not None:
             ev[key], sources[key] = ai_time, "ai"
-            methods[key], confidences[key] = "ai_visual_estimate", 0.35
+            methods[key], confidences[key] = "ai_visual_estimate", None
         else:
             ev[key], sources[key] = None, None
-            methods[key], confidences[key] = "unavailable", 0.0
+            methods[key], confidences[key] = "unavailable", None
 
     if ev["release"] is None and ai.get("wrist_snap") is not None:
         ev["release"], sources["release"] = ai["wrist_snap"], "ai"
-        methods["release"], confidences["release"] = "ai_visual_estimate", 0.35
+        methods["release"], confidences["release"] = "ai_visual_estimate", None
     if ev["release"] is None:
         return None
 
     if ev["ffc"] is None or not (ev["release"] - 0.5 < ev["ffc"] < ev["release"]):
         ev["ffc"], sources["ffc"] = max(0.0, ev["release"] - 0.13), "template"
-        methods["ffc"], confidences["ffc"] = "typical_gap_estimate", 0.0
+        methods["ffc"], confidences["ffc"] = "typical_gap_estimate", None
     if ev["bfc"] is None or not (ev["ffc"] - 0.6 < ev["bfc"] < ev["ffc"]):
         ev["bfc"], sources["bfc"] = max(0.0, ev["ffc"] - 0.22), "template"
-        methods["bfc"], confidences["bfc"] = "typical_gap_estimate", 0.0
+        methods["bfc"], confidences["bfc"] = "typical_gap_estimate", None
     if ev["take_off"] is None or not (ev["bfc"] - 0.8 < ev["take_off"] < ev["bfc"]):
         ev["take_off"], sources["take_off"] = max(0.0, ev["bfc"] - 0.32), "template"
-        methods["take_off"], confidences["take_off"] = "typical_gap_estimate", 0.0
+        methods["take_off"], confidences["take_off"] = "typical_gap_estimate", None
 
     ev["start"] = 0.0
     ev["end"] = limit if limit is not None else max(float(duration or 0), ev["release"] + 1.5)
     ev["sources"] = sources
     ev["event_methods"] = methods
-    ev["event_confidence"] = confidences
+    ev["joint_confidence"] = confidences
     ev["pose_detected"] = sorted(k for k, source in sources.items() if source == "skeleton")
     ev["measured"] = ev["pose_detected"]  # legacy alias for older report consumers
     ev["estimated"] = sorted(k for k, source in sources.items() if source != "skeleton")
@@ -474,7 +474,7 @@ def measured_text(ev, meas):
     source_labels = {"skeleton": "pose-derived", "ai": "AI-estimated", "template": "typical-gap estimate"}
     sources = ev.get("sources", {})
     methods = ev.get("event_methods", {})
-    confidence = ev.get("event_confidence", {})
+    confidence = ev.get("joint_confidence", {})
     method_labels = {
         "wrist_apex_proxy": "wrist-apex proxy (not confirmed ball release)",
         "ankle_ground_contact_heuristic": "ankle-ground contact heuristic",
