@@ -484,7 +484,8 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     if ev:
         data["events"] = (
             {k: round(ev[k], 3) for k in ("take_off", "bfc", "ffc", "release")}
-            | {"measured": ev["measured"], "estimated": ev.get("estimated", []), "sources": ev.get("sources", {}),
+            | {"measured": ev["measured"], "pose_detected": ev.get("pose_detected", []),
+               "estimated": ev.get("estimated", []), "sources": ev.get("sources", {}),
                "methods": ev.get("event_methods", {}), "confidence": ev.get("event_confidence", {})}
         )
 
