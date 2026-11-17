@@ -185,7 +185,9 @@ class TestMergeAndSync:
     def test_merge_prefers_pose(self):
         ev = biomech.merge_events({"release": 1.5, "ffc": 1.367, "bfc": 1.1},
                                   ai_steps_from({"finger_roll_release": 1.9, "ffc": 1.7}), 2.5)
-        assert ev["release"] == 1.5 and ev["ffc"] == 1.367 and ev["measured"] == ["bfc", "ffc", "release"]
+        assert ev["release"] == 1.5 and ev["ffc"] == 1.367 and ev["measured"] == ["bfc", "ffc"]
+        assert ev["sources"]["release"] == "skeleton"
+        assert ev["event_methods"]["release"] == "wrist_apex_proxy"
 
     def test_merge_fallback_ai_when_pose_missing(self):
         ai = ai_steps_from({"finger_roll_release": 2.0, "ffc": 1.85, "bfc": 1.6, "take_off": 1.3})
