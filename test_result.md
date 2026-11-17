@@ -171,3 +171,14 @@
 - The current code then removed the unvalidated take-off pose heuristic entirely. Take-off now comes from AI visual estimation or remains an explicitly marked typical-gap estimate; it is no longer presented as pose-detected. Tests updated accordingly.
 - The server now preserves pose_detected as a distinct event list while retaining the legacy measured field for compatibility.
 - Latest take-off/provenance commits require one final CI rerun.
+
+
+## PACED evidence-first engineering checkpoint
+- GitHub Actions run 44095900583 on commit b3f600fe9b038cdceba52b18c15959e54a29f129: backend compile passed; 60/60 focused biomechanics, validation-metric and AI-contract tests passed; frontend `yarn tsc --noEmit` passed.
+- Pose metrics now require confident source joints; interpolated poses remain display-only and are excluded from measured confidence. Capture screening and competing-person track ambiguity lower analysis confidence.
+- BFC/FFC remain explicitly labelled ankle-ground heuristics. Wrist apex is not treated as ball release. An AI release time is accepted only when the model explicitly reports visible ball separation, and the UI states that this is not sensor-confirmed.
+- Step and phase scores are derived from assessable movement-step scores; phase means are equally weighted. Reports suppress unassessable scores and unsupported faults, rank faults by severity and link them to a video step.
+- Pace is unavailable without calibrated radar/ball tracking. Video injury prediction has been removed; workload flags describe logged training-load trends only.
+- Real-video validation has **not** been completed. The annotation protocol and multi-clip event evaluator are in `docs/VALIDATION_DATASET.md` and `backend/validation_metrics.py`. Synthetic tests are not a substitute for consented, manually labelled bowling footage.
+- The preview-dependent integration suites in `backend/tests/` were not run in GitHub CI; the current workflow runs the deterministic unit/contract suites and frontend typecheck. A separate preview integration pass is still required.
+- Original `main` has not been merged or deployed. The feature branch remains a draft PR and is still 6 commits behind `main`; do not merge until the branch divergence is reviewed.
