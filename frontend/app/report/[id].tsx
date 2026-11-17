@@ -196,7 +196,15 @@ export default function Report() {
                   <SectionTitle title="Faults to Fix" action="See drills" onAction={() => router.push("/drills")} testID="report-see-drills" />
                   <View style={{ gap: space.sm }}>
                     {a.faults.map((f, i) => (
-                      <View key={i} style={[s.fault, { borderLeftColor: riskColor(f.severity, colors) }]} testID={`fault-card-${i}`}>
+                      <PressScale
+                        key={i}
+                        style={[s.fault, { borderLeftColor: riskColor(f.severity, colors) }]}
+                        testID={`fault-card-${i}`}
+                        onPress={() => {
+                          const targetIndex = steps.findIndex((step) => step.phase === f.phase && step.status !== "not_visible");
+                          if (targetIndex >= 0) selectStep(targetIndex, true);
+                        }}
+                      >
                         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm }}>
                           <Text style={s.faultTitle}>{f.title}</Text>
                           <Pill label={f.severity} color={riskColor(f.severity, colors)} />
@@ -207,7 +215,7 @@ export default function Report() {
                           <View style={s.fixRow}>
                             <Ionicons name="construct" size={14} color={colors.accent} />
                             <Text style={[s.body, { flex: 1, color: colors.onSurface }]}>{f.fix}</Text>
-                          </View>
+                          </PressScale>
                         ) : null}
                       </View>
                     ))}
