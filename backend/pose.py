@@ -232,46 +232,69 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dic
     }
 
 
-def _angle(a, b, c, w, h) -> int:
+def _angle(a, b, c, w, h):
+    """Return a camera-plane joint angle, or None for degenerate geometry."""
     ax, ay = (a[0] - b[0]) * w, (a[1] - b[1]) * h
     cx, cy = (c[0] - b[0]) * w, (c[1] - b[1]) * h
-    na, nc = math.hypot(ax, ay), math.hypot(cx, cy)
-    if not na or not nc:
-        return 0
+    na, nc = math.hypot(ax, ay), math.hypot(cy, cx)
+    if na < 1e-6 or nc < 1e-6:
+        return None
     return round(math.degrees(math.acos(max(-1, min(1, (ax * cx + ay * cy) / (na * nc))))))
+
+
+def _joint_confident(k, *indices, threshold: float = 0.45) -> bool:
+    """A metric is valid only when every keypoint it depends on was confidently observed."""
+    try:
+        return all(len(k[index]) >= 3 and float(k[index][2]) >= threshold for index in indices)
+    except (IndexError, TypeError, ValueError):
+        return False
 
 
 def _metrics(k, w, h, bowling_arm: str) -> dict:
     arm = R if _normalise_bowling_arm(bowling_arm) == "right" else L
     front = L if arm is R else R
-    sx, sy = (k[5][0] + k[6][0]) / 2, (k[5][1] + k[6][1]) / 2
-    hx, hy = (k[11][0] + k[12][0]) / 2, (k[11][1] + k[12][1]) / 2
-    dx, dy = (sx - hx) * w, (sy - hy) * h
-    return {
-        "front_knee": _angle(k[front["hip"]], k[front["knee"]], k[front["ankle"]], w, h),
-        "back_knee": _angle(k[arm["hip"]], k[arm["knee"]], k[arm["ankle"]], w, h),
-        "bowling_elbow": _angle(k[arm["shoulder"]], k[arm["elbow"]], k[arm["wrist"]], w, h),
-        "trunk_lean": round(math.degrees(math.atan2(abs(dx), abs(dy)))) if dy else 0,
+    front_joints = (front["hip"], front["knee"], front["ankle"])
+    back_joints = (arm["hip"], arm["knee"], arm["ankle"])
+    elbow_joints = (arm["shoulder"], arm["elbow"], arm["wrist"])
+    trunk_joints = (5, 6, 11, 12)
+
+    result = {
+        "front_knee": _angle(k[front["hip"]], k[front["knee"]], k[front["ankle"]], w, h)
+        if _joint_confident(k, *front_joints) else None,
+        "back_knee": _angle(k[arm["hip"]], k[arm["knee"]], k[arm["ankle"]], w, h)
+        if _joint_confident(k, *back_joints) else None,
+        "bowling_elbow": _angle(k[arm["shoulder"]], k[arm["elbow"]], k[arm["wrist"]], w, h)
+        if _joint_confident(k, *elbow_joints) else None,
+        "trunk_lean": None,
     }
+    if _joint_confident(k, *trunk_joints):
+        sx = (k[5][0] + k[6][0]) / 2
+        sy = (k[5][1] + k[6][1]) / 2
+        hx = (k[11][0] + k[12][0]) / 2
+        hy = (k[11][1] + k[12][1]) / 2
+        dx, dy = (sx - hx) * w, (sy - hy) * h
+        if abs(dy) > 1e-6:
+            result["trunk_lean"] = round(math.degrees(math.atan2(abs(dx), abs(dy))))
+    return result
 
 
 def metrics_at(pose: dict, t, bowling_arm: str) -> dict:
-    """Joint angles at the frame nearest to t. Front leg = opposite side to the bowling arm."""
-    frames = [f for f in pose.get("frames", []) if f["k"]]
+    """Confidence-gated 2D joint angles at the frame nearest to t."""
+    frames = [f for f in pose.get("frames", []) if f.get("k")]
     if not frames or t is None:
         return {}
     f = min(frames, key=lambda x: abs(x["t"] - t))
     if abs(f["t"] - t) > 0.4:
         return {}
-    return _metrics(f["k"], pose["width"] or 1, pose["height"] or 1, bowling_arm)
+    return _metrics(f["k"], pose.get("width") or 1, pose.get("height") or 1, bowling_arm)
 
 
 def timeline_text(pose: dict, bowling_arm: str, every: float = 0.08) -> str:
-    """Compact measured joint-angle timeline of the tracked bowler, fed to the AI analyst."""
-    frames = [f for f in pose.get("frames", []) if f["k"]]
+    """Confidence-gated camera-plane measurements for the AI analyst; unavailable values stay unavailable."""
+    frames = [f for f in pose.get("frames", []) if f.get("k")]
     if not frames:
-        return "No skeleton measurements available."
-    w, h = pose["width"] or 1, pose["height"] or 1
+        return "No reliable skeleton measurements available."
+    w, h = pose.get("width") or 1, pose.get("height") or 1
     arm = R if _normalise_bowling_arm(bowling_arm) == "right" else L
     rows, last_t = [], -1.0
     for f in frames:
@@ -280,8 +303,14 @@ def timeline_text(pose: dict, bowling_arm: str, every: float = 0.08) -> str:
         last_t = f["t"]
         k = f["k"]
         m = _metrics(k, w, h, bowling_arm)
-        wrist_y = k[arm["wrist"]][1]
-        head_y = k[0][1]
-        rows.append(f"t={f['t']:.2f} fk={m['front_knee']} bk={m['back_knee']} el={m['bowling_elbow']} "
-                    f"lean={m['trunk_lean']} wrist_above_head={'y' if wrist_y < head_y else 'n'} hip_x={(k[11][0] + k[12][0]) / 2:.2f}")
+        wrist_above_nose = "na"
+        if _joint_confident(k, arm["wrist"], 0):
+            wrist_above_nose = "y" if k[arm["wrist"]][1] < k[0][1] else "n"
+        hip_x = f"{(k[11][0] + k[12][0]) / 2:.2f}" if _joint_confident(k, 11, 12) else "na"
+        fmt = lambda value: "na" if value is None else str(value)
+        rows.append(
+            f"t={f['t']:.2f} fk={fmt(m['front_knee'])} bk={fmt(m['back_knee'])} "
+            f"el={fmt(m['bowling_elbow'])} lean={fmt(m['trunk_lean'])} "
+            f"wrist_above_nose={wrist_above_nose} hip_x={hip_x}"
+        )
     return "\n".join(rows)
