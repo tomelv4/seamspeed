@@ -675,8 +675,9 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
     transcript = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in history)
 
     system = (
-        "You are PACED Coach, a world-class fast-bowling coach. Give concise, practical, encouraging advice "
-        "(max ~150 words, short bullet points when listing). Prioritise injury prevention for young quicks. "
+         "You are PACED Coach, a world-class fast-bowling coach. Give concise, practical, encouraging advice "
+        "(max ~150 words, short bullet points when listing). Prioritise sustainable technique, recovery and workload habits. "
+        "Never diagnose injury or infer injury probability from a single delivery or uncalibrated video. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. "
         f"Recent analyses: {json.dumps(context)}. "
         f"Conversation so far:\n{transcript}"
@@ -855,9 +856,9 @@ async def workload_summary(device_id: str, profile: Profile) -> dict:
     guide = WEEKLY_GUIDE.get(profile.age_band)
     flags = []
     if acwr is not None and acwr > 1.5:
-        flags.append({"level": "high", "text": f"Acute:chronic ratio {acwr} - above the 1.5 danger zone for bone and tendon injury."})
+        flags.append({"level": "high", "text": f"Acute:chronic ratio {acwr} - logged bowling volume is substantially above the recent 4-week baseline. Review intensity and recovery before adding more."})
     elif acwr is not None and acwr > 1.3:
-        flags.append({"level": "medium", "text": f"Acute:chronic ratio {acwr} - edging above the 0.8-1.3 sweet spot."})
+        flags.append({"level": "medium", "text": f"Acute:chronic ratio {acwr} - logged bowling volume is above the recent baseline. Consider holding volume steady while monitoring recovery."})
     if prev_week and acute > prev_week * 1.3 and acute - prev_week >= 30:
         flags.append({"level": "medium" if acute < prev_week * 1.6 else "high", "text": f"Weekly spike: {acute} balls vs {prev_week} last week (+{round((acute / prev_week - 1) * 100)}%)."})
     if streak >= 4:
@@ -867,10 +868,10 @@ async def workload_summary(device_id: str, profile: Profile) -> dict:
     if guide and acute > guide:
         flags.append({"level": "high", "text": f"{acute} balls this week exceeds the ~{guide}/week guide for the {profile.age_band} age band."})
     status = "high" if any(f["level"] == "high" for f in flags) else "medium" if flags else "low"
-    headline = flags[0]["text"] if flags else (f"{acute} balls this week, {rest_days} rest days - load is well managed." if acute else "No bowling logged in the last 7 days.")
-    advice = {"high": "Cut volume by 30-50% this week, add 2 rest days and avoid max-effort spells.",
-              "medium": "Hold volume steady, keep 2 rest days and build no more than ~10% per week.",
-              "low": "Keep building gradually (max ~10% per week) with 2+ rest days."}[status]
+    headline = flags[0]["text"] if flags else (f"{acute} balls this week, {rest_days} rest days - no major workload flags in the logged data." if acute else "No bowling logged in the last 7 days.")
+    advice = {"high": "Logged volume is well above recent baseline or a weekly guide. Consider reducing this week’s volume, prioritise recovery and seek individual advice if pain or unusual fatigue persists.",
+              "medium": "Hold volume steady, plan recovery days and avoid a large jump in high-intensity deliveries.",
+              "low": "Continue gradual progression, monitor how you feel and plan regular recovery days."}[status]
     return {"acute": acute, "previous_week": prev_week, "chronic_weekly": round(chronic, 1), "acwr": acwr, "rest_days_7": rest_days,
             "streak": streak, "weeks": weeks, "weekly_guide": guide, "flags": flags, "status": status, "headline": headline,
             "advice": advice, "today": daily.get(today.isoformat(), 0)}
@@ -922,9 +923,11 @@ class SessionIn(BaseModel):
 
 BALL_PROMPT = """You are watching ONE delivery from a live fast-bowling net session. Bowler: {profile}. Session focus: {focus}.
 Current target from coach: {target}
-Return ONLY JSON: {{"is_bowling": true, "score": 7.1, "pace_kmh": 128, "hit_target": true,
-"good": "one thing done well", "fault": "the single most important fault (or empty)", "phase": "run_up|load|back_foot|front_foot|release|follow_through",
-"injury_flag": false, "observation": "1-2 sentence technical observation"}}"""
+Assess only visible technique and target execution. Do not diagnose injury or infer injury risk.
+Do not estimate bowling speed from body movement or uncalibrated video; pace_kmh must be null.
+Return ONLY JSON: {{"is_bowling": true, "score": 7.1, "pace_kmh": null, "hit_target": true,
+"good": "one thing done well", "fault": "the single most important visible technique fault (or empty)", "phase": "run_up|load|back_foot|front_foot|release|follow_through",
+"observation": "1-2 sentence technical observation"}}"""
 
 
 async def coach_say(system: str, prompt: str) -> str:
@@ -937,6 +940,7 @@ def coach_system(profile: Profile, focus: str) -> str:
     return (
         "You are PACED, a live fast-bowling net coach speaking out loud to the bowler between deliveries. "
         "Talk like a real coach at the nets: short, punchy, specific, encouraging. Plain spoken English only, no lists, no markdown, no emojis. "
+        "Focus on visible technique and sustainable training habits; do not diagnose injuries or estimate injury probability. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. Session focus: {focus}."
     )
 
@@ -1037,9 +1041,9 @@ async def session_ball(session_id: str, video: UploadFile = File(...), block: st
             os.remove(path)
     ball = {
         "n": len(session.balls) + 1, "created_at": now_iso(), "is_bowling": bool(obs.get("is_bowling", True)),
-        "score": float(obs.get("score") or 0), "pace_kmh": obs.get("pace_kmh"), "hit_target": obs.get("hit_target"),
+        "score": float(obs.get("score") or 0), "pace_kmh": None, "hit_target": obs.get("hit_target"),
         "good": obs.get("good", ""), "fault": obs.get("fault", ""), "phase": obs.get("phase", ""),
-        "injury_flag": bool(obs.get("injury_flag")), "observation": obs.get("observation", ""),
+        "observation": obs.get("observation", ""),
         "feedback": feedback, "next_target": next_target, "audio": audio, "block": block,
     }
     await db.sessions.update_one({"_id": ObjectId(session_id)}, {"$push": {"balls": ball}})
@@ -1070,11 +1074,7 @@ def compute_achievements(session: Session, prior_best_pace: float) -> tuple[list
         add("on_target", "On Target", f"Hit the coach's target {best} balls in a row")
     if len(balls) >= 4 and all(b["score"] >= 7 for b in balls):
         add("consistency", "Consistency", "Every ball scored 7 or higher")
-    if balls and not any(b.get("injury_flag") for b in balls):
-        add("safe_action", "Safe Action", "No injury-risk flags all session")
-    top = max([b.get("pace_kmh") or 0 for b in balls], default=0)
-    if top and top > prior_best_pace:
-        add("personal_best", "Personal Best Pace", f"New top estimate: {top} km/h")
+
     result = {}
     if test:
         hits = sum(1 for b in test if b.get("hit_target"))
