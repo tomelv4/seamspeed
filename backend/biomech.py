@@ -472,7 +472,7 @@ def measured(track, ev):
     if i_rel is not None and track.joints_confident(i_rel, arm["wrist"], 15, 16):
         ground = max(track.xy[i_rel, 15, 1], track.xy[i_rel, 16, 1])
         rel_h = (ground - track.xy[i_rel, arm["wrist"], 1]) / H * 100
-        m["finger_roll_release"] = {"wrist_height_at_apex_pct": round(rel_h)}
+        m["finger_roll_release"] = {"wrist_height_at_release_pct": round(rel_h)}
         post = track.range(ev["release"], ev["release"] + 0.15)
         leans = [track.trunk_lean(i) for i in post]
         leans = [v for v in leans if v is not None]
