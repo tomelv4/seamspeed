@@ -972,7 +972,7 @@ async def start_session(body: SessionIn, x_device_id: str = Header(...)):
             "\"bowling\": {\"balls\": 6-12, \"target\": \"first-ball target\"}, "
             "\"test\": {\"name\": \"\", \"balls\": 6, \"target\": \"what counts as a success\", \"description\": \"\"}, "
             "\"cool_down\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (4 items incl. walk, hip flexor/hamstring/lumbar/shoulder stretches), "
-            "\"tips\": [\"\", \"\", \"\"] (recovery, injury prevention and technique)}")))
+            "\"tips\": [\"\", \"\", \"\"] (recovery, workload management and technique)}")))
         plan = parse_json(raw)
         intro = str(plan.pop("intro", "")).strip() or "Welcome to your PACED session. Let's start the warm-up."
         audio = await speak(intro)
