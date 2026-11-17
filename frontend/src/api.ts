@@ -9,8 +9,11 @@ export const API = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
 
 export type Phase = { key: string; name: string; score: number; feedback: string };
 export type Fault = { title: string; phase: string; severity: "low" | "medium" | "high"; description: string; fix: string };
+export type AnalysisProgress = { stage?: string; percent?: number; message?: string };
 export type Analysis = {
   id: string;
+  status?: "processing" | "done" | "failed";
+  progress?: AnalysisProgress;
   created_at: string;
   notes: string;
   is_bowling_video: boolean;
@@ -90,7 +93,12 @@ export async function apiSend<T>(path: string, method: "POST" | "PUT" | "DELETE"
   );
 }
 
-export async function uploadDelivery(file: { uri: string; name?: string; mimeType?: string }, notes: string) {
+export async function uploadDelivery(
+  file: { uri: string; name?: string; mimeType?: string },
+  notes: string,
+  onProgress?: (progress: AnalysisProgress) => void,
+) {
+  onProgress?.({ stage: "uploading", percent: 0, message: "Uploading your video" });
   const res = await uploadForm(`${API}/analyses`, {
     files: { video: { uri: file.uri, name: file.name || "delivery.mp4", mimeType: file.mimeType || "video/mp4" } },
     fields: { notes },
@@ -107,6 +115,7 @@ export async function uploadDelivery(file: { uri: string; name?: string; mimeTyp
       if (/not found|404/i.test(String(e?.message))) throw new Error("This analysis is no longer available. Please upload the clip again.");
       continue; // brief network blip - keep waiting
     }
+    if (a.progress) onProgress?.(a.progress);
     if (a.status === "failed") throw new Error(a.error || "Analysis failed. Please try a clearer, side-on clip.");
     if (a.status !== "processing") return a;
   }
