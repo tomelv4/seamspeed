@@ -357,21 +357,46 @@ def step_window(key, ev):
 
 
 def sync_times(ai_steps, ev):
-    """Snap each step's time into its biomechanical window; keep order where the windows allow it."""
-    by_key = {s.get("key"): s for s in ai_steps if isinstance(s, dict)}
+    """Use event windows only when their anchors are genuinely detected; never invent missing step times."""
+    by_key = {s.get("key"): s for s in (ai_steps or []) if isinstance(s, dict)}
+    sources = ev.get("sources", {})
+    methods = ev.get("event_methods", {})
     out, last = {}, 0.0
-    for key, *_ in STEPS:
-        a, b = step_window(key, ev)
-        t = by_key.get(key, {}).get("t")
-        if not isinstance(t, (int, float)) or not (a <= t <= b):
-            t = (a + b) / 2 if b - a < 0.4 else (a if key in ("run_up_acceleration",) else b - min(0.15, (b - a) / 2))
-            if key in ("bfc", "ffc", "wrist_snap", "finger_roll_release", "take_off"):
-                t = min(ev[WINDOWS[key][0]], ev["end"])
-        t = min(max(t, last), b)  # never pushed out of its own window
-        out[key] = round(float(t), 3)
-        last = max(last, t)
-    return out
 
+    def anchor_is_usable(anchor):
+        source = sources.get(anchor)
+        method = methods.get(anchor)
+        return source in ("skeleton", "ai") and method not in (None, "wrist_apex_proxy", "typical_gap_estimate", "unavailable")
+
+    for key, *_ in STEPS:
+        anchor, _, _ = WINDOWS[key]
+        required = [anchor]
+        if WINDOWS[key][2] is None and key in NEXT:
+            required.append(NEXT[key][0])
+        usable_window = all(a == "start" or a == "end" or anchor_is_usable(a) for a in required)
+
+        raw = by_key.get(key, {}).get("t")
+        t = _valid_event_time(raw, ev.get("end")) if usable_window else None
+        if usable_window:
+            a, b = step_window(key, ev)
+            if key in ("bfc", "ffc", "take_off") and sources.get(key) == "skeleton":
+                t = ev[key]
+            elif t is not None and a <= t <= b:
+                pass
+            elif key == "finger_roll_release" and sources.get("release") == "ai":
+                t = ev["release"]
+            else:
+                t = None
+        elif key == "finger_roll_release" and sources.get("release") == "ai":
+            t = ev["release"]
+        if t is not None:
+            t = float(t)
+            if t < last:
+                t = None
+            else:
+                last = t
+        out[key] = round(t, 3) if t is not None else None
+    return out
 
 def measured(track, ev):
     """Measured values per step (2D estimates from the side camera) used for judging against the ideals."""
