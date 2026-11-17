@@ -21,6 +21,7 @@ export type Analysis = {
   summary: string;
   action_type: string;
   camera_view?: "side_on" | "rear" | "front_on" | "oblique" | "unknown";
+  camera_view_confidence?: "high" | "medium" | "low";
   phases: Phase[];
   faults: Fault[];
   strengths: string[];
@@ -33,6 +34,7 @@ export type Analysis = {
   has_pose?: boolean;
   analysis_quality?: {
     score_confidence?: string; assessable_steps?: number; step_coverage?: number;
+    camera_view?: string; camera_view_confidence?: string;
     pose?: { rating?: string; frame_coverage?: number; critical_joint_coverage?: number; mean_joint_confidence?: number; interpolated_frames?: number };
     event_methods?: Record<string, string>;
     event_confidence?: Record<string, number>;
