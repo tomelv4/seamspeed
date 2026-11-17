@@ -228,6 +228,9 @@ EVIDENCE AND SCORING RULES:
 - The bowling wrist's highest point is NOT proof of ball release. If ball separation is not clearly visible, describe
   the release moment as uncertain and do not call a wrist-apex proxy a confirmed release.
 - Mark a step "not_visible" when the relevant body part or event cannot be judged reliably. Do not force a score.
+- For 3D rotation, ground-reaction force, angular velocity, ball spin, elbow legality or close-up finger/wrist mechanics,
+  use "not_visible" unless the supplied footage and measurements genuinely support that assessment.
+- The coaching reference text is qualitative guidance, not a set of universal numeric thresholds.
 - "good", "ok" and "fault" require visible evidence; uncertainty is not a fault.
 - Scores should reflect only assessable technique. If several important steps are not assessable, lower confidence in
   the overall assessment and say so in the summary rather than filling gaps with assumptions.
@@ -261,7 +264,7 @@ If the video does not show a bowling action, set is_bowling_video to false, over
 
 MEASURED_PROMPT = """
 
-MEASURED SKELETON DATA of the tracked bowler (2D pose tracking at 30 fps):
+MEASURED SKELETON DATA of the tracked bowler (2D pose tracking at up to 60 fps):
 {events}
 
 Frame-by-frame timeline (angles in degrees; fk=front knee, bk=back knee, el=bowling elbow, lean=trunk lean from
