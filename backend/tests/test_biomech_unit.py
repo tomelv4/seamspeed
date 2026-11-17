@@ -343,9 +343,11 @@ class TestMeasured:
         assert "wrist_height_at_release_pct" in metrics["finger_roll_release"]
 
     def test_release_wrist_height_is_omitted_without_clip_ground_reference(self):
-        track = biomech.Track(synth_pose("right"), "right")
-        track.c[:, 15] = 0.0
-        track.c[:, 16] = 0.0
+        pose = synth_pose("right")
+        for frame in pose["frames"]:
+            frame["k"][15][2] = 0.0
+            frame["k"][16][2] = 0.0
+        track = biomech.Track(pose, "right")
         ev = biomech.detect_events(track)
         ev["event_methods"]["release"] = "ai_visual_estimate"
         ev["measured"] = sorted(set(ev.get("measured", [])) | {"release"})
@@ -402,7 +404,10 @@ class TestMeasured:
         ids = track.range(ev["bfc"] + 0.02, ev["bfc"] + 0.15)
         assert len(ids) >= 2
         side = track.arm
-        for i in ids[1:]:
+        i_bfc = track.idx(ev["bfc"])
+        for i in ids:
+            if i == i_bfc:
+                continue
             for joint in (side["hip"], side["knee"], side["ankle"]):
                 track.c[i, joint] = 0.0
 
