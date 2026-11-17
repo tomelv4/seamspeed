@@ -188,9 +188,10 @@ def _subject_selection_confidence(tracks, selected, diag) -> dict:
         if track is selected or not track.get("dets"):
             continue
         frames = set(track["dets"])
-        start, end = min(frames), max(frames)
-        overlap = max(0, min(selected_end, end) - max(selected_start, start) + 1)
-        overlap_ratio = overlap / max(1, min(selected_span, end - start + 1))
+        # Compare detections on the same sampled frames, not just overlapping
+        # first/last-frame ranges; sparse fragments are not simultaneous people.
+        shared_frames = selected_frames & frames
+        overlap_ratio = len(shared_frames) / max(1, min(len(selected_frames), len(frames)))
         if overlap_ratio < 0.4:
             continue
         competitors += 1
