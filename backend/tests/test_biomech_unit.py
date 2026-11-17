@@ -190,6 +190,18 @@ class TestMergeAndSync:
         assert biomech.merge_events({}, [], 3.0) is None
         assert biomech.merge_events({}, [{"key": "bfc", "t": None}, "junk"], 3.0) is None
 
+    def test_merge_ignores_release_timestamp_when_step_is_not_visible(self):
+        ai = ai_steps_from({"finger_roll_release": 1.5})
+        ai[-4]["status"] = "not_visible"
+        assert biomech.merge_events({}, ai, 2.5) is None
+
+    def test_sync_ignores_timestamp_for_not_visible_step(self):
+        ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
+        ai = ai_steps_from({"run_up_acceleration": 0.3, "finger_roll_release": 1.5})
+        ai[0]["status"] = "not_visible"
+        times = biomech.sync_times(ai, ev)
+        assert times["run_up_acceleration"] is None
+
     @pytest.mark.parametrize("ai_times", [{}, {k: 0.0 for k in KEYS}, {k: 9.9 for k in KEYS},
                                           {k: 2.5 - i * 0.09 for i, k in enumerate(KEYS)}])
     def test_sync_never_invents_times_outside_detected_windows(self, ai_times):
