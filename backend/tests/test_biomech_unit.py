@@ -99,6 +99,27 @@ class TestDetectEvents:
     def test_safe_fps_uses_default_for_invalid_metadata(self, value):
         assert pose_lib._safe_fps(value) == 30.0
 
+    def test_subject_selection_confidence_flags_competing_person_track(self):
+        def track(offset):
+            dets = {}
+            for frame in range(12):
+                x = offset + frame * 3
+                kp = np.zeros((17, 2), dtype=float)
+                kp[:, 0] = x + np.arange(17) * 0.1
+                kp[:, 1] = 20 + np.arange(17) * 2
+                dets[frame] = {
+                    "box": np.array([x, 10, x + 30, 110], dtype=float),
+                    "kp": kp,
+                    "sc": np.ones(17, dtype=float) * 0.9,
+                }
+            return {"dets": dets}
+
+        selected = track(0)
+        assert pose_lib._subject_selection_confidence([selected], selected, 200)["confidence"] == "high"
+        result = pose_lib._subject_selection_confidence([selected, track(80)], selected, 200)
+        assert result["confidence"] == "low"
+        assert result["competing_tracks"] == 1
+
     def test_safe_fps_preserves_valid_source_rate(self):
         assert pose_lib._safe_fps(59.94) == pytest.approx(59.94)
 
