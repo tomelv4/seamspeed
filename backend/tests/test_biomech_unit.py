@@ -84,6 +84,11 @@ class TestDetectEvents:
         ev = biomech.detect_events(biomech.Track(synth_pose("right"), "left"))
         assert isinstance(ev, dict)
 
+    @pytest.mark.parametrize("arm", [None, "", "unknown", "Right", "Left"])
+    def test_track_normalises_missing_or_unrecognised_arm(self, arm):
+        track = biomech.Track(synth_pose("right"), arm)
+        assert track.arm is (biomech.LA if arm == "Left" else biomech.RA)
+
     def test_empty_and_none_pose(self):
         for p in ({}, {"width": 0, "height": 0, "frames": []}, {"frames": [{"t": 0, "k": []}]}):
             tr = biomech.Track(p, "right")
@@ -102,12 +107,16 @@ class TestMergeAndSync:
         ev = biomech.merge_events({}, ai, 3.0)
         assert (ev["release"], ev["ffc"], ev["bfc"], ev["take_off"]) == (2.0, 1.85, 1.6, 1.3)
         assert ev["measured"] == [] and ev["end"] == 3.0
+        assert ev["estimated"] == ["bfc", "ffc", "release", "take_off"]
+        assert set(ev["sources"].values()) == {"ai"}
 
     def test_merge_fallback_typical_gaps_and_wrist_snap(self):
         ev = biomech.merge_events({}, ai_steps_from({"wrist_snap": 2.0, "ffc": 2.4}), 0)
         assert ev["release"] == 2.0
         assert ev["ffc"] == pytest.approx(1.87) and ev["bfc"] == pytest.approx(1.65) and ev["take_off"] == pytest.approx(1.33)
         assert ev["end"] == pytest.approx(3.5)
+        assert ev["sources"] == {"release": "ai", "ffc": "template", "bfc": "template", "take_off": "template"}
+        assert ev["measured"] == []
 
     def test_merge_none_when_no_release(self):
         assert biomech.merge_events({}, [], 3.0) is None
@@ -154,4 +163,6 @@ class TestMeasured:
         assert set(m) <= set(KEYS)
         txt = biomech.measured_text(ev, m)
         assert "BFC=" in txt and "release=" in txt
+        assert "skeleton-detected" in txt
+        assert "wrist_snap" not in m
         assert pose_lib.metrics_at(p, ev["release"], "right")["front_knee"] >= 0
