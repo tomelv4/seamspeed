@@ -111,6 +111,7 @@ export default function Report() {
                   {a.video_meta.quality.flags?.length ? ` · ${a.video_meta.quality.flags.map((flag) => flag.replaceAll("_", " ")).join(" · ")}` : " · no screening flags"}
                 </Text>
               ) : null}
+              <Text style={s.note}>Overall and phase scores are equal-weight averages of assessable movement-step scores; unassessable steps are excluded.</Text>
               <Text style={s.note}>Single-camera 2D coaching estimates only. These are not 3D biomechanical measurements or medical assessments.</Text>
               <Text style={s.note}>
                 {a.analysis_quality.release_evidence?.ball_separation_visible
