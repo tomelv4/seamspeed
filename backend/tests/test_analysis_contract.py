@@ -60,6 +60,8 @@ def test_normalise_produces_all_27_steps_and_sanitises_faults():
     assert len({step["key"] for step in result["steps"]}) == 27
     assert len(result["faults"]) == 2
     assert result["faults"][0]["title"] == "High priority"
+    assert result["faults"][0]["step_key"] in {key for key, _name, phase, *_rest in biomech.STEPS if phase == "back_foot"}
+    assert result["faults"][1]["step_key"] in {key for key, _name, phase, *_rest in biomech.STEPS if phase == "front_foot"}
     assert result["overall_score"] == 7.0
     assert result["overall_score_assessable"] is True
     assert result["strengths"] == ["Good rhythm"]
