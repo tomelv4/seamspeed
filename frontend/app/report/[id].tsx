@@ -162,9 +162,9 @@ export default function Report() {
                   </View>
                 </View>
                 <View style={[s.metric, { flex: 1, borderColor: riskColor(a.injury_risk?.level, colors) }]} testID="report-injury-risk">
-                  <Text style={s.kicker}>INJURY PREDICTION</Text>
+                  <Text style={s.kicker}>INJURY RISK</Text>
                   <Text style={[s.metricValue, { color: a.injury_risk?.level === "not_assessed" ? colors.muted : riskColor(a.injury_risk?.level, colors), textTransform: "uppercase" }]}>{a.injury_risk?.level === "not_assessed" ? "Not assessed" : (a.injury_risk?.level ?? "—")}</Text>
-                  <Text style={s.metricSub}>{a.injury_risk?.mixed_action == null ? "Cannot be predicted from one 2D video" : a.injury_risk.mixed_action ? "Mixed action detected" : "No mixed action"}</Text>
+                  <Text style={s.metricSub}>{a.injury_risk?.mixed_action == null ? "Not assessed from one 2D video" : a.injury_risk.mixed_action ? "Mixed action detected" : "No mixed action"}</Text>
                   <Text style={s.metricSub}>Counter-rotation: {a.injury_risk?.counter_rotation === "not_assessed" ? "Not assessed from this view" : (a.injury_risk?.counter_rotation ?? "—")}</Text>
                 </View>
               </View>
