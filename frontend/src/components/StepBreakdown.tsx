@@ -11,7 +11,7 @@ const METRIC_LABEL: Record<string, [string, string]> = {
   back_knee_min: ["Back knee min", "°"], knee_flex_after_bfc: ["Knee flex after BFC", "°"], stride_pct_height: ["Stride", "% height"],
   front_knee_ffc: ["Knee at FFC", "°"], front_knee_release: ["Knee at release", "°"], knee_flex_after_ffc: ["Knee flex after FFC", "°"],
   front_arm_elevation: ["Front arm", "°"], wrist_height_at_apex_pct: ["Wrist at apex", "% height"], forward_lean_max_2d_est: ["Forward lean (2D est.)", "°"], backward_lean_2d_est: ["Backward lean (2D est.)", "°"],
-  elbow_at_horizontal: ["Elbow at horizontal", "°"], elbow_at_release: ["Elbow at release", "°"], elbow_extension_est: ["Elbow extension (est)", "°"],
+
 
 };
 
