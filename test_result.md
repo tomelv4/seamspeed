@@ -129,3 +129,9 @@
 - Follow-up changes: preserve original 30/60 fps capture sampling up to 900 frames; interpolated pose frames are explicitly low-confidence and excluded from biomechanics; capture-quality coverage counts observed frames only; body-scale estimate requires confident keypoints; foot contact requires a visible swing before ground contact.
 - Corrected a test fixture to lower the actual front-knee keypoint and aligned timestamp assertions with the rule that wrist apex is not a confirmed release.
 - CI rerun pending after these commits.
+
+
+## Iteration 7 CI checkpoint
+- GitHub Actions run 44087518569: backend compile passed and 29/29 biomechanics unit tests passed in 0.10s on the commit tested by that run.
+- Subsequent commits added 60fps sampling, stricter observed-vs-interpolated confidence handling, qualitative coaching references, evidence-level metadata, pace/injury guardrails, and frontend UI/type changes. These later commits still require a fresh CI run.
+- Frontend TypeScript validation has now been added to the workflow.
