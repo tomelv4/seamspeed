@@ -122,14 +122,15 @@ def _iou(a, b):
     return inter / union if union > 0 else 0.0
 
 
-def _link(dets, diag):
-    """Greedy frame-to-frame association by IoU + centre distance. Returns tracks: {fi: det}."""
+def _link(dets, diag, times=None, max_gap_seconds: float = 0.35):
+    """Associate detections only across short real-time gaps using IoU + centre distance."""
     tracks = []  # each: {"last": fi, "box": bbox, "vel": (dx, dy), "dets": {fi: det}}
     for fi, people in enumerate(dets):
         pairs = []
         for ti, tr in enumerate(tracks):
             gap = fi - tr["last"]
-            if gap > 8:
+            elapsed = (float(times[fi]) - float(times[tr["last"]])) if times is not None else gap / 60.0
+            if gap <= 0 or elapsed <= 0 or elapsed > max_gap_seconds:
                 continue
             pred = tr["box"] + np.array([*tr["vel"], *tr["vel"]]) * gap
             pc = ((pred[0] + pred[2]) / 2, (pred[1] + pred[3]) / 2)
@@ -245,7 +246,7 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dic
     cap.release()
 
     diag = math.hypot(sw, sh)
-    tracks = _link(dets, diag)
+    tracks = _link(dets, diag, times=times)
     n = len(dets)
     frames = [{"t": t, "k": None} for t in times]
     observed = np.zeros(n, bool)
