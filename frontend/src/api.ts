@@ -37,7 +37,7 @@ export type Analysis = {
   };
   has_pose?: boolean;
   analysis_quality?: {
-    score_confidence?: string; assessable_steps?: number; step_coverage?: number;
+    score_confidence?: string; score_method?: string; assessable_steps?: number; step_coverage?: number;
     camera_view?: string; camera_view_confidence?: string;
     pose?: { rating?: string; frame_coverage?: number; critical_joint_coverage?: number; mean_joint_confidence?: number; interpolated_frames?: number; subject_selection_confidence?: string; competing_tracks?: number };
     video?: { rating?: string; flags?: string[]; samples?: number; mean_luminance?: number | null; median_sharpness?: number | null; method?: string };
