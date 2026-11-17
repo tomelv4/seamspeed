@@ -101,6 +101,12 @@ export default function Report() {
                     .map(([key, method]) => `${key.replace("_", " ")}: ${method.replaceAll("_", " ")}`).join(" · ")}
                 </Text>
               ) : null}
+              {a.video_meta?.quality ? (
+                <Text style={s.note}>
+                  Capture screening: {(a.video_meta.quality.rating ?? "unknown").toUpperCase()}
+                  {a.video_meta.quality.flags?.length ? ` · ${a.video_meta.quality.flags.map((flag) => flag.replaceAll("_", " ")).join(" · ")}` : " · no screening flags"}
+                </Text>
+              ) : null}
               <Text style={s.note}>Single-camera 2D coaching estimates only. These are not 3D biomechanical measurements or medical assessments.</Text>
               {a.analysis_quality.event_methods?.release === "wrist_apex_proxy" ? (
                 <Text style={s.note}>Release timing uses the wrist's highest point as a visual proxy; it does not confirm when the ball left the hand.</Text>
