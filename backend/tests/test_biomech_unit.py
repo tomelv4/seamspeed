@@ -152,30 +152,33 @@ class TestMergeAndSync:
 
     @pytest.mark.parametrize("ai_times", [{}, {k: 0.0 for k in KEYS}, {k: 9.9 for k in KEYS},
                                           {k: 2.5 - i * 0.09 for i, k in enumerate(KEYS)}])
-    def test_sync_order_and_event_anchors(self, ai_times):
+    def test_sync_never_invents_times_outside_detected_windows(self, ai_times):
         ev = biomech.merge_events({"release": 1.5, "ffc": 1.367, "bfc": 1.1, "take_off": 0.833}, [], 2.5)
         times = biomech.sync_times(ai_steps_from(ai_times), ev)
-        seq = [times[k] for k in KEYS]
+        seq = [times[k] for k in KEYS if times[k] is not None]
         assert seq == sorted(seq), seq
         for sk, ek in EVENT_STEPS.items():
             assert times[sk] == pytest.approx(ev[ek], abs=1e-3), (sk, times[sk], ev[ek])
         assert all(0 <= t <= ev["end"] for t in seq)
 
-    def test_sync_steps_inside_windows_default(self):
-        ev = biomech.merge_events({"release": 1.5, "ffc": 1.367, "bfc": 1.1, "take_off": 0.833}, [], 2.5)
+    def test_sync_does_not_create_times_when_anchor_events_are_templates(self):
+        ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
         times = biomech.sync_times([], ev)
-        outside = []
-        for k in KEYS:
-            a, b = biomech.step_window(k, ev)
-            if not (a - 1e-3 <= times[k] <= b + 1e-3):
-                outside.append((k, times[k], round(a, 3), round(b, 3)))
-        print("outside windows:", outside)
-        assert not outside, outside
+        assert all(t is None for t in times.values())
+
+    def test_sync_uses_ai_times_when_template_events_cannot_anchor_steps(self):
+        ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
+        ai = ai_steps_from({k: 0.2 + i * 0.05 for i, k in enumerate(KEYS)})
+        times = biomech.sync_times(ai, ev)
+        assert all(times[k] is None or 0 <= times[k] <= 2.5 for k in KEYS)
 
     def test_release_at_end_of_clip_stays_within_duration(self):
         ev = biomech.merge_events({"release": 2.45, "ffc": 2.3, "bfc": 2.1, "take_off": 1.8}, [], 2.5)
         times = biomech.sync_times([], ev)
-        assert max(times.values()) <= 2.5, times
+        assert all(t is None or 0 <= t <= 2.5 for t in times.values())
+        assert times["bfc"] == pytest.approx(2.1)
+        assert times["ffc"] == pytest.approx(2.3)
+        assert times["take_off"] == pytest.approx(1.8)
 
 
 class TestMeasured:
