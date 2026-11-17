@@ -5,6 +5,7 @@ Run from the repository root:
 """
 import argparse
 import json
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +47,57 @@ def evaluate_event_times(detected: dict[str, Any], reference: dict[str, Any], fp
         "within_tolerance": hits, "within_tolerance_rate": round(hits / labelled, 3) if labelled else None,
         "mean_absolute_error_s": round(sum(errors) / len(errors), 4) if errors else None,
         "events": per_event,
+    }
+
+
+def aggregate_event_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate per-clip evaluator results without hiding missed or unlabelled events."""
+    summary = {}
+    total_labelled = total_detected = total_missed = total_hits = 0
+    all_errors = []
+    for key in ("take_off", "bfc", "ffc", "release"):
+        labelled = detected = missed = hits = 0
+        errors = []
+        for report in reports:
+            event = report.get("events", {}).get(key, {})
+            status = event.get("status")
+            if status in (None, "not_labelled"):
+                continue
+            labelled += 1
+            if status == "missed":
+                missed += 1
+                continue
+            if status in ("within_tolerance", "outside_tolerance"):
+                detected += 1
+                error = event.get("absolute_error_s")
+                if isinstance(error, (int, float)) and math.isfinite(float(error)):
+                    errors.append(float(error))
+                    all_errors.append(float(error))
+                if status == "within_tolerance":
+                    hits += 1
+        total_labelled += labelled
+        total_detected += detected
+        total_missed += missed
+        total_hits += hits
+        summary[key] = {
+            "labelled_events": labelled,
+            "detected_events": detected,
+            "missed_events": missed,
+            "within_tolerance": hits,
+            "within_tolerance_rate": round(hits / labelled, 3) if labelled else None,
+            "mean_absolute_error_s": round(statistics.mean(errors), 4) if errors else None,
+            "median_absolute_error_s": round(statistics.median(errors), 4) if errors else None,
+        }
+    return {
+        "clips_evaluated": len(reports),
+        "labelled_events": total_labelled,
+        "detected_events": total_detected,
+        "missed_events": total_missed,
+        "within_tolerance": total_hits,
+        "within_tolerance_rate": round(total_hits / total_labelled, 3) if total_labelled else None,
+        "mean_absolute_error_s": round(statistics.mean(all_errors), 4) if all_errors else None,
+        "median_absolute_error_s": round(statistics.median(all_errors), 4) if all_errors else None,
+        "per_event": summary,
     }
 
 
