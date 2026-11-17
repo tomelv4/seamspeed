@@ -223,6 +223,15 @@ class TestDetectEvents:
             assert len(tr) == 0 and biomech.detect_events(tr) == {}
             assert biomech.measured(tr, {"release": 1.0}) == {}
 
+    def test_normalized_measurements_require_three_full_body_scale_frames(self):
+        pose = synth_pose("right")
+        for frame in pose["frames"][2:]:
+            frame["k"][0][2] = 0.0
+        track = biomech.Track(pose, "right")
+        assert track.height_px == 0.0
+        assert biomech.detect_events(track) == {}
+        assert biomech.measured(track, {"release": 1.0}) == {}
+
 
 class TestMergeAndSync:
     def test_merge_prefers_pose(self):
