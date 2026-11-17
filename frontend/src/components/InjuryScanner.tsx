@@ -12,7 +12,7 @@ const AREAS: Record<string, { name: string; detail: string; icon: string }> = {
   front_leg: { name: "Front-Leg Mechanics", detail: "Visible knee and foot positions only. Ground-reaction forces and tendon loading cannot be measured from this clip.", icon: "footsteps" },
   shoulder: { name: "Shoulder Movement", detail: "Visible arm path and follow-through only. The video cannot assess rotator-cuff health or internal shoulder loading.", icon: "sync" },
   hamstring_groin: { name: "Run-Up & Leg Movement", detail: "Visible running and stride mechanics only. This is not a hamstring or groin injury prediction.", icon: "flash" },
-  workload: { name: "Workload Spikes", detail: "Sudden jumps in weekly balls without recovery days — the leading non-mechanical trigger for bone and tendon injury.", icon: "calendar" },
+  workload: { name: "Workload Spikes", detail: "Changes in logged weekly bowling volume and recovery days. This is a training-load signal, not an injury prediction.", icon: "calendar" },
 };
 
 export function InjuryScanner({ areas }: { areas: InjuryArea[] }) {
