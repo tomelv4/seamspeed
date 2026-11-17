@@ -52,8 +52,8 @@ export type Drill = {
 };
 export type Profile = { name: string; bowling_arm: string; bowling_style: string; level: string; age_band?: string };
 export type Progress = {
-  points: { id: string; date: string; score: number; pace: number; risk: string; faults: number }[];
-  phase_avg: Record<string, number>;
+  points: { id: string; date: string; score: number | null; pace: number; risk: string; faults: number }[];
+  phase_avg: Record<string, number | null>;
   top_faults: { title: string; count: number }[];
   best_score: number; best_pace: number; total: number;
 };
