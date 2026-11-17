@@ -132,6 +132,7 @@ class Analysis(BaseDocument):
     video_meta: dict = {}
     has_pose: bool = False
     events: dict = {}
+    analysis_quality: dict = {}
     status: str = "done"  # processing | done | failed
     error: str = ""
 
@@ -220,17 +221,22 @@ For each step return {{"key","t","score" (0-10),"status" ("good"|"ok"|"fault"|"n
 Timestamps must be increasing and each must be the exact moment described in WHEN (scrub frame by frame around
 back-foot contact, front-foot contact and release). Use "not_visible" with t null if the step is out of frame.
 
-BE A CRITICAL, DEMANDING COACH. Judge every step against its IDEAL numbers, not against "looks fine":
-- In every observation state your estimate of the key number (angle, %, distance, timing) and the ideal range,
-  e.g. "Front knee collapses ~20° after landing (ideal < 10°)".
-- status "good" only when the step is inside the ideal range; "ok" when slightly outside; "fault" when clearly outside
-  or when it creates injury risk. Do not give the benefit of the doubt.
-- Scores: 9-10 international standard, 7-8 strong first-class, 5-6 typical club bowler, 3-4 clear technical
-  problems, 0-2 major breakdown. Most amateur actions should land 4-7.
-- Actively hunt for faults: front-knee collapse, mixed action / counter-rotation > 30°, short or over-long delivery
-  stride, front arm falling away early, falling away at release, low release, elbow flexion near or above 15°,
-  jumping too high in the bound, poor alignment, cut-off follow-through. Report every real fault you find
-  with its measured value; do not invent faults that are not visible.
+EVIDENCE AND SCORING RULES:
+- Never invent or guess a numeric angle, distance, speed, timing, joint position or ideal-range deviation.
+- Quote a number only when it is explicitly supplied by measured skeleton data or is a clearly labelled visual estimate.
+- A 2D skeleton value is a camera-plane estimate, not a 3D biomechanical measurement. Do not infer rotation, joint loading,
+  legal elbow extension, ball speed, spin or injury probability from a single uncalibrated view.
+- The bowling wrist's highest point is NOT proof of ball release. If ball separation is not clearly visible, describe
+  the release moment as uncertain and do not call a wrist-apex proxy a confirmed release.
+- Mark a step "not_visible" when the relevant body part or event cannot be judged reliably. Do not force a score.
+- "good", "ok" and "fault" require visible evidence; uncertainty is not a fault.
+- Scores should reflect only assessable technique. If several important steps are not assessable, lower confidence in
+  the overall assessment and say so in the summary rather than filling gaps with assumptions.
+- Injury scanner outputs are coaching observations only, never a diagnosis or prediction. Do not label a medical injury
+  risk high based on a single visual proxy. State when there is insufficient evidence.
+- Do not estimate bowling speed from body motion or ball flight. Return pace_band with null min_kmh/max_kmh and
+  confidence "unavailable" unless a calibrated speed source is provided.
+- Do not report elbow-extension legality from 2D pose angles.
 
 Break the action into 6 phases: run_up, load (bound/gather), back_foot (back-foot contact), front_foot (front-foot contact / delivery stride), release, follow_through.
 Score each phase 0-10 (one decimal). Identify faults with severity (low|medium|high), linked phase key and a short fix.
@@ -262,10 +268,10 @@ MEASURED SKELETON DATA of the tracked bowler (2D pose tracking at 30 fps):
 Frame-by-frame timeline (angles in degrees; fk=front knee, bk=back knee, el=bowling elbow, lean=trunk lean from
 vertical, hip_x=hip position across the frame 0-1):
 {timeline}
-Use the detected events as the anchors for your timestamps (BFC, FFC and release steps MUST use those times when
-they were measured) and place every other step at its correct moment relative to them. Use the measured values
-when judging each step against its ideal and quote them. 2D angles can be distorted by camera angle, so say so when
-the view is not side-on, but do not ignore a measured fault."""
+Use event times as approximate anchors only. The event metadata includes the detection method and confidence:
+a wrist-apex proxy is not confirmed ball release, and ankle-ground heuristics are not force-plate contact measurements.
+Use a measured value only when it is present and the relevant joints have adequate confidence. Do not fill absent values
+with guessed numbers. Treat 2D angles as camera-plane estimates; do not infer 3D rotation or injury loading from them."""
 
 
 def now_iso() -> str:
@@ -380,6 +386,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     pose_ev = biomech.detect_events(track)
     pre_ev = biomech.merge_events(pose_ev, [], meta.get("duration"))
     pre_text = biomech.measured_text(pre_ev, biomech.measured(track, pre_ev)) if pre_ev else "Key events could not be detected from the skeleton."
+    pose_quality = (pose_data or {}).get("quality", {"rating": "limited", "frame_coverage": 0.0, "critical_joint_coverage": 0.0, "mean_joint_confidence": 0.0})
     data = await run_gemini(pose_data)
 
     # sync every step to its biomechanical moment (measured events first, AI timestamps as fallback)
@@ -405,7 +412,8 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     if ev:
         data["events"] = (
             {k: round(ev[k], 3) for k in ("take_off", "bfc", "ffc", "release")}
-            | {"measured": ev["measured"], "estimated": ev.get("estimated", []), "sources": ev.get("sources", {})}
+            | {"measured": ev["measured"], "estimated": ev.get("estimated", []), "sources": ev.get("sources", {}),
+               "methods": ev.get("event_methods", {}), "confidence": ev.get("event_confidence", {})}
         )
 
     video_path = f"{APP_NAME}/uploads/{x_device_id}/{uuid.uuid4()}{suffix}"
@@ -421,6 +429,16 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     data["video_path"] = video_path
     data["video_meta"] = {**meta, "width": (pose_data or {}).get("width", 0), "height": (pose_data or {}).get("height", 0), "mime": mime}
     data["has_pose"] = bool(pose_data and pose_data.get("detected"))
+    data["analysis_quality"] = {
+        "pose": pose_quality,
+        "event_methods": (ev or {}).get("event_methods", {}),
+        "event_confidence": (ev or {}).get("event_confidence", {}),
+        "limitations": [
+            "Single-camera 2D pose estimates cannot establish 3D joint loading or rotation.",
+            "Wrist apex is not confirmed ball release unless ball separation is visible.",
+            "Bowling speed is unavailable without a calibrated measurement source.",
+        ],
+    }
     # Workload spikes are non-mechanical: computed from the bowler's logged volume, not the video.
     wl = await workload_summary(x_device_id, profile)
     risk = data.get("injury_risk") or {}
