@@ -175,6 +175,14 @@ class TestDetectEvents:
         track = biomech.Track(p, "right")
         assert track.knee(0, track.front) is None
 
+    def test_collapsed_limb_segments_are_not_measured_as_valid_angles(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        side = track.front
+        track.xy[0, side["hip"]] = [100.0, 100.0]
+        track.xy[0, side["knee"]] = [101.0, 100.0]
+        track.xy[0, side["ankle"]] = [102.0, 100.0]
+        assert track.knee(0, side) is None
+
     def test_low_confidence_bowling_wrist_prevents_release_detection(self):
         p = synth_pose("right")
         for frame in p["frames"]:
@@ -370,8 +378,8 @@ class TestMeasured:
         front = track.front
         for i in pre:
             shoulder = track.xy[i, front["shoulder"]].copy()
-            track.xy[i, front["hip"]] = shoulder + [0.0, 10.0]
-            track.xy[i, front["elbow"]] = shoulder + [0.0, 20.0]
+            track.xy[i, front["hip"]] = shoulder + [0.0, 30.0]
+            track.xy[i, front["elbow"]] = shoulder + [0.0, 60.0]
         metrics = biomech.measured(track, ev)
         assert metrics["front_arm_elevation"]["front_arm_elevation"] == 0
 
