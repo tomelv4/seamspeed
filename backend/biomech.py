@@ -181,59 +181,86 @@ class Track:
     def p(self, i, j):
         return self.xy[i, j]
 
+    def joints_confident(self, i, *joints, threshold=0.45):
+        return all(0 <= j < self.c.shape[1] and self.c[i, j] >= threshold for j in joints)
+
     def trunk_lean(self, i):
         """Signed trunk lean in the camera plane: + = toward the batter (direction of run), - = backward."""
+        if not self.joints_confident(i, 5, 6, 11, 12):
+            return None
         sh = (self.xy[i, 5] + self.xy[i, 6]) / 2
         hp = (self.xy[i, 11] + self.xy[i, 12]) / 2
         d = sh - hp
-        return math.degrees(math.atan2(d[0] * self.dir, abs(d[1]))) if d[1] else 0.0
+        return math.degrees(math.atan2(d[0] * self.dir, abs(d[1]))) if d[1] else None
 
     def knee(self, i, side):
+        joints = (side["hip"], side["knee"], side["ankle"])
+        if not self.joints_confident(i, *joints):
+            return None
         return _ang(self.xy[i, side["hip"]] / [self.w, self.h], self.xy[i, side["knee"]] / [self.w, self.h],
                     self.xy[i, side["ankle"]] / [self.w, self.h], self.w, self.h)
 
     def joint(self, i, a, b, c):
+        if not self.joints_confident(i, a, b, c):
+            return None
         return _ang(self.xy[i, a] / [self.w, self.h], self.xy[i, b] / [self.w, self.h], self.xy[i, c] / [self.w, self.h], self.w, self.h)
 
 
 def _landing(track, ankle, a, b):
-    """First frame after the foot's highest swing point where it reaches the ground level of the window."""
+    """Estimate foot contact using a clip-wide ground reference and sustained near-ground frames."""
     ids = track.range(a, b)
-    ids = ids[track.c[ids, ankle] > 0.3] if len(ids) else ids
-    if len(ids) < 3:
+    valid_all = np.where(track.c[:, ankle] >= 0.45)[0]
+    ids = ids[track.c[ids, ankle] >= 0.45] if len(ids) else ids
+    if len(ids) < 4 or len(valid_all) < 4:
         return None
+    # Image y increases downward. A high percentile approximates the lowest (grounded) ankle positions.
+    ground_y = float(np.percentile(track.xy[valid_all, ankle, 1], 90))
     y = track.xy[ids, ankle, 1]
     top = int(np.argmin(y))
     after = ids[top:]
-    if len(after) < 2:
-        return None
-    ya = track.xy[after, ankle, 1]
-    ground = ya.max()
-    tol = 0.025 * track.height_px
-    for i, v in zip(after, ya):
-        if v >= ground - tol:
+    tol = 0.02 * track.height_px
+    for pos in range(len(after) - 1):
+        i, nxt = after[pos], after[pos + 1]
+        if nxt - i > 2:
+            continue
+        yi = track.xy[i, ankle, 1]
+        yn = track.xy[nxt, ankle, 1]
+        if yi >= ground_y - tol and yn >= ground_y - tol:
+            # Reject a single noisy frame that only crosses the estimated ground line.
             return float(track.t[i])
     return None
-
 
 def detect_events(track):
     """Release, FFC, BFC and take-off times from the tracked bowler (None when not detectable)."""
     if len(track) < 8:
         return {}
     arm = track.arm
+    shoulders_ok = (track.c[:, 5] >= 0.45) & (track.c[:, 6] >= 0.45)
+    ok = (track.c[:, arm["wrist"]] >= 0.45) & shoulders_ok
+    if ok.sum() < 3:
+        return {}
     sh_y = (track.xy[:, 5, 1] + track.xy[:, 6, 1]) / 2
     wrist_up = (sh_y - track.xy[:, arm["wrist"], 1]) / track.height_px
-    ok = track.c[:, arm["wrist"]] > 0.3
-    if not ok.any() or wrist_up[ok].max() < 0.12:
+    if wrist_up[ok].max() < 0.12:
         return {}
     i_rel = int(np.argmax(np.where(ok, wrist_up, -9)))
-    ev = {"release": float(track.t[i_rel])}
+    ev = {
+        "release": float(track.t[i_rel]),
+        "event_methods": {"release": "wrist_apex_proxy"},
+        "event_confidence": {"release": round(float(min(track.c[i_rel, arm["wrist"]], track.c[i_rel, 5], track.c[i_rel, 6])), 2)},
+    }
     ffc = _landing(track, track.front["ankle"], ev["release"] - 0.45, ev["release"] - 0.02)
     if ffc is not None:
         ev["ffc"] = ffc
+        i_ffc = track.idx(ffc)
+        ev["event_methods"]["ffc"] = "ankle_ground_contact_heuristic"
+        ev["event_confidence"]["ffc"] = round(float(track.c[i_ffc, track.front["ankle"]]), 2)
         bfc = _landing(track, arm["ankle"], ffc - 0.5, ffc - 0.06)
         if bfc is not None:
             ev["bfc"] = bfc
+            i_bfc = track.idx(bfc)
+            ev["event_methods"]["bfc"] = "ankle_ground_contact_heuristic"
+            ev["event_confidence"]["bfc"] = round(float(track.c[i_bfc, arm["ankle"]]), 2)
             # take-off: last moment the take-off (front-side) foot is on the ground before the bound
             ids = track.range(bfc - 0.7, bfc - 0.1)
             if len(ids) >= 3:
@@ -241,7 +268,10 @@ def detect_events(track):
                 ground = y.max()
                 on = [i for i, v in zip(ids, y) if v >= ground - 0.03 * track.height_px]
                 if on:
-                    ev["take_off"] = float(track.t[on[-1]])
+                    take_idx = on[-1]
+                    ev["take_off"] = float(track.t[take_idx])
+                    ev["event_methods"]["take_off"] = "ankle_ground_departure_heuristic"
+                    ev["event_confidence"]["take_off"] = round(float(track.c[take_idx, track.front["ankle"]]), 2)
     return ev
 
 
@@ -269,33 +299,45 @@ def merge_events(pose_ev, ai_steps, duration):
             if value is not None:
                 ai[step.get("key")] = value
 
-    ev, sources = {}, {}
+    ev, sources, methods, confidences = {}, {}, {}, {}
+    pose_methods = pose_ev.get("event_methods", {})
+    pose_confidence = pose_ev.get("event_confidence", {})
     for key, ai_key in (("release", "finger_roll_release"), ("ffc", "ffc"),
                         ("bfc", "bfc"), ("take_off", "take_off")):
         pose_time = _valid_event_time(pose_ev.get(key), limit)
         ai_time = ai.get(ai_key)
         if pose_time is not None:
             ev[key], sources[key] = pose_time, "skeleton"
+            methods[key] = pose_methods.get(key, "pose_heuristic")
+            confidences[key] = float(pose_confidence.get(key, 0.0))
         elif ai_time is not None:
             ev[key], sources[key] = ai_time, "ai"
+            methods[key], confidences[key] = "ai_visual_estimate", 0.35
         else:
             ev[key], sources[key] = None, None
+            methods[key], confidences[key] = "unavailable", 0.0
 
     if ev["release"] is None and ai.get("wrist_snap") is not None:
         ev["release"], sources["release"] = ai["wrist_snap"], "ai"
+        methods["release"], confidences["release"] = "ai_visual_estimate", 0.35
     if ev["release"] is None:
         return None
 
     if ev["ffc"] is None or not (ev["release"] - 0.5 < ev["ffc"] < ev["release"]):
         ev["ffc"], sources["ffc"] = max(0.0, ev["release"] - 0.13), "template"
+        methods["ffc"], confidences["ffc"] = "typical_gap_estimate", 0.0
     if ev["bfc"] is None or not (ev["ffc"] - 0.6 < ev["bfc"] < ev["ffc"]):
         ev["bfc"], sources["bfc"] = max(0.0, ev["ffc"] - 0.22), "template"
+        methods["bfc"], confidences["bfc"] = "typical_gap_estimate", 0.0
     if ev["take_off"] is None or not (ev["bfc"] - 0.8 < ev["take_off"] < ev["bfc"]):
         ev["take_off"], sources["take_off"] = max(0.0, ev["bfc"] - 0.32), "template"
+        methods["take_off"], confidences["take_off"] = "typical_gap_estimate", 0.0
 
     ev["start"] = 0.0
     ev["end"] = limit if limit is not None else max(float(duration or 0), ev["release"] + 1.5)
     ev["sources"] = sources
+    ev["event_methods"] = methods
+    ev["event_confidence"] = confidences
     ev["measured"] = sorted(k for k, source in sources.items() if source == "skeleton")
     ev["estimated"] = sorted(k for k, source in sources.items() if source != "skeleton")
     return ev
@@ -355,12 +397,23 @@ def measured(track, ev):
                 m["back_knee_compression"]["knee_flex_after_bfc"] = round(max(0, bk - min(vals)))
         pre = track.range(ev["bfc"] - 0.12, ev["bfc"])
         if len(pre):
-            m["posterior_trunk_tilt"] = {"backward_lean": round(max(0, -min(track.trunk_lean(i) for i in pre)))}
+            leans = [track.trunk_lean(i) for i in pre]
+            leans = [v for v in leans if v is not None]
+            if leans:
+                m["posterior_trunk_tilt"] = {"backward_lean_2d_est": round(max(0, -min(leans)))}
     if i_ffc is not None:
         fk = track.knee(i_ffc, front)
-        stride = np.linalg.norm(track.p(i_ffc, front["ankle"]) - track.p(i_ffc, arm["ankle"])) / H * 100
-        m["ffc"] = {"front_knee": round(fk) if fk else 0, "stride_pct_height": round(stride)}
-        m["delivery_stride"] = {"stride_pct_height": round(stride)}
+        stride = None
+        if track.joints_confident(i_ffc, front["ankle"], arm["ankle"]) and H > 0:
+            stride = np.linalg.norm(track.p(i_ffc, front["ankle"]) - track.p(i_ffc, arm["ankle"])) / H * 100
+        ffc_values = {}
+        if fk is not None:
+            ffc_values["front_knee"] = round(fk)
+        if stride is not None:
+            ffc_values["stride_pct_height"] = round(stride)
+            m["delivery_stride"] = {"stride_pct_height": round(stride)}
+        if ffc_values:
+            m["ffc"] = ffc_values
         if i_rel is not None and i_rel >= i_ffc:
             vals = [track.knee(i, front) for i in range(i_ffc, i_rel + 1)]
             vals = [v for v in vals if v]
@@ -373,33 +426,16 @@ def measured(track, ev):
             el = [v for v in el if v]
             if el:
                 m["front_arm_elevation"] = {"front_arm_elevation": round(max(el))}
-    if i_rel is not None:
+    if i_rel is not None and track.joints_confident(i_rel, arm["wrist"], 15, 16):
         ground = max(track.xy[i_rel, 15, 1], track.xy[i_rel, 16, 1])
         rel_h = (ground - track.xy[i_rel, arm["wrist"], 1]) / H * 100
-        m["finger_roll_release"] = {"release_height_pct": round(rel_h)}
+        m["finger_roll_release"] = {"wrist_height_at_apex_pct": round(rel_h)}
         post = track.range(ev["release"], ev["release"] + 0.15)
-        if len(post):
-            m["forward_trunk_flexion"] = {"forward_lean_max": round(max(0, max(track.trunk_lean(i) for i in post)))}
-        # elbow: compare arm at horizontal (before release) with release - large drop of flexion = possible straightening
-        if i_ffc is not None:
-            ids = range(i_ffc, i_rel + 1)
-            elb = [(i, track.joint(i, arm["shoulder"], arm["elbow"], arm["wrist"])) for i in ids]
-            elb = [(i, v) for i, v in elb if v]
-            if elb:
-                horiz = min(elb, key=lambda iv: abs(track.xy[iv[0], arm["wrist"], 1] - track.xy[iv[0], arm["shoulder"], 1]))
-                rel_el = elb[-1][1]
-                m["arm_circumduction"] = {"elbow_at_horizontal": round(horiz[1]), "elbow_at_release": round(rel_el),
-                                          "elbow_extension_est": round(max(0, rel_el - horiz[1]))}
-    # approach speed estimate (assumes a 1.80 m bowler and a side-on, static camera)
-    if "take_off" in real:
-        ids = track.range(ev["take_off"] - 0.6, ev["take_off"])
-        if len(ids) >= 3:
-            hx = (track.xy[ids, 11, 0] + track.xy[ids, 12, 0]) / 2
-            dt = track.t[ids[-1]] - track.t[ids[0]]
-            if dt > 0.15:
-                ms = abs(hx[-1] - hx[0]) / H * 1.8 / dt
-                if 1 < ms < 12:
-                    m["peak_approach_velocity"] = {"approach_speed_ms": round(ms, 1)}
+        leans = [track.trunk_lean(i) for i in post]
+        leans = [v for v in leans if v is not None]
+        if leans:
+            m["forward_trunk_flexion"] = {"forward_lean_max_2d_est": round(max(0, max(leans)))}
+    # A single 2D view cannot establish elbow-extension legality or calibrated bowling speed.
     return m
 
 
