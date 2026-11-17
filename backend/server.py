@@ -973,7 +973,7 @@ async def start_session(body: SessionIn, x_device_id: str = Header(...)):
             "\"test\": {\"name\": \"\", \"balls\": 6, \"target\": \"what counts as a success\", \"description\": \"\"}, "
             "\"cool_down\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (4 items incl. walk, hip flexor/hamstring/lumbar/shoulder stretches), "
             "\"tips\": [\"\", \"\", \"\"] (recovery, workload management and technique)}")))
-        plan = parse_json(raw)
+        plan = parse_model_json(raw)
         intro = str(plan.pop("intro", "")).strip() or "Welcome to your PACED session. Let's start the warm-up."
         audio = await speak(intro)
     except Exception as exc:
@@ -1024,7 +1024,7 @@ async def session_ball(session_id: str, video: UploadFile = File(...), block: st
         raw = await chat.send_message(UserMessage(
             text=BALL_PROMPT.format(profile=f"{profile.bowling_arm}-arm {profile.bowling_style}", focus=session.focus, target=target),
             file_contents=[FileContentWithMimeType(file_path=path, mime_type=mime)]))
-        obs = parse_json(raw)
+        obs = parse_model_json(raw)
         history = [{"n": b["n"], "score": b["score"], "fault": b.get("fault")} for b in session.balls[-5:]]
         speech = await coach_say(coach_system(profile, session.focus),
             f"Ball {len(session.balls) + 1} just bowled. Analysis: {json.dumps(obs)}. Previous balls: {json.dumps(history)}. "
