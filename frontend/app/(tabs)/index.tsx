@@ -50,12 +50,12 @@ export default function Home() {
               <>
                 <Text style={s.heroLabel}>LATEST DELIVERY</Text>
                 <View style={s.heroScoreRow}>
-                  <Text style={s.heroScore} testID="home-latest-score">{latest.overall_score.toFixed(1)}</Text>
+                  <Text style={s.heroScore} testID="home-latest-score">{latest.overall_score_assessable === false ? "—" : latest.overall_score.toFixed(1)}</Text>
                   <Text style={s.heroOutOf}>/10</Text>
                 </View>
                 <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
                   <Pill label={latest.pace_band?.label || "Pace n/a"} color={colors.onSurface} icon="speedometer" />
-                  <Pill label={`${latest.injury_risk?.level || "low"} risk`} color={riskColor(latest.injury_risk?.level, colors)} icon="shield-checkmark" />
+                  <Pill label={latest.injury_risk?.level === "not_assessed" ? "Injury risk not assessed" : `${latest.injury_risk?.level || "Not assessed"} risk`} color={latest.injury_risk?.level === "not_assessed" ? colors.muted : riskColor(latest.injury_risk?.level, colors)} icon="shield-checkmark" />
                 </View>
               </>
             ) : (
