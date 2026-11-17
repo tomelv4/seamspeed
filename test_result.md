@@ -135,3 +135,8 @@
 - GitHub Actions run 44087518569: backend compile passed and 29/29 biomechanics unit tests passed in 0.10s on the commit tested by that run.
 - Subsequent commits added 60fps sampling, stricter observed-vs-interpolated confidence handling, qualitative coaching references, evidence-level metadata, pace/injury guardrails, and frontend UI/type changes. These later commits still require a fresh CI run.
 - Frontend TypeScript validation has now been added to the workflow.
+
+
+## Iteration 7 CI checkpoint 2
+- GitHub Actions run 44088422794 on the current feature-branch snapshot: backend compile passed and 29/29 biomechanics tests passed in 0.20s.
+- Frontend typecheck did not start because the repository has no committed yarn.lock; setup-node's Yarn cache path therefore failed. Workflow corrected to install from the exact package.json versions without lockfile caching. Frontend typecheck remains pending.
