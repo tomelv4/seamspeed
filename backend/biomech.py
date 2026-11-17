@@ -469,10 +469,15 @@ def measured(track, ev):
             el = [v for v in el if v]
             if el:
                 m["front_arm_elevation"] = {"front_arm_elevation": round(max(el))}
-    if i_rel is not None and track.joints_confident(i_rel, arm["wrist"], 15, 16):
-        ground = max(track.xy[i_rel, 15, 1], track.xy[i_rel, 16, 1])
-        rel_h = (ground - track.xy[i_rel, arm["wrist"], 1]) / H * 100
-        m["finger_roll_release"] = {"wrist_height_at_release_pct": round(rel_h)}
+    if i_rel is not None and H > 0 and track.joints_confident(i_rel, arm["wrist"]):
+        # One visible ankle is enough to provide a rough image-ground reference.
+        # Requiring both ankles incorrectly suppresses this estimate when the
+        # non-supporting leg is occluded at release.
+        visible_ankles = [j for j in (15, 16) if track.c[i_rel, j] >= 0.45]
+        if visible_ankles:
+            ground = max(track.xy[i_rel, j, 1] for j in visible_ankles)
+            rel_h = (ground - track.xy[i_rel, arm["wrist"], 1]) / H * 100
+            m["finger_roll_release"] = {"wrist_height_at_release_pct": round(rel_h)}
         post = track.range(ev["release"], ev["release"] + 0.15)
         leans = [track.trunk_lean(i) for i in post]
         leans = [v for v in leans if v is not None]
