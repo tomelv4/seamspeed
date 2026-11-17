@@ -382,6 +382,16 @@ class TestMeasured:
         assert "ffc" not in metrics
         assert "delivery_stride" not in metrics
 
+    def test_event_measurement_is_omitted_when_nearest_pose_frame_is_too_far(self):
+        pose = synth_pose("right", fps=30)
+        pose["frames"] = [f for f in pose["frames"] if not 1.4 <= f["t"] <= 1.6]
+        track = biomech.Track(pose, "right")
+        ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
+
+        metrics = biomech.measured(track, ev)
+
+        assert "finger_roll_release" not in metrics
+
 
     @pytest.mark.parametrize("hidden_ankle", [15, 16])
     def test_release_wrist_height_survives_single_ankle_occlusion(self, hidden_ankle):
