@@ -32,6 +32,8 @@ def valid_payload():
         "faults": [
             {"title": "Example fault", "phase": "front_foot", "severity": "medium",
              "description": "A visible pattern.", "fix": "Use a simple cue."},
+            {"title": "High priority", "phase": "back_foot", "severity": "high",
+             "description": "A higher-priority visible pattern.", "fix": "Address this first."},
             {"title": "Invalid fault", "phase": "unknown", "severity": "high",
              "description": "Should be dropped.", "fix": ""},
         ],
@@ -55,7 +57,8 @@ def test_normalise_produces_all_27_steps_and_sanitises_faults():
     result = normalise_model_payload(valid_payload(), duration=4.0)
     assert len(result["steps"]) == 27
     assert len({step["key"] for step in result["steps"]}) == 27
-    assert len(result["faults"]) == 1
+    assert len(result["faults"]) == 2
+    assert result["faults"][0]["title"] == "High priority"
     assert result["overall_score"] == 7.5
     assert result["overall_score_assessable"] is True
     assert result["strengths"] == ["Good rhythm"]
@@ -89,7 +92,10 @@ def test_normalise_clamps_scores_and_rejects_out_of_clip_or_nonmonotonic_times()
 def test_normalise_missing_phase_is_explicitly_unassessable():
     payload = valid_payload()
     payload["phases"] = [p for p in payload["phases"] if p["key"] != "release"]
+    payload["faults"].append({"title": "Unsupported release fault", "phase": "release", "severity": "high",
+                              "description": "The phase is not assessable.", "fix": ""})
     result = normalise_model_payload(payload, duration=4.0)
     phase = next(p for p in result["phases"] if p["key"] == "release")
     assert phase["assessable"] is False
     assert phase["feedback"] == "Not enough clear visual evidence to assess this phase."
+    assert all(fault["phase"] != "release" for fault in result["faults"])
