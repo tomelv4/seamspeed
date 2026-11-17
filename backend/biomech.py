@@ -163,8 +163,14 @@ class Track:
             hp = (self.xy[:, 11] + self.xy[:, 12]) / 2
             leg = (seg(11, 13) + seg(13, 15) + seg(12, 14) + seg(14, 16)) / 2
             stand = np.linalg.norm(self.xy[:, 0] - sh, axis=1) + np.linalg.norm(sh - hp, axis=1) + leg
-            self.height_px = float(np.median(stand) * 1.12)  # nose->ankle chain + head top / foot
-            self.dir = 1.0 if hp[-1, 0] >= hp[0, 0] else -1.0  # running direction across the frame
+            height_joints = (0, 5, 6, 11, 12, 13, 14, 15, 16)
+            valid_height = np.all(self.c[:, height_joints] >= 0.45, axis=1)
+            self.height_px = float(np.median(stand[valid_height]) * 1.12) if valid_height.any() else 1.0
+            valid_hips = np.where((self.c[:, 11] >= 0.45) & (self.c[:, 12] >= 0.45))[0]
+            if len(valid_hips) >= 2:
+                self.dir = 1.0 if hp[valid_hips[-1], 0] >= hp[valid_hips[0], 0] else -1.0
+            else:
+                self.dir = 1.0
         else:
             self.height_px = 1.0
             self.dir = 1.0
@@ -216,6 +222,8 @@ def _landing(track, ankle, a, b):
     # Image y increases downward. A high percentile approximates the lowest (grounded) ankle positions.
     ground_y = float(np.percentile(track.xy[valid_all, ankle, 1], 90))
     y = track.xy[ids, ankle, 1]
+    if float(np.ptp(y)) < 0.04 * track.height_px:
+        return None  # no clearly visible swing-to-ground movement
     top = int(np.argmin(y))
     after = ids[top:]
     tol = 0.02 * track.height_px
