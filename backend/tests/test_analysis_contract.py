@@ -48,7 +48,7 @@ def test_parse_model_json_accepts_fences_and_preamble():
     assert result == {"summary": "A {brace} inside text", "ok": True}
 
 
-@pytest.mark.parametrize("raw", ["no json", "[1, 2]", "{broken json}", None])
+@pytest.mark.parametrize("raw", ["no json", "[1, 2]", "[{\"summary\":\"wrong root\"}]", "{broken json}", None])
 def test_parse_model_json_rejects_invalid_responses(raw):
     with pytest.raises(ValueError):
         parse_model_json(raw)
