@@ -77,8 +77,9 @@ def test_normalise_marks_missing_and_unassessable_steps_not_visible():
 def test_normalise_clamps_scores_and_rejects_out_of_clip_or_nonmonotonic_times():
     payload = valid_payload()
     payload["steps"][0]["score"] = 14
+    payload["steps"][0]["t"] = 0.2
     payload["steps"][1]["t"] = 99
-    payload["steps"][2]["t"] = 0.05
+    payload["steps"][2]["t"] = 0.15
     result = normalise_model_payload(payload, duration=4.0)
     assert result["steps"][0]["score"] == 10
     assert result["steps"][1]["t"] is None
