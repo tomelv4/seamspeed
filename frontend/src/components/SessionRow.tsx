@@ -24,7 +24,7 @@ export function SessionRow({ item }: { item: Analysis }) {
           {date.toLocaleDateString(undefined, { day: "numeric", month: "short" })} · {item.pace_band?.label || "—"} · {item.faults.length} faults
         </Text>
       </View>
-      <View style={[s.dot, { backgroundColor: item.is_bowling_video ? riskColor(item.injury_risk?.level, colors) : colors.muted }]} />
+      <View style={[s.dot, { backgroundColor: item.is_bowling_video && item.injury_risk?.level !== "not_assessed" ? riskColor(item.injury_risk?.level, colors) : colors.muted }]} />
       <Ionicons name="chevron-forward" size={18} color={colors.muted} />
     </PressScale>
   );
