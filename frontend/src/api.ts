@@ -7,7 +7,7 @@ import { storage } from "@/src/utils/storage";
 
 export const API = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
 
-export type Phase = { key: string; name: string; score: number; feedback: string };
+export type Phase = { key: string; name: string; score: number; feedback: string; assessable?: boolean };
 export type Fault = { title: string; phase: string; severity: "low" | "medium" | "high"; description: string; fix: string };
 export type AnalysisProgress = { stage?: string; percent?: number; message?: string };
 export type Analysis = {
@@ -18,6 +18,7 @@ export type Analysis = {
   notes: string;
   is_bowling_video: boolean;
   overall_score: number;
+  overall_score_assessable?: boolean;
   summary: string;
   action_type: string;
   camera_view?: "side_on" | "rear" | "front_on" | "oblique" | "unknown";
