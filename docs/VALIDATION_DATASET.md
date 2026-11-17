@@ -60,7 +60,7 @@ Export the tracked pose result as JSON and pair it with the manual annotation:
 python backend/validation_metrics.py --pose pose.json --annotation annotation.json
 ```
 
-The report gives event misses, absolute timing error and the proportion within the configured tolerance. Report results separately by event, source FPS and camera view. Never pool all camera angles into one headline accuracy figure.
+The report gives event misses, absolute timing error and the proportion within the configured tolerance. For a dataset, save each clip's evaluator JSON output and aggregate the reports with `aggregate_event_reports(reports)` from `backend/validation_metrics.py`; the aggregate includes per-event mean and median absolute error, miss rate and within-tolerance rate. Report results separately by event, source FPS and camera view. Never pool all camera angles into one headline accuracy figure.
 
 ## Acceptance gates
 
