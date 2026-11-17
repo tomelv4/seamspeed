@@ -129,7 +129,7 @@ def _smooth(kps, scs):
     return out
 
 
-def extract_pose(path: str, target_fps: int = 60, max_frames: int = 900) -> dict:
+def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dict:
     body = _get_body()
     cap = cv2.VideoCapture(path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
