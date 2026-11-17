@@ -31,6 +31,8 @@ export default function ProgressScreen() {
   const router = useRouter();
   const p = progress.data;
   const last = (p?.points ?? []).slice(-8);
+  const scorePoints = last.filter((point) => point.score != null);
+  const pacePoints = last.filter((point) => point.pace > 0);
   const label = (d: string) => new Date(d).toLocaleDateString(undefined, { day: "numeric", month: "numeric" });
 
   return (
@@ -71,7 +73,7 @@ export default function ProgressScreen() {
                 <Text style={s.statLabel}>Deliveries</Text>
               </View>
               <View style={s.stat} testID="stat-best-score">
-                <Text style={[s.statValue, { color: colors.accent }]}>{p.best_score.toFixed(1)}</Text>
+                <Text style={[s.statValue, { color: colors.accent }]}>{p.best_score > 0 ? p.best_score.toFixed(1) : "—"}</Text>
                 <Text style={s.statLabel}>Best score</Text>
               </View>
               <View style={s.stat} testID="stat-best-pace">
@@ -83,26 +85,30 @@ export default function ProgressScreen() {
             <View style={s.card} testID="progress-chart">
               {seg === "score" ? (
                 <>
-                  <Text style={s.cardTitle}>Overall score · last {last.length}</Text>
-                  <Bars data={last.map((x) => ({ label: label(x.date), value: x.score }))} max={10} color={colors.accent} format={(v) => v.toFixed(1)} />
+                  <Text style={s.cardTitle}>Overall score · last {scorePoints.length} assessable</Text>
+                  {scorePoints.length ? (
+                    <Bars data={scorePoints.map((x) => ({ label: label(x.date), value: x.score as number }))} max={10} color={colors.accent} format={(v) => v.toFixed(1)} />
+                  ) : <Text style={s.phaseLabel}>No reliable scores yet. Clearer footage is needed before a score can be shown.</Text>}
                 </>
               ) : seg === "pace" ? (
                 <>
-                  <Text style={s.cardTitle}>Estimated pace (km/h)</Text>
-                  <Bars data={last.map((x) => ({ label: label(x.date), value: Math.round(x.pace) }))} max={Math.max(160, ...last.map((x) => x.pace))} color={colors.info} />
+                  <Text style={s.cardTitle}>Measured pace (km/h)</Text>
+                  {pacePoints.length ? (
+                    <Bars data={pacePoints.map((x) => ({ label: label(x.date), value: Math.round(x.pace) }))} max={Math.max(160, ...pacePoints.map((x) => x.pace))} color={colors.info} />
+                  ) : <Text style={s.phaseLabel}>Pace data is unavailable until a calibrated radar or ball-tracking source is connected.</Text>}
                 </>
               ) : (
                 <>
                   <Text style={s.cardTitle}>Average phase scores</Text>
                   {PHASES.map((ph) => {
-                    const v = p.phase_avg[ph.key] ?? 0;
+                    const v = p.phase_avg[ph.key];
                     return (
                       <View key={ph.key} style={s.phaseRow} testID={`phase-avg-${ph.key}`}>
                         <Text style={s.phaseLabel}>{ph.label}</Text>
                         <View style={s.phaseTrack}>
-                          <View style={[s.phaseFill, { width: `${v * 10}%`, backgroundColor: scoreColor(v, colors) }]} />
+                          {v == null ? null : <View style={[s.phaseFill, { width: `${v * 10}%`, backgroundColor: scoreColor(v, colors) }]} />}
                         </View>
-                        <Text style={s.phaseValue}>{v.toFixed(1)}</Text>
+                        <Text style={s.phaseValue}>{v == null ? "—" : v.toFixed(1)}</Text>
                       </View>
                     );
                   })}
