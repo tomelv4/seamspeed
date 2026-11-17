@@ -20,6 +20,7 @@ export type Analysis = {
   overall_score: number;
   summary: string;
   action_type: string;
+  camera_view?: "side_on" | "rear" | "front_on" | "oblique" | "unknown";
   phases: Phase[];
   faults: Fault[];
   strengths: string[];
