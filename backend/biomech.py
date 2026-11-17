@@ -166,6 +166,10 @@ class Track:
             height_joints = (0, 5, 6, 11, 12, 13, 14, 15, 16)
             valid_height = np.all(self.c[:, height_joints] >= 0.45, axis=1)
             self.height_px = float(np.median(stand[valid_height]) * 1.12) if valid_height.any() else 1.0
+            ankle_y = self.xy[:, [15, 16], 1]
+            ankle_confident = self.c[:, [15, 16]] >= 0.45
+            visible_ankle_y = ankle_y[ankle_confident]
+            self.ground_y = float(np.percentile(visible_ankle_y, 90)) if len(visible_ankle_y) >= 4 else None
             valid_hips = np.where((self.c[:, 11] >= 0.45) & (self.c[:, 12] >= 0.45))[0]
             if len(valid_hips) >= 2:
                 self.dir = 1.0 if hp[valid_hips[-1], 0] >= hp[valid_hips[0], 0] else -1.0
@@ -173,6 +177,7 @@ class Track:
                 self.dir = 1.0
         else:
             self.height_px = 1.0
+            self.ground_y = None
             self.dir = 1.0
 
     def __len__(self):
@@ -486,15 +491,11 @@ def measured(track, ev):
             el = _window_values(track, pre, lambda i: track.joint(i, front["hip"], front["shoulder"], front["elbow"]))
             if el:
                 m["front_arm_elevation"] = {"front_arm_elevation": round(max(el))}
-    if i_rel is not None and H > 0 and track.joints_confident(i_rel, arm["wrist"]):
-        # One visible ankle is enough to provide a rough image-ground reference.
-        # Requiring both ankles incorrectly suppresses this estimate when the
-        # non-supporting leg is occluded at release.
-        visible_ankles = [j for j in (15, 16) if track.c[i_rel, j] >= 0.45]
-        if visible_ankles:
-            ground = max(track.xy[i_rel, j, 1] for j in visible_ankles)
-            rel_h = (ground - track.xy[i_rel, arm["wrist"], 1]) / H * 100
-            m["finger_roll_release"] = {"wrist_height_at_release_pct": round(rel_h)}
+    if i_rel is not None and H > 0 and track.ground_y is not None and track.joints_confident(i_rel, arm["wrist"]):
+        # Use a clip-wide ankle-ground reference. The feet may both be airborne
+        # at release, so their instantaneous positions are not a ground plane.
+        rel_h = (track.ground_y - track.xy[i_rel, arm["wrist"], 1]) / H * 100
+        m["finger_roll_release"] = {"wrist_height_at_release_pct": round(rel_h)}
         post = track.range(ev["release"], ev["release"] + 0.15)
         leans = _window_values(track, post, track.trunk_lean)
         if leans:
