@@ -10,7 +10,7 @@ import biomech  # noqa: E402
 import pose as pose_lib  # noqa: E402
 
 KEYS = [s[0] for s in biomech.STEPS]
-EVENT_STEPS = {"bfc": "bfc", "ffc": "ffc", "finger_roll_release": "release", "take_off": "take_off"}
+EVENT_STEPS = {"bfc": "bfc", "ffc": "ffc", "take_off": "take_off"}
 
 
 def _bump(t, t0, t1, a):
@@ -96,7 +96,8 @@ class TestDetectEvents:
 
     def test_low_confidence_joint_is_not_measured(self):
         p = synth_pose("right")
-        p["frames"][0]["k"][14][2] = 0.1
+        track = biomech.Track(p, "right")
+        p["frames"][0]["k"][track.front["knee"]][2] = 0.1
         track = biomech.Track(p, "right")
         assert track.knee(0, track.front) is None
 
@@ -164,7 +165,8 @@ class TestMergeAndSync:
     def test_sync_does_not_create_times_when_anchor_events_are_templates(self):
         ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
         times = biomech.sync_times([], ev)
-        assert all(t is None for t in times.values())
+        assert times["bfc"] is None and times["ffc"] is None and times["take_off"] is None
+        assert times["finger_roll_release"] == pytest.approx(1.5)
 
     def test_sync_uses_ai_times_when_template_events_cannot_anchor_steps(self):
         ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
@@ -196,7 +198,8 @@ class TestMeasured:
         txt = biomech.measured_text(ev, m)
         assert "BFC=" in txt and "release=" in txt
         assert "skeleton-detected" in txt
-        assert "wrist_apex_proxy" in txt
+        assert ev["event_methods"]["release"] == "wrist_apex_proxy"
+        assert "not confirmed ball release" in txt
         assert "wrist_height_at_apex_pct" in m["finger_roll_release"]
         assert "peak_approach_velocity" not in m
         assert "arm_circumduction" not in m
