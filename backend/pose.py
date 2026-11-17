@@ -326,12 +326,12 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dic
     }
 
 
-def _angle(a, b, c, w, h):
+def _angle(a, b, c, w, h, min_segment_px=1e-6):
     """Return a camera-plane joint angle, or None for degenerate geometry."""
     ax, ay = (a[0] - b[0]) * w, (a[1] - b[1]) * h
     cx, cy = (c[0] - b[0]) * w, (c[1] - b[1]) * h
     na, nc = math.hypot(ax, ay), math.hypot(cy, cx)
-    if na < 1e-6 or nc < 1e-6:
+    if na < min_segment_px or nc < min_segment_px:
         return None
     return round(math.degrees(math.acos(max(-1, min(1, (ax * cx + ay * cy) / (na * nc))))))
 
@@ -351,13 +351,23 @@ def _metrics(k, w, h, bowling_arm: str) -> dict:
     back_joints = (arm["hip"], arm["knee"], arm["ankle"])
     elbow_joints = (arm["shoulder"], arm["elbow"], arm["wrist"])
     trunk_joints = (5, 6, 11, 12)
+    height_joints = (0, 5, 6, 11, 12, 13, 14, 15, 16)
+    if _joint_confident(k, *height_joints):
+        sx, sy = (k[5][0] + k[6][0]) / 2, (k[5][1] + k[6][1]) / 2
+        hx, hy = (k[11][0] + k[12][0]) / 2, (k[11][1] + k[12][1]) / 2
+        leg = (math.dist(k[11][:2], k[13][:2]) + math.dist(k[13][:2], k[15][:2]) +
+               math.dist(k[12][:2], k[14][:2]) + math.dist(k[14][:2], k[16][:2])) * 0.5
+        body_height = (math.dist(k[0][:2], (sx, sy)) + math.dist((sx, sy), (hx, hy)) + leg) * math.hypot(w, h) * 0.5 * 1.12
+    else:
+        body_height = h * 0.5
+    min_segment_px = max(2.0, body_height * 0.025)
 
     result = {
-        "front_knee": _angle(k[front["hip"]], k[front["knee"]], k[front["ankle"]], w, h)
+        "front_knee": _angle(k[front["hip"]], k[front["knee"]], k[front["ankle"]], w, h, min_segment_px)
         if _joint_confident(k, *front_joints) else None,
-        "back_knee": _angle(k[arm["hip"]], k[arm["knee"]], k[arm["ankle"]], w, h)
+        "back_knee": _angle(k[arm["hip"]], k[arm["knee"]], k[arm["ankle"]], w, h, min_segment_px)
         if _joint_confident(k, *back_joints) else None,
-        "bowling_elbow": _angle(k[arm["shoulder"]], k[arm["elbow"]], k[arm["wrist"]], w, h)
+        "bowling_elbow": _angle(k[arm["shoulder"]], k[arm["elbow"]], k[arm["wrist"]], w, h, min_segment_px)
         if _joint_confident(k, *elbow_joints) else None,
         "trunk_lean": None,
     }
@@ -373,12 +383,16 @@ def _metrics(k, w, h, bowling_arm: str) -> dict:
 
 
 def metrics_at(pose: dict, t, bowling_arm: str) -> dict:
-    """Confidence-gated 2D joint angles at the frame nearest to t."""
+    """Confidence-gated 2D joint angles only near the requested timestamp."""
     frames = [f for f in pose.get("frames", []) if f.get("k")]
     if not frames or t is None:
         return {}
     f = min(frames, key=lambda x: abs(x["t"] - t))
-    if abs(f["t"] - t) > 0.4:
+    times = np.array([float(frame["t"]) for frame in frames], dtype=float)
+    intervals = np.diff(times)
+    intervals = intervals[intervals > 0]
+    tolerance = min(0.2, max(0.04, 1.5 * float(np.median(intervals)))) if len(intervals) else 0.04
+    if abs(float(f["t"]) - float(t)) > tolerance:
         return {}
     return _metrics(f["k"], pose.get("width") or 1, pose.get("height") or 1, bowling_arm)
 
