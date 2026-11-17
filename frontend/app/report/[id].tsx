@@ -90,6 +90,10 @@ export default function Report() {
                 Score confidence: {(a.analysis_quality.score_confidence ?? "unknown").toUpperCase()} ·
                 {a.analysis_quality.assessable_steps ?? 0}/27 steps assessable
               </Text>
+              <Text style={s.note}>
+                Subject tracking: {(a.analysis_quality.pose.subject_selection_confidence ?? "unknown").toUpperCase()} confidence ·
+                {a.analysis_quality.pose.competing_tracks ?? 0} competing person track(s)
+              </Text>
               {a.analysis_quality.pose.interpolated_frames ? (
                 <Text style={s.note}>
                   {a.analysis_quality.pose.interpolated_frames} interpolated frames were shown for continuity but excluded from measurements.
