@@ -27,6 +27,7 @@ from fastapi.responses import FileResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 import pose as pose_lib
+from analysis_contract import normalise_model_payload, parse_model_json
 from storage import APP_NAME, CACHE_DIR, cache_path, cached_file, init_storage, put_object
 from emergentintegrations.llm.openai import OpenAITextToSpeech
 from emergentintegrations.llm.chat import (
@@ -120,6 +121,7 @@ class Analysis(BaseDocument):
     notes: str = ""
     is_bowling_video: bool = True
     overall_score: float = 0
+    overall_score_assessable: bool = True
     summary: str = ""
     action_type: str = ""
     camera_view: str = "unknown"
@@ -293,13 +295,6 @@ async def get_profile(device_id: str) -> Profile:
     return Profile.from_mongo(doc) if doc else Profile(device_id=device_id, updated_at="")
 
 
-def parse_json(text: str) -> dict:
-    match = re.search(r"\{.*\}", text, re.S)
-    if not match:
-        raise ValueError("No JSON in model response")
-    return json.loads(match.group(0))
-
-
 # ---------------------------------------------------------------- routes
 @api_router.get("/")
 async def root():
@@ -402,7 +397,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         response = await chat.send_message(
             UserMessage(text=prompt, file_contents=[FileContentWithMimeType(file_path=path, mime_type=mime)])
         )
-        return parse_json(response)
+        return parse_model_json(response)
 
     await set_progress("tracking", 20, "Tracking your bowling action")
     pose_data = await run_pose()
@@ -412,7 +407,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     pre_ev = biomech.merge_events(pose_ev, [], meta.get("duration"))
     pre_text = biomech.measured_text(pre_ev, biomech.measured(track, pre_ev)) if pre_ev else "Key events could not be detected from the skeleton."
     pose_quality = (pose_data or {}).get("quality", {"rating": "limited", "frame_coverage": 0.0, "critical_joint_coverage": 0.0, "mean_joint_confidence": 0.0})
-    data = await run_gemini(pose_data)
+    data = normalise_model_payload(await run_gemini(pose_data), meta.get("duration"))
     await set_progress("report", 82, "Building your coaching report")
     camera_view = str(data.get("camera_view") or "unknown").strip().lower()
     if camera_view not in {"side_on", "rear", "front_on", "oblique", "unknown"}:
