@@ -457,7 +457,15 @@ def measured(track, ev):
     arm, front = track.arm, track.front
     H = track.height_px
     m = {}
-    at = lambda t: track.idx(t) if t is not None and abs(track.t[track.idx(t)] - t) < 0.12 else None
+    intervals = np.diff(track.t)
+    intervals = intervals[intervals > 0]
+    sample_tolerance = min(0.12, max(0.025, 0.75 * float(np.median(intervals)))) if len(intervals) else 0.025
+
+    def at(t):
+        if t is None:
+            return None
+        i = track.idx(t)
+        return i if i is not None and abs(float(track.t[i]) - float(t)) <= sample_tolerance else None
 
     # Pose-derived and AI-timed events can both anchor a 2D skeleton measurement:
     # the joint positions come from pose tracking, while the event source remains
