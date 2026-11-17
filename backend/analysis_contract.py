@@ -93,7 +93,7 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         source = phase_by_key.get(key, {})
         score = _finite_number(source.get("score"), 0, 10)
         feedback = source.get("feedback")
-        assessable = score is not None and isinstance(feedback, str) and bool(feedback.strip())
+        assessable = bool(is_bowling and score is not None and isinstance(feedback, str) and feedback.strip())
         phases.append({
             "key": key,
             "name": source.get("name") if isinstance(source.get("name"), str) and source.get("name").strip() else name,
@@ -116,7 +116,8 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         score = _finite_number(source.get("score"), 0, 10)
         observation = source.get("observation") if isinstance(source.get("observation"), str) else ""
         cue = source.get("cue") if isinstance(source.get("cue"), str) else ""
-        if status not in VALID_STATUSES or score is None or (status != "not_visible" and not observation.strip()):
+        if (not is_bowling or status not in VALID_STATUSES or score is None
+                or (status != "not_visible" and not observation.strip())):
             status = "not_visible"
         raw_time = source.get("t")
         timestamp = _valid_timestamp(raw_time, duration_limit, last_time)
@@ -175,7 +176,7 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         **payload,
         "is_bowling_video": is_bowling,
         "overall_score": round(overall_score, 1),
-        "overall_score_assessable": bool(overall_assessable and assessable_count >= 10),
+        "overall_score_assessable": bool(is_bowling and overall_assessable and assessable_count >= 10),
         "summary": summary.strip(),
         "action_type": payload.get("action_type") if isinstance(payload.get("action_type"), str) else "unknown",
         "camera_view": camera_view,
