@@ -102,6 +102,10 @@ def test_non_bowling_video_is_not_scored_or_faulted():
 def test_normalise_missing_phase_is_explicitly_unassessable():
     payload = valid_payload()
     payload["phases"] = [p for p in payload["phases"] if p["key"] != "release"]
+    release_keys = {key for key, _name, phase, *_rest in biomech.STEPS if phase == "release"}
+    for step in payload["steps"]:
+        if step["key"] in release_keys:
+            step["status"] = "not_visible"
     payload["faults"].append({"title": "Unsupported release fault", "phase": "release", "severity": "high",
                               "description": "The phase is not assessable.", "fix": ""})
     result = normalise_model_payload(payload, duration=4.0)
