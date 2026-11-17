@@ -57,7 +57,7 @@ Times are seconds from the start of the clip. Use null or omit an event when it 
 Export the tracked pose result as JSON and pair it with the manual annotation:
 
 ```bash
-python backend/evaluate_validation.py --pose pose.json --annotation annotation.json
+python backend/validation_metrics.py --pose pose.json --annotation annotation.json
 ```
 
 The report gives event misses, absolute timing error and the proportion within the configured tolerance. Report results separately by event, source FPS and camera view. Never pool all camera angles into one headline accuracy figure.
