@@ -168,6 +168,20 @@ class TestDetectEvents:
         assert "fk=na" in first
         assert "el=na" in first
 
+    def test_pose_metrics_reject_collapsed_joint_segments(self):
+        p = synth_pose("right")
+        hip, knee, ankle = biomech.LA["hip"], biomech.LA["knee"], biomech.LA["ankle"]
+        p["frames"][0]["k"][hip][:2] = [0.5, 0.5]
+        p["frames"][0]["k"][knee][:2] = [0.501, 0.5]
+        p["frames"][0]["k"][ankle][:2] = [0.502, 0.5]
+        metrics = pose_lib.metrics_at(p, 0.0, "right")
+        assert metrics["front_knee"] is None
+
+    def test_pose_metrics_reject_timestamp_far_from_observed_frame(self):
+        p = synth_pose("right", fps=10)
+        p["frames"] = [f for f in p["frames"] if f["t"] <= 0.5 or f["t"] >= 1.5]
+        assert pose_lib.metrics_at(p, 1.0, "right") == {}
+
     def test_low_confidence_joint_is_not_measured(self):
         p = synth_pose("right")
         track = biomech.Track(p, "right")
