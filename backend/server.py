@@ -121,6 +121,7 @@ class Analysis(BaseDocument):
     overall_score: float = 0
     summary: str = ""
     action_type: str = ""
+    camera_view: str = "unknown"
     phases: List[dict] = []
     faults: List[dict] = []
     strengths: List[str] = []
@@ -243,7 +244,7 @@ EVIDENCE AND SCORING RULES:
 
 Break the action into 6 phases: run_up, load (bound/gather), back_foot (back-foot contact), front_foot (front-foot contact / delivery stride), release, follow_through.
 Score each phase 0-10 (one decimal). Identify faults with severity (low|medium|high), linked phase key and a short fix.
-Classify the visible action type as side-on, front-on, semi-open, mixed or unknown only when the view supports it. Do not infer 3D counter-rotation from a single 2D camera view.
+Classify the visible action type as side-on, front-on, semi-open, mixed or unknown only when the view supports it. Separately classify the CAMERA VIEW as side_on, rear, front_on, oblique or unknown. Do not infer 3D counter-rotation from a single 2D camera view.
 Do not estimate bowling speed from run-up movement, arm speed or ball flight. A calibrated radar or ball-tracking measurement is required.
 
 Return ONLY valid JSON, no markdown, matching exactly:
@@ -252,6 +253,7 @@ Return ONLY valid JSON, no markdown, matching exactly:
  "overall_score": 7.2,
  "summary": "2-3 sentence coach summary",
  "action_type": "semi-open",
+ "camera_view": "side_on|rear|front_on|oblique|unknown",
  "phases": [{{"key":"run_up","name":"Run-up","score":7.5,"feedback":"..."}}, ... all 6 in order],
  "steps": [{{"key":"run_up_acceleration","t":0.4,"score":7,"status":"good","observation":"...","cue":"..."}}, ... all 27 in order],
  "faults": [{{"title":"Collapsing front knee","phase":"front_foot","severity":"medium","description":"...","fix":"..."}}],
@@ -271,7 +273,9 @@ MEASURED SKELETON DATA of the tracked bowler (2D pose tracking at up to 60 fps):
 Frame-by-frame timeline (angles in degrees; fk=front knee, bk=back knee, el=bowling elbow, lean=trunk lean from
 vertical, hip_x=hip position across the frame 0-1):
 {timeline}
-Use event times as approximate anchors only. The event metadata includes the detection method and confidence:
+Use event times as approximate anchors only. The event metadata includes the detection method and confidence.
+Only use sagittal-plane knee, trunk-lean and stride measurements as coaching evidence when the camera view is side_on. For rear,
+front-on or oblique views, treat these side-plane values as unsuitable and do not score from them.
 a wrist-apex proxy is not confirmed ball release, and ankle-ground heuristics are not force-plate contact measurements.
 Use a measured value only when it is present and the relevant joints have adequate confidence. Do not fill absent values
 with guessed numbers. Treat 2D angles as camera-plane estimates; do not infer 3D rotation or injury loading from them."""
@@ -407,6 +411,10 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     pose_quality = (pose_data or {}).get("quality", {"rating": "limited", "frame_coverage": 0.0, "critical_joint_coverage": 0.0, "mean_joint_confidence": 0.0})
     data = await run_gemini(pose_data)
     await set_progress("report", 82, "Building your coaching report")
+    camera_view = str(data.get("camera_view") or "unknown").strip().lower()
+    if camera_view not in {"side_on", "rear", "front_on", "oblique", "unknown"}:
+        camera_view = "unknown"
+    data["camera_view"] = camera_view
 
     # Never publish uncalibrated AI guesses as bowling speed or injury probability.
     data["pace_band"] = {
@@ -432,7 +440,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     by_key = {s.get("key"): s for s in ai_steps if isinstance(s, dict)}
     ev = biomech.merge_events(pose_ev, ai_steps, meta.get("duration"))
     times = biomech.sync_times(ai_steps, ev) if ev else {}
-    meas = biomech.measured(track, ev) if ev else {}
+    meas = biomech.measured(track, ev) if ev and camera_view == "side_on" else {}
     steps = []
     for key, name, phase, when, ideal in STEPS:
         s = by_key.get(key, {})
