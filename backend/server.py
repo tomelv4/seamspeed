@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import tempfile
@@ -448,21 +449,34 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     times = biomech.sync_times(ai_steps, ev) if ev else {}
     meas = biomech.measured(track, ev) if ev and camera_view == "side_on" and camera_view_confidence == "high" else {}
     steps = []
+    last_ai_time = 0.0
     for key, name, phase, when, ideal in STEPS:
         s = by_key.get(key, {})
         status = s.get("status", "not_visible")
+        if status not in {"good", "ok", "fault", "not_visible"}:
+            status = "not_visible"
         t = times.get(key)
-        if t is None:
-            t = s.get("t") if isinstance(s.get("t"), (int, float)) else None
+        # Only use raw AI timestamps when no event anchors exist at all. If anchors exist,
+        # sync_times returning None means the timestamp failed validation and must stay unavailable.
+        if t is None and not ev:
+            raw_t = biomech._valid_event_time(s.get("t"), meta.get("duration"))
+            if raw_t is not None and raw_t >= last_ai_time:
+                t = round(raw_t, 3)
+                last_ai_time = raw_t
+        raw_score = s.get("score", 0)
+        score = float(raw_score) if isinstance(raw_score, (int, float)) and not isinstance(raw_score, bool) and math.isfinite(float(raw_score)) else 0.0
+        score = max(0.0, min(10.0, score))
+        observation = s.get("observation", "") if isinstance(s.get("observation", ""), str) else ""
+        cue = s.get("cue", "") if isinstance(s.get("cue", ""), str) else ""
         steps.append({
             "key": key, "name": name, "phase": phase, "description": when, "ideal": ideal, "t": t,
-            "score": 0 if status == "not_visible" else s.get("score", 0), "status": status,
-            "observation": s.get("observation", ""), "cue": s.get("cue", ""),
+            "score": 0 if status == "not_visible" else score, "status": status,
+            "observation": observation, "cue": cue,
             "metrics": meas.get(key, {}),
             "evidence_level": (
                 "insufficient" if status == "not_visible"
                 else "pose_estimate" if meas.get(key)
-                else "visual_assessment" if s.get("observation")
+                else "visual_assessment" if observation
                 else "insufficient"
             ),
         })
