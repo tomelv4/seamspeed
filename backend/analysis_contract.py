@@ -103,6 +103,17 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
             "assessable": assessable,
         })
 
+    raw_release = payload.get("release_evidence") if isinstance(payload.get("release_evidence"), dict) else {}
+    release_confidence = raw_release.get("confidence")
+    if release_confidence not in VALID_CONFIDENCE:
+        release_confidence = "low"
+    ball_separation_visible = raw_release.get("ball_separation_visible") is True and release_confidence in {"high", "medium"}
+    release_evidence = {
+        "ball_separation_visible": ball_separation_visible,
+        "confidence": release_confidence,
+        "notes": raw_release.get("notes").strip() if isinstance(raw_release.get("notes"), str) else "",
+    }
+
     raw_steps = payload.get("steps") if isinstance(payload.get("steps"), list) else []
     step_by_key = {}
     for step in raw_steps:
@@ -170,17 +181,6 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         if not isinstance(value, list):
             return []
         return [item.strip() for item in value if isinstance(item, str) and item.strip()]
-
-    raw_release = payload.get("release_evidence") if isinstance(payload.get("release_evidence"), dict) else {}
-    release_confidence = raw_release.get("confidence")
-    if release_confidence not in VALID_CONFIDENCE:
-        release_confidence = "low"
-    ball_separation_visible = raw_release.get("ball_separation_visible") is True and release_confidence in {"high", "medium"}
-    release_evidence = {
-        "ball_separation_visible": ball_separation_visible,
-        "confidence": release_confidence,
-        "notes": raw_release.get("notes").strip() if isinstance(raw_release.get("notes"), str) else "",
-    }
 
     camera_view = payload.get("camera_view")
     if camera_view not in VALID_CAMERA_VIEWS:
