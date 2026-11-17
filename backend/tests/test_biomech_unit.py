@@ -95,6 +95,13 @@ class TestDetectEvents:
         assert pose_lib.metrics_at(p, 1.0, None)
         assert "t=" in pose_lib.timeline_text(p, "unrecognised", every=0.5)
 
+    @pytest.mark.parametrize("value", [None, 0, -1, float("nan"), float("inf"), "invalid"])
+    def test_safe_fps_uses_default_for_invalid_metadata(self, value):
+        assert pose_lib._safe_fps(value) == 30.0
+
+    def test_safe_fps_preserves_valid_source_rate(self):
+        assert pose_lib._safe_fps(59.94) == pytest.approx(59.94)
+
     def test_video_quality_screen_flags_low_light_blur_and_low_fps(self):
         dark_blurred = np.zeros((480, 640, 3), dtype=np.uint8)
         quality = pose_lib.assess_video_quality([dark_blurred], fps=15, width=640, height=480)
