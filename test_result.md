@@ -155,3 +155,12 @@
 - Frontend dependency install passed. TypeScript then reported widespread RN 0.88 style-prop widening errors across existing screens; the shared makeStyles helper has been updated to restore contextual ViewStyle/TextStyle/ImageStyle inference. A fresh typecheck is required.
 - Added camera-view classification and only exposes 2D sagittal-plane metrics when Gemini reports a high-confidence side-on camera view. Other views retain visual coaching feedback without misleading side-plane measurements.
 - Increased pose sampling capacity to cover 20-second clips at up to 60fps.
+
+
+## Iteration 7 CI checkpoint 4
+- Backend test suite: 33/33 passing on the latest tested snapshot (run 44089428450); backend compile also passed.
+- Frontend typecheck identified that the shared style helper needed stronger contextual typing; the helper was adjusted again to preserve React Native style literal types. Retest pending.
+- Actual progress reporting is now wired from backend stages through API polling into the Analyze screen; the previous timer-driven fake progress sequence has been removed.
+- Added camera-view classification confidence. Side-plane measurements are only exposed for high-confidence side-on footage; other views are limited to visual assessment.
+- Hardened report assembly: invalid statuses are downgraded to not_visible, scores are finite and clamped, and raw AI timestamps are only accepted when there are no event anchors and the time is in-clip and monotonic.
+- Added 20-second/60fps pose capacity and interpolated frames are excluded from measured confidence.
