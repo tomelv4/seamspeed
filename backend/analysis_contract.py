@@ -69,10 +69,6 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
     if not isinstance(is_bowling, bool):
         raise ValueError("The analysis model did not identify whether this is a bowling video.")
 
-    raw_overall = _finite_number(payload.get("overall_score"), 0, 10)
-    overall_assessable = raw_overall is not None
-    overall_score = raw_overall if raw_overall is not None else 0.0
-
     summary = payload.get("summary")
     if not isinstance(summary, str) or not summary.strip():
         summary = "The video was processed, but the model did not provide a reliable coaching summary."
@@ -152,7 +148,18 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
 
     assessable_step_phases = {step["phase"] for step in steps if step["status"] != "not_visible"}
     for phase in phases:
-        phase["assessable"] = bool(phase["assessable"] and phase["key"] in assessable_step_phases)
+        phase_steps = [
+            step["score"] for step in steps
+            if step["phase"] == phase["key"] and step["status"] != "not_visible"
+        ]
+        phase["assessable"] = bool(is_bowling and phase_steps and phase["key"] in assessable_step_phases)
+        phase["score"] = round(sum(phase_steps) / len(phase_steps), 1) if phase["assessable"] else 0.0
+    assessable_phase_count = sum(1 for phase in phases if phase["assessable"])
+    overall_assessable = is_bowling and assessable_count >= 10 and assessable_phase_count >= 4
+    overall_score = (
+        round(sum(phase["score"] for phase in phases if phase["assessable"]) / assessable_phase_count, 1)
+        if overall_assessable else 0.0
+    )
 
     faults = []
     raw_faults = payload.get("faults") if isinstance(payload.get("faults"), list) else []
@@ -192,8 +199,9 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
     return {
         **payload,
         "is_bowling_video": is_bowling,
-        "overall_score": round(overall_score, 1),
-        "overall_score_assessable": bool(is_bowling and overall_assessable and assessable_count >= 10),
+        "overall_score": overall_score,
+        "overall_score_assessable": bool(overall_assessable),
+        "score_method": "equal_weight_mean_of_assessable_phase_step_scores",
         "summary": summary.strip(),
         "action_type": payload.get("action_type") if isinstance(payload.get("action_type"), str) else "unknown",
         "camera_view": camera_view,
