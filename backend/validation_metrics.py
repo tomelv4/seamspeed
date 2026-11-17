@@ -5,6 +5,7 @@ Run from the repository root:
 """
 import argparse
 import json
+import math
 import statistics
 from pathlib import Path
 from typing import Any
