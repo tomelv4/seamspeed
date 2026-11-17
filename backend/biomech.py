@@ -442,8 +442,21 @@ def measured(track, ev):
 def measured_text(ev, meas):
     source_labels = {"skeleton": "skeleton-detected", "ai": "AI-estimated", "template": "typical-gap estimate"}
     sources = ev.get("sources", {})
-    source_text = ", ".join(f"{key}={source_labels.get(sources.get(key), 'unavailable')}"
-                            for key in ("take_off", "bfc", "ffc", "release"))
+    methods = ev.get("event_methods", {})
+    confidence = ev.get("event_confidence", {})
+    method_labels = {
+        "wrist_apex_proxy": "wrist-apex proxy (not confirmed ball release)",
+        "ankle_ground_contact_heuristic": "ankle-ground contact heuristic",
+        "ankle_ground_departure_heuristic": "ankle-ground departure heuristic",
+        "ai_visual_estimate": "AI visual estimate",
+        "typical_gap_estimate": "typical-gap estimate",
+    }
+    source_text = ", ".join(
+        f"{key}={source_labels.get(sources.get(key), 'unavailable')} / "
+        f"{method_labels.get(methods.get(key), methods.get(key, 'unavailable'))} "
+        f"(keypoint confidence {confidence.get(key, 0):.2f})"
+        for key in ("take_off", "bfc", "ffc", "release")
+    )
     lines = [f"Event timings (s): take_off={ev['take_off']:.2f}, BFC={ev['bfc']:.2f}, FFC={ev['ffc']:.2f}, release={ev['release']:.2f}"
              f" (measured from skeleton: {', '.join(ev.get('measured', [])) or 'none'}; sources: {source_text})"]
     if not ev.get("measured"):
