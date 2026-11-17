@@ -242,6 +242,9 @@ EVIDENCE AND SCORING RULES:
 - "good", "ok" and "fault" require visible evidence; uncertainty is not a fault.
 - Scores should reflect only assessable technique. If several important steps are not assessable, lower confidence in
   the overall assessment and say so in the summary rather than filling gaps with assumptions.
+- Use consistent step-score anchors: 0-2 = clear major breakdown; 3-4 = clear technical problem; 5-6 = mixed or
+  inconsistent execution; 7-8 = controlled, repeatable execution; 9-10 = exceptional execution clearly supported by
+  the footage. Do not award 9-10 merely because the action looks acceptable.
 - Injury scanner outputs are coaching observations only, never a diagnosis or prediction. Do not label a medical injury
   risk high based on a single visual proxy. State when there is insufficient evidence.
 - Do not estimate bowling speed from body motion or ball flight. Return pace_band with null min_kmh/max_kmh and
