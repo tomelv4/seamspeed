@@ -443,6 +443,15 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     # sync every step to its biomechanical moment (measured events first, AI timestamps as fallback)
     ai_steps = data.get("steps", [])
     by_key = {s.get("key"): s for s in ai_steps if isinstance(s, dict)}
+    release_evidence = data.get("release_evidence", {})
+    if release_evidence.get("ball_separation_visible") is True and release_evidence.get("confidence") in {"high", "medium"}:
+        # Prefer the AI's visible ball-separation timestamp over the wrist-apex proxy.
+        pose_ev = dict(pose_ev)
+        pose_ev.pop("release", None)
+        for field in ("event_methods", "event_confidence"):
+            values = dict(pose_ev.get(field) or {})
+            values.pop("release", None)
+            pose_ev[field] = values
     ev = biomech.merge_events(pose_ev, ai_steps, meta.get("duration"))
     times = biomech.sync_times(ai_steps, ev) if ev else {}
     meas = biomech.measured(track, ev) if ev and camera_view == "side_on" and camera_view_confidence == "high" else {}
@@ -525,6 +534,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         "video": video_quality,
         "event_methods": (ev or {}).get("event_methods", {}),
         "event_confidence": (ev or {}).get("event_confidence", {}),
+        "release_evidence": release_evidence,
         "limitations": [
             "Single-camera 2D pose estimates cannot establish 3D joint loading or rotation.",
             "Wrist apex is not confirmed ball release unless ball separation is visible.",
