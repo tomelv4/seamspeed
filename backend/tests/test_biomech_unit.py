@@ -396,6 +396,19 @@ class TestMeasured:
 
         assert "finger_roll_release" not in metrics
 
+    def test_forward_trunk_flexion_uses_pre_release_not_follow_through_frames(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
+        for i, t in enumerate(track.t):
+            if t > ev["release"]:
+                hip_x = (track.xy[i, 11, 0] + track.xy[i, 12, 0]) / 2
+                track.xy[i, 5, 0] = hip_x + 100.0
+                track.xy[i, 6, 0] = hip_x + 100.0
+
+        metrics = biomech.measured(track, ev)
+
+        assert metrics["forward_trunk_flexion"]["forward_lean_max_2d_est"] == 0
+
     def test_event_measurement_is_omitted_when_nearest_pose_frame_is_too_far(self):
         pose = synth_pose("right", fps=30)
         pose["frames"] = [f for f in pose["frames"] if not 1.4 <= f["t"] <= 1.6]
