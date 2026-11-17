@@ -180,14 +180,14 @@ export type Step = {
 export type PoseData = { width: number; height: number; frames: { t: number; k: number[][] | null }[] };
 export type Ball = {
   n: number; created_at: string; is_bowling: boolean; score: number; pace_kmh?: number | null; hit_target?: boolean;
-  good: string; fault: string; phase: string; injury_flag: boolean; observation: string; feedback: string; next_target: string; audio: string; block?: "bowling" | "test";
+  good: string; fault: string; phase: string; observation: string; feedback: string; next_target: string; audio: string; block?: "bowling" | "test";
 };
 export type CoachSession = {
   id: string; created_at: string; focus: string; status: "active" | "ended"; intro: string; intro_audio: string;
   balls: Ball[]; summary: string; summary_audio: string;
   plan?: SessionPlan;
   achievements?: { key: string; title: string; description: string }[];
-  test_result?: { name?: string; balls?: number; hits?: number; avg_score?: number; top_pace?: number };
+  test_result?: { name?: string; balls?: number; hits?: number; avg_score?: number; top_pace?: number | null };
 };
 export type PlanItem = { name: string; minutes?: number; reps?: string; cue?: string };
 export type SessionPlan = {
