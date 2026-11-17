@@ -28,7 +28,8 @@ export type Analysis = {
   video_meta?: { fps?: number; duration?: number; width?: number; height?: number };
   has_pose?: boolean;
   analysis_quality?: {
-    pose?: { rating?: string; frame_coverage?: number; critical_joint_coverage?: number; mean_joint_confidence?: number };
+    score_confidence?: string; assessable_steps?: number; step_coverage?: number;
+    pose?: { rating?: string; frame_coverage?: number; critical_joint_coverage?: number; mean_joint_confidence?: number; interpolated_frames?: number };
     event_methods?: Record<string, string>;
     event_confidence?: Record<string, number>;
     limitations?: string[];
