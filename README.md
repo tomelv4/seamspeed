@@ -1,9 +1,9 @@
-# expo
+# PACED
 
-A small starter for a mobile app with a backend: **FastAPI with MongoDB**
-behind an **Expo + expo-router** app in strict TypeScript. The app runs as a
-web preview in the browser, in Expo Go on a phone, and as a native build.
-Nothing app-specific is built yet; it is a skeleton to build on.
+A fast-bowling video analysis and coaching app built with **FastAPI + MongoDB**
+and **Expo + expo-router** in strict TypeScript. It runs as a web preview, in
+Expo Go and as a native build. The original scaffold has been extended into
+PACED; project-specific architecture and analysis limitations are documented below.
 
 Versions are not written down here. Every package is at whatever
 `package.json` pins; open that file only when a version actually matters.
@@ -91,8 +91,7 @@ dependencies come from `backend/requirements.txt`.
 - **Routing** is expo-router, file-based: every file under `app/` is a screen
   (`app/profile/settings.tsx` is `/profile/settings`), `_layout.tsx` files
   define navigators, typed routes are on. Non-screen code (components, hooks,
-  the API module, utilities) goes under `src/`. `app/index.tsx` is a
-  placeholder; replace it.
+  the API module, utilities) goes under `src/`. app routes are organised into feature screens and route groups; keep non-screen code under `src/`.
 - **Root layout.** `app/_layout.tsx` wraps the app in `ErrorBoundary` →
   `QueryClientProvider` → `KeyboardProvider` → `<Stack>`. Keep those when you
   rewrite it; add your route groups and login gating inside the `Stack`.
@@ -150,7 +149,7 @@ lint or smoke passes while still building; tier 1 runs exactly once.
 
 ## Testing
 
-**Backend (pytest).** Specs in `tests/` at the template root as `test_*.py`.
+**Backend (pytest).** Project tests live under `backend/tests/`.
 The ini lives in `backend/`, so pass it explicitly or its settings are skipped:
 
 ```bash
@@ -201,7 +200,7 @@ local-run notes above.
 
 ---
 
-# PACED
+## PACED project notes
 
 **Understand Every Movement.**
 
