@@ -378,7 +378,7 @@ def _metrics(k, w, h, bowling_arm: str) -> dict:
         hx = (k[11][0] + k[12][0]) / 2
         hy = (k[11][1] + k[12][1]) / 2
         dx, dy = (sx - hx) * w, (sy - hy) * h
-        if abs(dy) > 1e-6:
+        if math.hypot(dx, dy) >= max(2.0, body_height * 0.05) and abs(dy) > 1e-6:
             result["trunk_lean"] = round(math.degrees(math.atan2(abs(dx), abs(dy))))
     return result
 
