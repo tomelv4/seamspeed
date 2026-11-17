@@ -90,6 +90,17 @@ export default function Report() {
                 Score confidence: {(a.analysis_quality.score_confidence ?? "unknown").toUpperCase()} ·
                 {a.analysis_quality.assessable_steps ?? 0}/27 steps assessable
               </Text>
+              {a.analysis_quality.pose.interpolated_frames ? (
+                <Text style={s.note}>
+                  {a.analysis_quality.pose.interpolated_frames} interpolated frames were shown for continuity but excluded from measurements.
+                </Text>
+              ) : null}
+              {Object.keys(a.analysis_quality.event_methods ?? {}).length ? (
+                <Text style={s.note}>
+                  Event timing methods: {Object.entries(a.analysis_quality.event_methods ?? {})
+                    .map(([key, method]) => `${key.replace("_", " ")}: ${method.replaceAll("_", " ")}`).join(" · ")}
+                </Text>
+              ) : null}
               <Text style={s.note}>Single-camera 2D coaching estimates only. These are not 3D biomechanical measurements or medical assessments.</Text>
               {a.analysis_quality.event_methods?.release === "wrist_apex_proxy" ? (
                 <Text style={s.note}>Release timing uses the wrist's highest point as a visual proxy; it does not confirm when the ball left the hand.</Text>
