@@ -217,6 +217,19 @@ class TestDetectEvents:
             frame["k"][10][2] = 0.1
         assert biomech.detect_events(biomech.Track(p, "right")) == {}
 
+    def test_non_finite_bowling_wrist_prevents_release_detection(self):
+        p = synth_pose("right")
+        for frame in p["frames"]:
+            frame["k"][10][0] = float("nan")
+        assert biomech.detect_events(biomech.Track(p, "right")) == {}
+
+    def test_non_finite_joint_coordinates_are_not_measured(self):
+        p = synth_pose("right")
+        p["frames"][0]["k"][biomech.LA["knee"]][0] = float("nan")
+        track = biomech.Track(p, "right")
+        assert track.knee(0, track.front) is None
+        assert pose_lib.metrics_at(p, 0.0, "right")["front_knee"] is None
+
     def test_empty_and_none_pose(self):
         for p in ({}, {"width": 0, "height": 0, "frames": []}, {"frames": [{"t": 0, "k": []}]}):
             tr = biomech.Track(p, "right")
