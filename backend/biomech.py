@@ -165,7 +165,8 @@ class Track:
             stand = np.linalg.norm(self.xy[:, 0] - sh, axis=1) + np.linalg.norm(sh - hp, axis=1) + leg
             height_joints = (0, 5, 6, 11, 12, 13, 14, 15, 16)
             valid_height = np.all(self.c[:, height_joints] >= 0.45, axis=1)
-            self.height_px = float(np.median(stand[valid_height]) * 1.12) if valid_height.any() else 1.0
+            # A single fully visible frame is not a stable scale reference.
+            self.height_px = float(np.median(stand[valid_height]) * 1.12) if int(valid_height.sum()) >= 3 else 0.0
             ankle_y = self.xy[:, [15, 16], 1]
             ankle_confident = self.c[:, [15, 16]] >= 0.45
             visible_ankle_y = ankle_y[ankle_confident]
@@ -176,7 +177,7 @@ class Track:
             else:
                 self.dir = 1.0
         else:
-            self.height_px = 1.0
+            self.height_px = 0.0
             self.ground_y = None
             self.dir = 1.0
 
@@ -227,6 +228,8 @@ class Track:
 
 def _landing(track, ankle, a, b):
     """Estimate foot contact using a clip-wide ground reference and sustained near-ground frames."""
+    if track.height_px <= 0:
+        return None
     ids = track.range(a, b)
     valid_all = np.where(track.c[:, ankle] >= 0.45)[0]
     ids = ids[track.c[ids, ankle] >= 0.45] if len(ids) else ids
@@ -261,7 +264,7 @@ def _landing(track, ankle, a, b):
 
 def detect_events(track):
     """Release, FFC, BFC and take-off times from the tracked bowler (None when not detectable)."""
-    if len(track) < 8:
+    if len(track) < 8 or track.height_px <= 0:
         return {}
     arm = track.arm
     shoulders_ok = (track.c[:, 5] >= 0.45) & (track.c[:, 6] >= 0.45)
