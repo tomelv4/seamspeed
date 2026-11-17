@@ -67,8 +67,8 @@ export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
 
 type NamedStyles<T> = { [K in keyof T]: ViewStyle | TextStyle | ImageStyle };
 
-export function makeStyles<T extends NamedStyles<T>>(
-  factory: (colors: ThemeColors) => T,
+export function makeStyles<T extends NamedStyles<T> | NamedStyles<any>>(
+  factory: (colors: ThemeColors) => T & NamedStyles<any>,
 ): () => T {
   return function useStyles(): T {
     const { colors: c } = useTheme();
