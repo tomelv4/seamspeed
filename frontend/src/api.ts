@@ -42,7 +42,7 @@ export type Analysis = {
     pose?: { rating?: string; frame_coverage?: number; critical_joint_coverage?: number; mean_joint_confidence?: number; interpolated_frames?: number; subject_selection_confidence?: string; competing_tracks?: number };
     video?: { rating?: string; flags?: string[]; samples?: number; mean_luminance?: number | null; median_sharpness?: number | null; method?: string };
     event_methods?: Record<string, string>;
-    event_confidence?: Record<string, number>;
+    joint_confidence?: Record<string, number | null>;
     release_evidence?: { ball_separation_visible?: boolean; confidence?: string; notes?: string };
     limitations?: string[];
   };
