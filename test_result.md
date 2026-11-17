@@ -105,3 +105,15 @@
 - Step timing sync: backend/biomech.py detects take_off/BFC/FFC/release from tracked skeleton (ankle landings, highest bowling wrist), each of 27 steps snapped into a window relative to those events, monotonic order. Measured values per step (knee angles, stride % height, release height %, elbow extension est, approach speed est) stored in step.metrics. analysis.events saved.
 - Prompt: critical coach, judge vs ideal ranges supplied by user (STEPS now have when + ideal; step.ideal shown in StepCard as IDEAL box).
 - Pose sampling 30fps.
+
+
+## Iteration 7 context (main agent)
+- Backend pose quality: extract_pose now reports frame coverage, critical-joint coverage and mean confidence for shoulders, elbows, wrists, hips, knees and ankles. Rating is a transparent capture-quality heuristic, not a calibrated probability.
+- Measurement gating: Track.knee, Track.joint and Track.trunk_lean reject low-confidence keypoints; ankle contact heuristic now uses a clip-wide ground reference and requires sustained near-ground frames.
+- Event provenance: event methods and keypoint confidence are persisted. The wrist's highest point is explicitly a wrist-apex proxy, not confirmed ball release. AI and typical-gap estimates are distinguished.
+- Measurement scope: removed uncalibrated approach-speed and 2D elbow-extension/legality proxies; renamed wrist height at apex and trunk lean metrics to make their 2D estimate nature explicit.
+- Timestamp integrity: sync_times no longer manufactures timestamps from template event anchors; AI timestamps are preserved when pose anchors cannot safely constrain a step, otherwise unavailable times remain null.
+- AI guardrails: prompt now forbids invented numeric measurements, uncalibrated pace estimates, 2D elbow legality claims and injury predictions from a single visual proxy.
+- Frontend: report now displays pose quality and wrist-apex release limitation; step metric panel identifies values as 2D pose estimates.
+- CI: added .github/workflows/paced-backend-checks.yml to compile backend and run focused biomechanics unit tests on the feature branch / PR.
+- Retesting required: all changes above are pending automated execution. Do not mark working=true until the workflow passes.
