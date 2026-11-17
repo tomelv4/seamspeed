@@ -72,7 +72,7 @@ class TestDetectEvents:
         assert ev["release"] == pytest.approx(1.5, abs=0.034)
         assert ev["ffc"] == pytest.approx(1.367, abs=0.034)
         assert ev["bfc"] == pytest.approx(1.1, abs=0.034)
-        assert ev["take_off"] == pytest.approx(0.833, abs=0.034)
+        assert "take_off" not in ev
 
     def test_left_arm_synthetic(self):
         ev = biomech.detect_events(biomech.Track(synth_pose("left"), "left"))
@@ -197,7 +197,7 @@ class TestMeasured:
         assert set(m) <= set(KEYS)
         txt = biomech.measured_text(ev, m)
         assert "BFC=" in txt and "release=" in txt
-        assert "skeleton-detected" in txt
+        assert "pose-derived" in txt
         assert ev["event_methods"]["release"] == "wrist_apex_proxy"
         assert "not confirmed ball release" in txt
         assert "wrist_height_at_apex_pct" in m["finger_roll_release"]
