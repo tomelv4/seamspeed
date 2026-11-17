@@ -182,6 +182,10 @@ class TestDetectEvents:
         p["frames"] = [f for f in p["frames"] if f["t"] <= 0.5 or f["t"] >= 1.5]
         assert pose_lib.metrics_at(p, 1.0, "right") == {}
 
+    @pytest.mark.parametrize("timestamp", [None, True, float("nan"), float("inf"), "invalid"])
+    def test_pose_metrics_reject_invalid_timestamps(self, timestamp):
+        assert pose_lib.metrics_at(synth_pose("right"), timestamp, "right") == {}
+
     def test_low_confidence_joint_is_not_measured(self):
         p = synth_pose("right")
         track = biomech.Track(p, "right")
