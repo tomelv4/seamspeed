@@ -110,6 +110,7 @@ export default function Report() {
                   Capture screening: {(a.video_meta.quality.rating ?? "unknown").toUpperCase()}
                   {a.video_meta.quality.flags?.length ? ` · ${a.video_meta.quality.flags.map((flag) => flag.replaceAll("_", " ")).join(" · ")}` : " · no screening flags"}
                 </Text>
+                <Text style={s.note}>Capture flags are screening heuristics, not a calibrated video-quality score.</Text>
               ) : null}
               <Text style={s.note}>Overall and phase scores are equal-weight averages of assessable movement-step scores; unassessable steps are excluded.</Text>
               <Text style={s.note}>Single-camera 2D coaching estimates only. These are not 3D biomechanical measurements or medical assessments.</Text>
