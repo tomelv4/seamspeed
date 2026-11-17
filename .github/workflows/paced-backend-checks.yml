@@ -25,3 +25,21 @@ jobs:
         run: python -m compileall -q backend
       - name: Run biomechanics unit tests
         run: pytest -c backend/pytest.ini -n 0 backend/tests/test_biomech_unit.py
+
+  frontend-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile --ignore-scripts
+      - name: Type-check frontend
+        working-directory: frontend
+        run: yarn tsc --noEmit
