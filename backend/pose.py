@@ -355,9 +355,10 @@ def _metrics(k, w, h, bowling_arm: str) -> dict:
     if _joint_confident(k, *height_joints):
         sx, sy = (k[5][0] + k[6][0]) / 2, (k[5][1] + k[6][1]) / 2
         hx, hy = (k[11][0] + k[12][0]) / 2, (k[11][1] + k[12][1]) / 2
-        leg = (math.dist(k[11][:2], k[13][:2]) + math.dist(k[13][:2], k[15][:2]) +
-               math.dist(k[12][:2], k[14][:2]) + math.dist(k[14][:2], k[16][:2])) * 0.5
-        body_height = (math.dist(k[0][:2], (sx, sy)) + math.dist((sx, sy), (hx, hy)) + leg) * math.hypot(w, h) * 0.5 * 1.12
+        dist_px = lambda a, b: math.hypot((a[0] - b[0]) * w, (a[1] - b[1]) * h)
+        leg = (dist_px(k[11], k[13]) + dist_px(k[13], k[15]) +
+               dist_px(k[12], k[14]) + dist_px(k[14], k[16])) * 0.5
+        body_height = (dist_px(k[0], (sx, sy)) + dist_px((sx, sy), (hx, hy)) + leg) * 1.12
     else:
         body_height = h * 0.5
     min_segment_px = max(2.0, body_height * 0.025)
