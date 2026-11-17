@@ -526,6 +526,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
     )
     data["analysis_quality"] = {
         "score_confidence": score_confidence,
+        "score_method": data.get("score_method", "not_available"),
         "camera_view": camera_view,
         "camera_view_confidence": camera_view_confidence,
         "assessable_steps": assessable_steps,
