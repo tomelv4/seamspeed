@@ -354,7 +354,7 @@ class TestMeasured:
 
     def test_zero_degree_front_arm_elevation_is_not_treated_as_missing(self):
         track = biomech.Track(synth_pose("right"), "right")
-        ev = biomech.detect_events(track)
+        ev = biomech.merge_events(biomech.detect_events(track), [], 2.5)
         pre = track.range(ev["ffc"] - 0.12, ev["ffc"])
         assert len(pre) > 0
         front = track.front
