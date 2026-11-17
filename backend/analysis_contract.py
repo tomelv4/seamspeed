@@ -177,9 +177,15 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
                 or severity not in {"low", "medium", "high"}
                 or not isinstance(description, str) or not description.strip()):
             continue
+        phase_steps = [step for step in steps if step["phase"] == phase and step["status"] != "not_visible"]
+        if not phase_steps:
+            continue
+        requested_step = fault.get("step_key")
+        valid_step_keys = {step["key"] for step in phase_steps}
+        step_key = requested_step if requested_step in valid_step_keys else phase_steps[0]["key"]
         fix = fault.get("fix") if isinstance(fault.get("fix"), str) else ""
         faults.append({
-            "title": title.strip(), "phase": phase, "severity": severity,
+            "title": title.strip(), "phase": phase, "step_key": step_key, "severity": severity,
             "description": description.strip(), "fix": fix.strip(),
         })
 
