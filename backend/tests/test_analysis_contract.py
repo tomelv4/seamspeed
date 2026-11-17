@@ -17,6 +17,7 @@ def valid_payload():
         "action_type": "side-on",
         "camera_view": "side_on",
         "camera_view_confidence": "high",
+        "release_evidence": {"ball_separation_visible": True, "confidence": "high", "notes": "Ball visibly leaves the hand."},
         "phases": [
             {"key": key, "name": name, "score": 7, "feedback": "Visible and repeatable."}
             for key, name in (
@@ -87,6 +88,16 @@ def test_normalise_clamps_scores_and_rejects_out_of_clip_or_nonmonotonic_times()
     assert result["steps"][0]["score"] == 10
     assert result["steps"][1]["t"] is None
     assert result["steps"][2]["t"] is None
+
+
+def test_release_step_requires_explicit_ball_separation_evidence():
+    payload = valid_payload()
+    payload["release_evidence"] = {"ball_separation_visible": False, "confidence": "low", "notes": "Ball is obscured."}
+    result = normalise_model_payload(payload, duration=4.0)
+    release = next(step for step in result["steps"] if step["key"] == "finger_roll_release")
+    assert release["status"] == "not_visible"
+    assert release["t"] is None
+    assert result["release_evidence"]["ball_separation_visible"] is False
 
 
 def test_non_bowling_video_is_not_scored_or_faulted():
