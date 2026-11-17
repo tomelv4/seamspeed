@@ -41,12 +41,64 @@ def warmup():
     _get_body()
 
 
+def assess_video_quality(frames, fps: float, width: int, height: int) -> dict:
+    """Screen capture quality with transparent heuristics; this is not a calibrated quality score."""
+    flags = []
+    if min(width, height) < 480:
+        flags.append("low_resolution")
+    if not math.isfinite(float(fps)) or fps < 24:
+        flags.append("low_frame_rate")
+
+    luminance, sharpness = [], []
+    for frame in frames:
+        if frame is None or not getattr(frame, "size", 0):
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
+        luminance.append(float(np.mean(gray)))
+        sharpness.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
+
+    mean_luminance = float(np.mean(luminance)) if luminance else None
+    median_sharpness = float(np.median(sharpness)) if sharpness else None
+    if mean_luminance is not None and mean_luminance < 35:
+        flags.append("low_light")
+    elif mean_luminance is not None and mean_luminance > 220:
+        flags.append("overexposed")
+    if median_sharpness is not None and median_sharpness < 35:
+        flags.append("possible_blur_or_motion_blur")
+    if not luminance:
+        flags.append("quality_sampling_unavailable")
+
+    return {
+        "rating": "review" if flags else "good",
+        "flags": flags,
+        "samples": len(luminance),
+        "mean_luminance": round(mean_luminance, 1) if mean_luminance is not None else None,
+        "median_sharpness": round(median_sharpness, 1) if median_sharpness is not None else None,
+        "method": "screening_heuristics_not_calibrated",
+    }
+
+
 def video_meta(path: str) -> dict:
     cap = cv2.VideoCapture(path)
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    total = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or 30)
+    if not math.isfinite(fps) or fps <= 0:
+        fps = 30.0
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+    sample_frames = []
+    if total > 0:
+        for index in np.linspace(0, max(0, total - 1), min(8, total), dtype=int):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(index))
+            ok, frame = cap.read()
+            if ok:
+                sample_frames.append(frame)
     cap.release()
-    return {"fps": round(fps, 2), "duration": round(total / fps, 2) if total else 0}
+    duration = round(total / fps, 2) if total else 0
+    return {
+        "fps": round(fps, 2), "duration": duration, "width": width, "height": height,
+        "quality": assess_video_quality(sample_frames, fps, width, height),
+    }
 
 
 def _bbox(kp, sc):
