@@ -170,6 +170,7 @@ class TestMergeAndSync:
         ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
         ai = ai_steps_from({k: 0.2 + i * 0.05 for i, k in enumerate(KEYS)})
         times = biomech.sync_times(ai, ev)
+        assert any(times[k] is not None for k in KEYS)
         assert all(times[k] is None or 0 <= times[k] <= 2.5 for k in KEYS)
 
     def test_release_at_end_of_clip_stays_within_duration(self):
