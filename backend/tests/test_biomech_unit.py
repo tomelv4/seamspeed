@@ -323,7 +323,7 @@ class TestMeasured:
         metrics = biomech.measured(track, ev)
         assert "wrist_height_at_release_pct" in metrics["finger_roll_release"]
 
-    def test_release_wrist_height_requires_at_least_one_visible_ankle(self):
+    def test_release_wrist_height_uses_clip_ground_when_both_ankles_are_occluded_at_release(self):
         track = biomech.Track(synth_pose("right"), "right")
         ev = biomech.detect_events(track)
         ev["event_methods"]["release"] = "ai_visual_estimate"
@@ -331,6 +331,16 @@ class TestMeasured:
         i_rel = track.idx(ev["release"])
         track.c[i_rel, 15] = 0.0
         track.c[i_rel, 16] = 0.0
+        metrics = biomech.measured(track, ev)
+        assert "wrist_height_at_release_pct" in metrics["finger_roll_release"]
+
+    def test_release_wrist_height_is_omitted_without_clip_ground_reference(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        track.c[:, 15] = 0.0
+        track.c[:, 16] = 0.0
+        ev = biomech.detect_events(track)
+        ev["event_methods"]["release"] = "ai_visual_estimate"
+        ev["measured"] = sorted(set(ev.get("measured", [])) | {"release"})
         metrics = biomech.measured(track, ev)
         assert "finger_roll_release" not in metrics
 
