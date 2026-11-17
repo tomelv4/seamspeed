@@ -31,3 +31,21 @@ def test_link_does_not_bridge_long_elapsed_gap_at_low_frame_rate():
 def test_link_without_timestamps_uses_sixty_fps_default():
     tracks = pose._link([[_detection()], [_detection()]], 200.0)
     assert len(tracks) == 1
+
+def _track(frame_indices):
+    return {"dets": {frame: _detection() for frame in frame_indices}}
+
+
+def test_subject_selection_ignores_tracks_without_shared_observed_frames():
+    selected = _track([0, 2, 4])
+    disjoint = _track([1, 3, 5])
+    result = pose._subject_selection_confidence([selected, disjoint], selected, 200.0)
+    assert result == {"confidence": "high", "competing_tracks": 0}
+
+
+def test_subject_selection_counts_tracks_with_shared_observed_frames():
+    selected = _track([0, 2, 4])
+    competitor = _track([2, 4, 6])
+    result = pose._subject_selection_confidence([selected, competitor], selected, 200.0)
+    assert result["competing_tracks"] == 1
+    assert result["confidence"] == "low"
