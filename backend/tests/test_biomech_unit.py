@@ -333,3 +333,22 @@ class TestMeasured:
         track.c[i_rel, 16] = 0.0
         metrics = biomech.measured(track, ev)
         assert "finger_roll_release" not in metrics
+
+    def test_front_knee_release_angle_is_omitted_when_release_pose_is_occluded(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        ev = biomech.detect_events(track)
+        assert ev.get("ffc") is not None and ev.get("release") is not None
+        ev["event_methods"]["release"] = "ai_visual_estimate"
+        ev["measured"] = sorted(set(ev.get("measured", [])) | {"ffc", "release"})
+        i_rel = track.idx(ev["release"])
+        front = track.front
+        for joint in (front["hip"], front["knee"], front["ankle"]):
+            track.c[i_rel, joint] = 0.0
+
+        metrics = biomech.measured(track, ev)
+
+        assert "front_knee_bracing" in metrics
+        assert "front_knee_ffc" in metrics["front_knee_bracing"]
+        assert "knee_flex_after_ffc" in metrics["front_knee_bracing"]
+        assert "front_knee_release" not in metrics["front_knee_bracing"]
+
