@@ -204,15 +204,21 @@ class Track:
         d = sh - hp
         return math.degrees(math.atan2(d[0] * self.dir, abs(d[1]))) if d[1] else None
 
+    def _segments_visible(self, i, *pairs):
+        # Very short limbs are usually collapsed/noisy keypoint estimates; their
+        # angles are numerically defined but biomechanically meaningless.
+        minimum = max(2.0, 0.025 * self.height_px)
+        return all(np.linalg.norm(self.xy[i, a] - self.xy[i, b]) >= minimum for a, b in pairs)
+
     def knee(self, i, side):
-        joints = (side["hip"], side["knee"], side["ankle"])
-        if not self.joints_confident(i, *joints):
+        hip, knee, ankle = side["hip"], side["knee"], side["ankle"]
+        if not self.joints_confident(i, hip, knee, ankle) or not self._segments_visible(i, (hip, knee), (knee, ankle)):
             return None
-        return _ang(self.xy[i, side["hip"]] / [self.w, self.h], self.xy[i, side["knee"]] / [self.w, self.h],
-                    self.xy[i, side["ankle"]] / [self.w, self.h], self.w, self.h)
+        return _ang(self.xy[i, hip] / [self.w, self.h], self.xy[i, knee] / [self.w, self.h],
+                    self.xy[i, ankle] / [self.w, self.h], self.w, self.h)
 
     def joint(self, i, a, b, c):
-        if not self.joints_confident(i, a, b, c):
+        if not self.joints_confident(i, a, b, c) or not self._segments_visible(i, (a, b), (b, c)):
             return None
         return _ang(self.xy[i, a] / [self.w, self.h], self.xy[i, b] / [self.w, self.h], self.xy[i, c] / [self.w, self.h], self.w, self.h)
 
