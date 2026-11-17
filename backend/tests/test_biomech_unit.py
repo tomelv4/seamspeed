@@ -190,8 +190,11 @@ class TestDetectEvents:
 
 class TestMergeAndSync:
     def test_merge_prefers_pose(self):
-        ev = biomech.merge_events({"release": 1.5, "ffc": 1.367, "bfc": 1.1},
-                                  ai_steps_from({"finger_roll_release": 1.9, "ffc": 1.7}), 2.5)
+        ev = biomech.merge_events(
+            {"release": 1.5, "ffc": 1.367, "bfc": 1.1,
+             "event_methods": {"release": "wrist_apex_proxy"}},
+            ai_steps_from({"finger_roll_release": 1.9, "ffc": 1.7}), 2.5
+        )
         assert ev["release"] == 1.5 and ev["ffc"] == 1.367 and ev["measured"] == ["bfc", "ffc"]
         assert ev["sources"]["release"] == "skeleton"
         assert ev["event_methods"]["release"] == "wrist_apex_proxy"
