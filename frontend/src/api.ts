@@ -22,7 +22,7 @@ export type Analysis = {
   strengths: string[];
   tips: string[];
   pace_band: { label?: string; min_kmh?: number; max_kmh?: number; confidence?: string };
-  injury_risk: { level?: string; mixed_action?: boolean; counter_rotation?: string; notes?: string; areas?: InjuryArea[] };
+  injury_risk: { level?: string; mixed_action?: boolean | null; counter_rotation?: string; notes?: string; areas?: InjuryArea[] };
   steps?: Step[];
   video_path?: string;
   video_meta?: { fps?: number; duration?: number; width?: number; height?: number };
