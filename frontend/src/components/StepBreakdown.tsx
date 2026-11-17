@@ -10,9 +10,9 @@ const METRIC_LABEL: Record<string, [string, string]> = {
   front_knee: ["Front knee", "°"], back_knee: ["Back knee", "°"], bowling_elbow: ["Bowling elbow", "°"], trunk_lean: ["Trunk lean", "°"],
   back_knee_min: ["Back knee min", "°"], knee_flex_after_bfc: ["Knee flex after BFC", "°"], stride_pct_height: ["Stride", "% height"],
   front_knee_ffc: ["Knee at FFC", "°"], front_knee_release: ["Knee at release", "°"], knee_flex_after_ffc: ["Knee flex after FFC", "°"],
-  front_arm_elevation: ["Front arm", "°"], release_height_pct: ["Release", "% height"], forward_lean_max: ["Forward lean", "°"], backward_lean: ["Backward lean", "°"],
+  front_arm_elevation: ["Front arm", "°"], wrist_height_at_apex_pct: ["Wrist at apex", "% height"], forward_lean_max_2d_est: ["Forward lean (2D est.)", "°"], backward_lean_2d_est: ["Backward lean (2D est.)", "°"],
   elbow_at_horizontal: ["Elbow at horizontal", "°"], elbow_at_release: ["Elbow at release", "°"], elbow_extension_est: ["Elbow extension (est)", "°"],
-  approach_speed_ms: ["Approach (est)", " m/s"],
+
 };
 
 function useStatusColor() {
@@ -52,6 +52,8 @@ export function StepCard({ step, index }: { step: Step; index: number }) {
         </View>
       ) : null}
       {metrics.length ? (
+        <>
+        <Text style={s.metricNote}>2D pose estimates · camera angle and tracking confidence can affect accuracy.</Text>
         <View style={s.metrics}>
           {metrics.map(([k, v]) => (
             <View key={k} style={s.metric} testID={`step-metric-${k}`}>
@@ -60,6 +62,7 @@ export function StepCard({ step, index }: { step: Step; index: number }) {
             </View>
           ))}
         </View>
+        </>
       ) : null}
     </View>
   );
@@ -107,6 +110,7 @@ const useStyles = makeStyles((c) => ({
   cue: { flexDirection: "row", gap: space.sm, alignItems: "center", padding: space.md, borderRadius: radius.md, backgroundColor: c.brandTertiary },
   cueLabel: { fontFamily: fonts.textXBold, fontSize: 11, color: c.accent, letterSpacing: 1 },
   cueText: { flex: 1, fontFamily: fonts.textBold, fontSize: 14, color: c.onSurface },
+  metricNote: { fontFamily: fonts.text, fontSize: 11, color: c.muted },
   metrics: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   metric: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, minWidth: 84 },
   metricValue: { fontFamily: fonts.mono, fontSize: 20, color: c.accent },
