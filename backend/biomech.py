@@ -164,14 +164,17 @@ class Track:
             leg = (seg(11, 13) + seg(13, 15) + seg(12, 14) + seg(14, 16)) / 2
             stand = np.linalg.norm(self.xy[:, 0] - sh, axis=1) + np.linalg.norm(sh - hp, axis=1) + leg
             height_joints = (0, 5, 6, 11, 12, 13, 14, 15, 16)
-            valid_height = np.all(self.c[:, height_joints] >= 0.45, axis=1)
+            height_xy = self.xy[:, height_joints, :]
+            valid_height = (np.all(self.c[:, height_joints] >= 0.45, axis=1) &
+                            np.all(np.isfinite(height_xy), axis=(1, 2)) & np.isfinite(stand))
             # A single fully visible frame is not a stable scale reference.
             self.height_px = float(np.median(stand[valid_height]) * 1.12) if int(valid_height.sum()) >= 3 else 0.0
             ankle_y = self.xy[:, [15, 16], 1]
-            ankle_confident = self.c[:, [15, 16]] >= 0.45
+            ankle_confident = (self.c[:, [15, 16]] >= 0.45) & np.isfinite(ankle_y)
             visible_ankle_y = ankle_y[ankle_confident]
             self.ground_y = float(np.percentile(visible_ankle_y, 90)) if len(visible_ankle_y) >= 4 else None
-            valid_hips = np.where((self.c[:, 11] >= 0.45) & (self.c[:, 12] >= 0.45))[0]
+            valid_hips = np.where((self.c[:, 11] >= 0.45) & (self.c[:, 12] >= 0.45) &
+                                  np.all(np.isfinite(self.xy[:, [11, 12], :]), axis=(1, 2)))[0]
             if len(valid_hips) >= 2:
                 self.dir = 1.0 if hp[valid_hips[-1], 0] >= hp[valid_hips[0], 0] else -1.0
             else:
@@ -194,7 +197,12 @@ class Track:
         return self.xy[i, j]
 
     def joints_confident(self, i, *joints, threshold=0.45):
-        return all(0 <= j < self.c.shape[1] and self.c[i, j] >= threshold for j in joints)
+        return all(
+            0 <= j < self.c.shape[1]
+            and np.isfinite(self.c[i, j]) and self.c[i, j] >= threshold
+            and np.all(np.isfinite(self.xy[i, j]))
+            for j in joints
+        )
 
     def trunk_lean(self, i):
         """Signed trunk lean in the camera plane: + = toward the batter (direction of run), - = backward."""
@@ -231,8 +239,8 @@ def _landing(track, ankle, a, b):
     if track.height_px <= 0:
         return None
     ids = track.range(a, b)
-    valid_all = np.where(track.c[:, ankle] >= 0.45)[0]
-    ids = ids[track.c[ids, ankle] >= 0.45] if len(ids) else ids
+    valid_all = np.where((track.c[:, ankle] >= 0.45) & np.all(np.isfinite(track.xy[:, ankle]), axis=1))[0]
+    ids = ids[(track.c[ids, ankle] >= 0.45) & np.all(np.isfinite(track.xy[ids, ankle]), axis=1)] if len(ids) else ids
     if len(ids) < 4 or len(valid_all) < 4:
         return None
     # Image y increases downward. A high percentile approximates the lowest (grounded) ankle positions.
@@ -268,7 +276,9 @@ def detect_events(track):
         return {}
     arm = track.arm
     shoulders_ok = (track.c[:, 5] >= 0.45) & (track.c[:, 6] >= 0.45)
-    ok = (track.c[:, arm["wrist"]] >= 0.45) & shoulders_ok
+    critical_xy = track.xy[:, [5, 6, arm["wrist"]], :]
+    ok = ((track.c[:, arm["wrist"]] >= 0.45) & shoulders_ok &
+          np.all(np.isfinite(critical_xy), axis=(1, 2)))
     if ok.sum() < 3:
         return {}
     sh_y = (track.xy[:, 5, 1] + track.xy[:, 6, 1]) / 2
