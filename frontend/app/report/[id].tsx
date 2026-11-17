@@ -208,7 +208,9 @@ export default function Report() {
                         style={[s.fault, { borderLeftColor: riskColor(f.severity, colors) }]}
                         testID={`fault-card-${i}`}
                         onPress={() => {
-                          const targetIndex = steps.findIndex((step) => step.phase === f.phase && step.status !== "not_visible");
+                          const exactIndex = steps.findIndex((step) => step.key === f.step_key && step.status !== "not_visible");
+                          const phaseIndex = steps.findIndex((step) => step.phase === f.phase && step.status !== "not_visible");
+                          const targetIndex = exactIndex >= 0 ? exactIndex : phaseIndex;
                           if (targetIndex >= 0) selectStep(targetIndex, true);
                         }}
                       >
