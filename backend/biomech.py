@@ -227,15 +227,16 @@ def _landing(track, ankle, a, b):
     top = int(np.argmin(y))
     after = ids[top:]
     tol = 0.02 * track.height_px
-    for pos in range(len(after) - 1):
-        i, nxt = after[pos], after[pos + 1]
-        if nxt - i > 2:
+    # Require three consecutive, temporally adjacent near-ground observations.
+    # A single crossing (or a two-frame detector glitch) is not enough evidence
+    # to call a foot contact event.
+    for pos in range(len(after) - 2):
+        window = after[pos:pos + 3]
+        if any(window[j + 1] - window[j] > 2 for j in range(2)):
             continue
-        yi = track.xy[i, ankle, 1]
-        yn = track.xy[nxt, ankle, 1]
-        if yi >= ground_y - tol and yn >= ground_y - tol:
-            # Reject a single noisy frame that only crosses the estimated ground line.
-            return float(track.t[i])
+        ys = track.xy[window, ankle, 1]
+        if np.all(ys >= ground_y - tol) and float(np.ptp(ys)) <= 0.015 * track.height_px:
+            return float(track.t[window[0]])
     return None
 
 def detect_events(track):
