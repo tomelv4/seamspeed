@@ -27,6 +27,12 @@ export type Analysis = {
   video_path?: string;
   video_meta?: { fps?: number; duration?: number; width?: number; height?: number };
   has_pose?: boolean;
+  analysis_quality?: {
+    pose?: { rating?: string; frame_coverage?: number; critical_joint_coverage?: number; mean_joint_confidence?: number };
+    event_methods?: Record<string, string>;
+    event_confidence?: Record<string, number>;
+    limitations?: string[];
+  };
 };
 export type Drill = {
   id: string; phase: string; title: string; duration: string; level: string;
@@ -150,6 +156,7 @@ export type Step = {
   key: string; name: string; phase: string; description: string; ideal?: string; t: number | null; score: number;
   status: "good" | "ok" | "fault" | "not_visible"; observation: string; cue: string;
   metrics: Record<string, number>;
+  evidence_level?: "pose_estimate" | "visual_assessment" | "insufficient";
 };
 export type PoseData = { width: number; height: number; frames: { t: number; k: number[][] | null }[] };
 export type Ball = {
