@@ -8,9 +8,9 @@ import { makeStyles, useTheme } from "@/src/theme";
 const STATUS_LABEL: Record<string, string> = { good: "Good", ok: "Work on", fault: "Fault", not_visible: "Not visible" };
 const METRIC_LABEL: Record<string, [string, string]> = {
   front_knee: ["Front knee", "°"], back_knee: ["Back knee", "°"], bowling_elbow: ["Bowling elbow", "°"], trunk_lean: ["Trunk lean", "°"],
-  back_knee_min: ["Back knee min", "°"], knee_flex_after_bfc: ["Knee flex after BFC", "°"], stride_pct_height: ["Stride", "% height"],
+  back_knee_min: ["Back knee min", "°"], knee_flex_after_bfc: ["Knee flex after BFC", "°"], stride_pct_height: ["Projected stride (2D)", "% height"],
   front_knee_ffc: ["Knee at FFC", "°"], front_knee_release: ["Knee at release", "°"], knee_flex_after_ffc: ["Knee flex after FFC", "°"],
-  front_arm_elevation: ["Front arm", "°"], wrist_height_at_release_pct: ["Wrist at release (2D)", "% height"], forward_lean_max_2d_est: ["Forward lean (2D est.)", "°"], backward_lean_2d_est: ["Backward lean (2D est.)", "°"],
+  front_arm_elevation: ["Front-arm elevation", "°"], wrist_height_at_release_pct: ["Wrist at release (2D)", "% height"], forward_lean_max_2d_est: ["Forward lean (2D est.)", "°"], backward_lean_2d_est: ["Backward lean (2D est.)", "°"],
 
 
 };
