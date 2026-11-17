@@ -439,14 +439,22 @@ def sync_times(ai_steps, ev):
     return out
 
 def _window_values(track, ids, measure, min_samples=2):
-    """Return window measurements only when at least two distinct frames support the estimate."""
+    """Return window measurements only when observations provide continuous temporal support."""
     values = []
     for i in ids:
         value = measure(int(i))
         if value is not None:
             values.append((float(track.t[i]), value))
-    if len(values) < min_samples or len({t for t, _ in values}) < min_samples:
+    values.sort(key=lambda item: item[0])
+    times = [t for t, _ in values]
+    if len(values) < min_samples or len(set(times)) < min_samples:
         return []
+    intervals = np.diff(track.t)
+    intervals = intervals[intervals > 0]
+    if len(intervals):
+        max_gap = max(0.06, 1.6 * float(np.median(intervals)))
+        if any(gap > max_gap for gap in np.diff(times)):
+            return []
     return [value for _, value in values]
 
 
