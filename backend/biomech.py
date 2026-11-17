@@ -412,6 +412,18 @@ def sync_times(ai_steps, ev):
         out[key] = round(t, 3) if t is not None else None
     return out
 
+def _window_values(track, ids, measure, min_samples=2):
+    """Return window measurements only when at least two distinct frames support the estimate."""
+    values = []
+    for i in ids:
+        value = measure(int(i))
+        if value is not None:
+            values.append((float(track.t[i]), value))
+    if len(values) < min_samples or len({t for t, _ in values}) < min_samples:
+        return []
+    return [value for _, value in values]
+
+
 def measured(track, ev):
     """Measured values per step (2D estimates from the side camera) used for judging against the ideals."""
     if not len(track) or not ev:
@@ -432,16 +444,14 @@ def measured(track, ev):
         if bk is not None:
             m.setdefault("bfc", {})["back_knee"] = round(bk)
         ids = track.range(ev["bfc"], ev["bfc"] + 0.15)
-        vals = [track.knee(i, arm) for i in ids]
-        vals = [v for v in vals if v is not None]
+        vals = _window_values(track, ids, lambda i: track.knee(i, arm))
         if vals:
             m["back_knee_compression"] = {"back_knee_min": round(min(vals))}
             if bk is not None:
                 m["back_knee_compression"]["knee_flex_after_bfc"] = round(max(0, bk - min(vals)))
         pre = track.range(ev["bfc"] - 0.12, ev["bfc"])
         if len(pre):
-            leans = [track.trunk_lean(i) for i in pre]
-            leans = [v for v in leans if v is not None]
+            leans = _window_values(track, pre, track.trunk_lean)
             if leans:
                 m["posterior_trunk_tilt"] = {"backward_lean_2d_est": round(max(0, -min(leans)))}
     if i_ffc is not None:
@@ -458,8 +468,8 @@ def measured(track, ev):
         if ffc_values:
             m["ffc"] = ffc_values
         if i_rel is not None and i_rel >= i_ffc and fk is not None:
-            vals = [track.knee(i, front) for i in range(i_ffc, i_rel + 1)]
-            vals = [v for v in vals if v is not None]
+            knee_ids = range(i_ffc, i_rel + 1)
+            vals = _window_values(track, knee_ids, lambda i: track.knee(i, front))
             if vals:
                 bracing = {
                     "front_knee_ffc": round(fk),
@@ -473,8 +483,7 @@ def measured(track, ev):
                 m["front_knee_bracing"] = bracing
         pre = track.range(ev["ffc"] - 0.12, ev["ffc"])
         if len(pre):
-            el = [track.joint(i, front["hip"], front["shoulder"], front["elbow"]) for i in pre]
-            el = [v for v in el if v is not None]
+            el = _window_values(track, pre, lambda i: track.joint(i, front["hip"], front["shoulder"], front["elbow"]))
             if el:
                 m["front_arm_elevation"] = {"front_arm_elevation": round(max(el))}
     if i_rel is not None and H > 0 and track.joints_confident(i_rel, arm["wrist"]):
@@ -487,8 +496,7 @@ def measured(track, ev):
             rel_h = (ground - track.xy[i_rel, arm["wrist"], 1]) / H * 100
             m["finger_roll_release"] = {"wrist_height_at_release_pct": round(rel_h)}
         post = track.range(ev["release"], ev["release"] + 0.15)
-        leans = [track.trunk_lean(i) for i in post]
-        leans = [v for v in leans if v is not None]
+        leans = _window_values(track, post, track.trunk_lean)
         if leans:
             m["forward_trunk_flexion"] = {"forward_lean_max_2d_est": round(max(0, max(leans)))}
     # A single 2D view cannot establish elbow-extension legality or calibrated bowling speed.
