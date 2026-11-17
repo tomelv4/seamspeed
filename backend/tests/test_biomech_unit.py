@@ -81,6 +81,13 @@ class TestDetectEvents:
         assert ev["ffc"] == pytest.approx(1.367, abs=0.034)
         assert ev["bfc"] == pytest.approx(1.1, abs=0.034)
 
+    def test_landing_rejects_three_frames_spread_over_long_elapsed_time(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        # Simulate a sparse/irregular observation sequence around the foot plant.
+        # Frame indices are consecutive, but the observations are 200 ms apart.
+        track.t[40:] += np.arange(len(track.t) - 40) * 0.2
+        assert biomech._landing(track, track.front["ankle"], 0.8, 3.0) is None
+
     def test_wrong_arm_profile_does_not_crash(self):
         ev = biomech.detect_events(biomech.Track(synth_pose("right"), "left"))
         assert isinstance(ev, dict)
