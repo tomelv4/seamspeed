@@ -376,7 +376,7 @@ def sync_times(ai_steps, ev):
         usable_window = all(a == "start" or a == "end" or anchor_is_usable(a) for a in required)
 
         raw = by_key.get(key, {}).get("t")
-        t = _valid_event_time(raw, ev.get("end")) if usable_window else None
+        t = _valid_event_time(raw, ev.get("end"))
         if usable_window:
             a, b = step_window(key, ev)
             if key in ("bfc", "ffc", "take_off") and sources.get(key) == "skeleton":
