@@ -108,9 +108,11 @@ export default function Report() {
                 </Text>
               ) : null}
               <Text style={s.note}>Single-camera 2D coaching estimates only. These are not 3D biomechanical measurements or medical assessments.</Text>
-              {a.analysis_quality.event_methods?.release === "wrist_apex_proxy" ? (
-                <Text style={s.note}>Release timing uses the wrist's highest point as a visual proxy; it does not confirm when the ball left the hand.</Text>
-              ) : null}
+              <Text style={s.note}>
+                {a.analysis_quality.release_evidence?.ball_separation_visible
+                  ? `Ball separation visually identified · AI release estimate · ${a.analysis_quality.release_evidence.confidence ?? "low"} confidence.`
+                  : "Ball separation was not clearly visible; actual ball release is unconfirmed. A wrist-apex proxy is not a confirmed release."}
+              </Text>
             </View>
           ) : null}
           {a.video_path ? (
