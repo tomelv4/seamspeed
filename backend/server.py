@@ -133,6 +133,7 @@ class Analysis(BaseDocument):
     has_pose: bool = False
     events: dict = {}
     analysis_quality: dict = {}
+    progress: dict = Field(default_factory=lambda: {"stage": "queued", "percent": 0, "message": "Waiting to start"})
     status: str = "done"  # processing | done | failed
     error: str = ""
 
@@ -350,10 +351,23 @@ async def process_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x
         logger.exception("analysis failed")
         with suppress(OSError):
             os.remove(path)
-        await db.analyses.update_one({"_id": ObjectId(analysis_id)}, {"$set": {"status": "failed", "error": f"Analysis failed: {exc}"}})
+        await db.analyses.update_one(
+            {"_id": ObjectId(analysis_id)},
+            {"$set": {
+                "status": "failed", "error": f"Analysis failed: {exc}",
+                "progress": {"stage": "failed", "percent": 100, "message": "Analysis failed"},
+            }},
+        )
 
 
 async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_device_id, profile):
+    async def set_progress(stage: str, percent: int, message: str):
+        await db.analyses.update_one(
+            {"_id": ObjectId(analysis_id)},
+            {"$set": {"progress": {"stage": stage, "percent": percent, "message": message}}},
+        )
+
+    await set_progress("preparing", 5, "Preparing your video")
     meta = await run_in_threadpool(pose_lib.video_meta, path)
 
     async def run_pose():
@@ -383,13 +397,16 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         )
         return parse_json(response)
 
+    await set_progress("tracking", 20, "Tracking your bowling action")
     pose_data = await run_pose()
+    await set_progress("reviewing", 55, "Reviewing technique and movement")
     track = biomech.Track(pose_data or {}, profile.bowling_arm)
     pose_ev = biomech.detect_events(track)
     pre_ev = biomech.merge_events(pose_ev, [], meta.get("duration"))
     pre_text = biomech.measured_text(pre_ev, biomech.measured(track, pre_ev)) if pre_ev else "Key events could not be detected from the skeleton."
     pose_quality = (pose_data or {}).get("quality", {"rating": "limited", "frame_coverage": 0.0, "critical_joint_coverage": 0.0, "mean_joint_confidence": 0.0})
     data = await run_gemini(pose_data)
+    await set_progress("report", 82, "Building your coaching report")
 
     # Never publish uncalibrated AI guesses as bowling speed or injury probability.
     data["pace_band"] = {
@@ -443,6 +460,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
                "methods": ev.get("event_methods", {}), "confidence": ev.get("event_confidence", {})}
         )
 
+    await set_progress("saving", 95, "Saving your analysis")
     video_path = f"{APP_NAME}/uploads/{x_device_id}/{uuid.uuid4()}{suffix}"
     try:
         await run_in_threadpool(put_object, video_path, data_bytes, mime)
@@ -453,6 +471,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         with suppress(OSError):
             os.remove(path)
 
+    data["progress"] = {"stage": "complete", "percent": 100, "message": "Analysis complete"}
     data["video_path"] = video_path
     data["video_meta"] = {**meta, "width": (pose_data or {}).get("width", 0), "height": (pose_data or {}).get("height", 0), "mime": mime}
     data["has_pose"] = bool(pose_data and pose_data.get("detected"))
