@@ -4,6 +4,7 @@ import os
 import sys
 
 import pytest
+import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import biomech  # noqa: E402
@@ -93,6 +94,28 @@ class TestDetectEvents:
         p = synth_pose("right")
         assert pose_lib.metrics_at(p, 1.0, None)
         assert "t=" in pose_lib.timeline_text(p, "unrecognised", every=0.5)
+
+    def test_video_quality_screen_flags_low_light_blur_and_low_fps(self):
+        dark_blurred = np.zeros((480, 640, 3), dtype=np.uint8)
+        quality = pose_lib.assess_video_quality([dark_blurred], fps=15, width=640, height=480)
+        assert quality["rating"] == "review"
+        assert "low_frame_rate" in quality["flags"]
+        assert "low_light" in quality["flags"]
+        assert "possible_blur_or_motion_blur" in quality["flags"]
+        assert quality["method"] == "screening_heuristics_not_calibrated"
+
+    def test_video_quality_screen_does_not_flag_clear_well_lit_capture(self):
+        yy, xx = np.indices((720, 1280))
+        checker = (((xx // 8 + yy // 8) % 2) * 180 + 40).astype(np.uint8)
+        frame = np.repeat(checker[:, :, None], 3, axis=2)
+        quality = pose_lib.assess_video_quality([frame], fps=60, width=1280, height=720)
+        assert quality["rating"] == "good"
+        assert quality["flags"] == []
+
+    def test_video_quality_screen_reports_unavailable_sampling(self):
+        quality = pose_lib.assess_video_quality([], fps=30, width=1920, height=1080)
+        assert quality["rating"] == "review"
+        assert "quality_sampling_unavailable" in quality["flags"]
 
     def test_pose_metrics_reject_low_confidence_joints(self):
         p = synth_pose("right")
