@@ -105,6 +105,13 @@ export default function Report() {
                     .map(([key, method]) => `${key.replace("_", " ")}: ${method.replaceAll("_", " ")}`).join(" · ")}
                 </Text>
               ) : null}
+              {Object.keys(a.analysis_quality.joint_confidence ?? {}).length ? (
+                <Text style={s.note}>
+                  Keypoint visibility at detected events: {Object.entries(a.analysis_quality.joint_confidence ?? {})
+                    .map(([key, value]) => `${key.replace("_", " ")}: ${typeof value === "number" ? `${Math.round(value * 100)}%` : "unavailable"}`).join(" · ")}
+                  . This is pose-joint visibility confidence, not confidence that the event timing itself is correct.
+                </Text>
+              ) : null}
               {a.video_meta?.quality ? (
                 <>
                   <Text style={s.note}>
