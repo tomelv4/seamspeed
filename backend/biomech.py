@@ -444,12 +444,21 @@ def measured(track, ev):
     m = {}
     at = lambda t: track.idx(t) if t is not None and abs(track.t[track.idx(t)] - t) < 0.12 else None
 
-    real = set(ev.get("measured", []))  # only judge from events actually measured on the skeleton
-    # A wrist-height apex is only a proxy for release. Do not use it as a true release
-    # anchor for release-phase measurements such as wrist action or trunk flexion.
-    if ev.get("event_methods", {}).get("release") == "wrist_apex_proxy":
-        real.discard("release")
-    i_bfc, i_ffc, i_rel = [at(ev.get(k)) if k in real else None for k in ("bfc", "ffc", "release")]
+    # Pose-derived and AI-timed events can both anchor a 2D skeleton measurement:
+    # the joint positions come from pose tracking, while the event source remains
+    # separately visible in the report. Template times and wrist-apex proxies
+    # must never be treated as measured biomechanical events.
+    usable = set(ev.get("pose_detected", ev.get("measured", [])))
+    sources = ev.get("sources", {})
+    methods = ev.get("event_methods", {})
+    for key in ("bfc", "ffc", "release"):
+        if sources.get(key) in ("skeleton", "ai") and methods.get(key) not in (
+            None, "wrist_apex_proxy", "typical_gap_estimate", "unavailable"
+        ):
+            usable.add(key)
+    if methods.get("release") == "wrist_apex_proxy":
+        usable.discard("release")
+    i_bfc, i_ffc, i_rel = [at(ev.get(k)) if k in usable else None for k in ("bfc", "ffc", "release")]
     if i_bfc is not None:
         bk = track.knee(i_bfc, arm)
         if bk is not None:
