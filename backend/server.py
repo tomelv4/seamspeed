@@ -502,11 +502,18 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
 
     data["progress"] = {"stage": "complete", "percent": 100, "message": "Analysis complete"}
     data["video_path"] = video_path
-    data["video_meta"] = {**meta, "width": (pose_data or {}).get("width", 0), "height": (pose_data or {}).get("height", 0), "mime": mime}
+    data["video_meta"] = {
+        **meta,
+        "width": (pose_data or {}).get("width") or meta.get("width", 0),
+        "height": (pose_data or {}).get("height") or meta.get("height", 0),
+        "mime": mime,
+    }
     data["has_pose"] = bool(pose_data and pose_data.get("detected"))
     assessable_steps = sum(1 for step in steps if step["status"] != "not_visible")
+    video_quality = meta.get("quality", {})
+    capture_needs_review = video_quality.get("rating") != "good"
     score_confidence = (
-        "low" if assessable_steps < 10 or pose_quality.get("rating") == "limited"
+        "low" if assessable_steps < 10 or pose_quality.get("rating") == "limited" or capture_needs_review
         else "medium" if assessable_steps < 19 or pose_quality.get("rating") != "good"
         else "high"
     )
@@ -517,6 +524,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         "assessable_steps": assessable_steps,
         "step_coverage": round(assessable_steps / max(1, len(steps)), 3),
         "pose": pose_quality,
+        "video": video_quality,
         "event_methods": (ev or {}).get("event_methods", {}),
         "event_confidence": (ev or {}).get("event_confidence", {}),
         "limitations": [
