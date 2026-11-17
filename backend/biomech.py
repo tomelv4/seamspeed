@@ -269,17 +269,6 @@ def detect_events(track):
             i_bfc = track.idx(bfc)
             ev["event_methods"]["bfc"] = "ankle_ground_contact_heuristic"
             ev["event_confidence"]["bfc"] = round(float(track.c[i_bfc, arm["ankle"]]), 2)
-            # take-off: last moment the take-off (front-side) foot is on the ground before the bound
-            ids = track.range(bfc - 0.7, bfc - 0.1)
-            if len(ids) >= 3:
-                y = track.xy[ids, track.front["ankle"], 1]
-                ground = y.max()
-                on = [i for i, v in zip(ids, y) if v >= ground - 0.03 * track.height_px]
-                if on:
-                    take_idx = on[-1]
-                    ev["take_off"] = float(track.t[take_idx])
-                    ev["event_methods"]["take_off"] = "ankle_ground_departure_heuristic"
-                    ev["event_confidence"]["take_off"] = round(float(track.c[take_idx, track.front["ankle"]]), 2)
     return ev
 
 
@@ -346,7 +335,8 @@ def merge_events(pose_ev, ai_steps, duration):
     ev["sources"] = sources
     ev["event_methods"] = methods
     ev["event_confidence"] = confidences
-    ev["measured"] = sorted(k for k, source in sources.items() if source == "skeleton")
+    ev["pose_detected"] = sorted(k for k, source in sources.items() if source == "skeleton")
+    ev["measured"] = ev["pose_detected"]  # legacy alias for older report consumers
     ev["estimated"] = sorted(k for k, source in sources.items() if source != "skeleton")
     return ev
 
@@ -387,7 +377,7 @@ def sync_times(ai_steps, ev):
         t = _valid_event_time(raw, ev.get("end"))
         if usable_window:
             a, b = step_window(key, ev)
-            if key in ("bfc", "ffc", "take_off") and sources.get(key) == "skeleton":
+            if key in ("bfc", "ffc", "take_off") and sources.get(key) in ("skeleton", "ai"):
                 t = ev[key]
             elif t is not None and a <= t <= b:
                 pass
@@ -473,7 +463,7 @@ def measured(track, ev):
 
 
 def measured_text(ev, meas):
-    source_labels = {"skeleton": "skeleton-detected", "ai": "AI-estimated", "template": "typical-gap estimate"}
+    source_labels = {"skeleton": "pose-derived", "ai": "AI-estimated", "template": "typical-gap estimate"}
     sources = ev.get("sources", {})
     methods = ev.get("event_methods", {})
     confidence = ev.get("event_confidence", {})
@@ -491,9 +481,9 @@ def measured_text(ev, meas):
         for key in ("take_off", "bfc", "ffc", "release")
     )
     lines = [f"Event timings (s): take_off={ev['take_off']:.2f}, BFC={ev['bfc']:.2f}, FFC={ev['ffc']:.2f}, release={ev['release']:.2f}"
-             f" (measured from skeleton: {', '.join(ev.get('measured', [])) or 'none'}; sources: {source_text})"]
+             f" (pose-derived events: {', '.join(ev.get('pose_detected', ev.get('measured', []))) or 'none'}; sources: {source_text})"]
     if not ev.get("measured"):
-        lines.append("No key events were detected from the skeleton. Treat all event timings as estimates, not measured evidence.")
+        lines.append("No key events were detected from pose tracking. Treat all event timings as estimates, not measured evidence.")
     lines.append(f"BFC->FFC {ev['ffc'] - ev['bfc']:.2f}s, FFC->release {ev['release'] - ev['ffc']:.2f}s")
     for key, vals in meas.items():
         lines.append(f"{key}: " + ", ".join(f"{k}={v}" for k, v in vals.items()))
