@@ -230,9 +230,16 @@ def _landing(track, ankle, a, b):
     # Require three consecutive, temporally adjacent near-ground observations.
     # A single crossing (or a two-frame detector glitch) is not enough evidence
     # to call a foot contact event.
+    # Use elapsed time, not just frame indices: at low source FPS, three
+    # detections can span hundreds of milliseconds and are not a contact plateau.
+    sample_intervals = np.diff(track.t)
+    sample_intervals = sample_intervals[sample_intervals > 0]
+    if not len(sample_intervals):
+        return None
+    max_gap_s = max(0.04, 1.6 * float(np.median(sample_intervals)))
     for pos in range(len(after) - 2):
         window = after[pos:pos + 3]
-        if any(window[j + 1] - window[j] > 2 for j in range(2)):
+        if np.any(np.diff(track.t[window]) > max_gap_s):
             continue
         ys = track.xy[window, ankle, 1]
         if np.all(ys >= ground_y - tol) and float(np.ptp(ys)) <= 0.015 * track.height_px:
