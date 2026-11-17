@@ -129,7 +129,7 @@ def _smooth(kps, scs):
     return out
 
 
-def extract_pose(path: str, target_fps: int = 30, max_frames: int = 420) -> dict:
+def extract_pose(path: str, target_fps: int = 60, max_frames: int = 900) -> dict:
     body = _get_body()
     cap = cv2.VideoCapture(path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
@@ -188,37 +188,45 @@ def extract_pose(path: str, target_fps: int = 30, max_frames: int = 420) -> dict
         kps = np.zeros((n, 17, 2))
         scs = np.zeros((n, 17))
         have = np.zeros(n, bool)
+        observed = np.zeros(n, bool)
         for fi in idx:
-            kps[fi], scs[fi], have[fi] = bowler["dets"][fi]["kp"], bowler["dets"][fi]["sc"], True
+            kps[fi], scs[fi], have[fi], observed[fi] = bowler["dets"][fi]["kp"], bowler["dets"][fi]["sc"], True, True
         # fill short gaps (<= 4 frames) by linear interpolation between the bowler's poses
         for a, b in zip(idx, idx[1:]):
             if 1 < b - a <= 5:
                 for fi in range(a + 1, b):
                     r = (fi - a) / (b - a)
                     kps[fi] = kps[a] * (1 - r) + kps[b] * r
-                    scs[fi] = np.minimum(scs[a], scs[b]) * 0.8
+                    # Interpolated joints are useful for a continuous overlay, but are not observations.
+                    # Keep their confidence below the measurement threshold so they cannot drive biomechanics.
+                    scs[fi] = np.minimum(scs[a], scs[b]) * 0.4
                     have[fi] = True
         kps = _smooth(kps, scs)
         for fi in range(n):
             if have[fi] and scs[fi].mean() >= 0.25:
                 frames[fi]["k"] = [[round(float(x) / sw, 4), round(float(y) / sh, 4), round(float(s), 2)]
                                    for (x, y), s in zip(kps[fi], scs[fi])]
-    detected = sum(1 for f in frames if f["k"])
+    detected = int(observed.sum())
+    pose_frames = sum(1 for f in frames if f["k"])
+    interpolated_frames = max(0, pose_frames - detected)
     critical = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
-    visible_scores = [f["k"][j][2] for f in frames if f["k"] for j in critical]
-    critical_slots = max(1, len(frames) * len(critical))
-    reliable_slots = sum(1 for f in frames if f["k"] for j in critical if f["k"][j][2] >= 0.45)
+    observed_scores = [frames[i]["k"][j][2] for i in range(len(frames)) if observed[i] and frames[i]["k"] for j in critical]
+    critical_slots = max(1, detected * len(critical))
+    reliable_slots = sum(1 for i in range(len(frames)) if observed[i] and frames[i]["k"]
+                         for j in critical if frames[i]["k"][j][2] >= 0.45)
     coverage = detected / max(1, len(frames))
     joint_coverage = reliable_slots / critical_slots
-    mean_confidence = float(np.mean(visible_scores)) if visible_scores else 0.0
+    mean_confidence = float(np.mean(observed_scores)) if observed_scores else 0.0
     quality = "good" if coverage >= 0.80 and joint_coverage >= 0.70 and mean_confidence >= 0.55 else (
         "usable" if coverage >= 0.50 and joint_coverage >= 0.45 and mean_confidence >= 0.40 else "limited"
     )
     return {
         "width": width, "height": height, "frames": frames, "detected": detected,
+        "source_fps": round(float(fps), 2), "sampled_fps": round(float(fps / step), 2),
         "quality": {
             "rating": quality, "frame_count": len(frames), "detected_frames": detected,
-            "frame_coverage": round(coverage, 3), "critical_joint_coverage": round(joint_coverage, 3),
+            "interpolated_frames": interpolated_frames, "frame_coverage": round(coverage, 3),
+            "critical_joint_coverage": round(joint_coverage, 3),
             "mean_joint_confidence": round(mean_confidence, 3),
         },
     }
