@@ -162,6 +162,7 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 900) -> dict
     tracks = _link(dets, diag)
     n = len(dets)
     frames = [{"t": t, "k": None} for t in times]
+    observed = np.zeros(n, bool)
     if tracks:
         bowler = max(tracks, key=lambda tr: _bowler_score(tr, diag))
         # stitch: re-attach fragments that continue the bowler where his track broke (occlusion)
@@ -188,7 +189,6 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 900) -> dict
         kps = np.zeros((n, 17, 2))
         scs = np.zeros((n, 17))
         have = np.zeros(n, bool)
-        observed = np.zeros(n, bool)
         for fi in idx:
             kps[fi], scs[fi], have[fi], observed[fi] = bowler["dets"][fi]["kp"], bowler["dets"][fi]["sc"], True, True
         # fill short gaps (<= 4 frames) by linear interpolation between the bowler's poses
