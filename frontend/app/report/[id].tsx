@@ -122,6 +122,7 @@ export default function Report() {
             </View>
             <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
               {a.action_type ? <Pill testID="report-action-type" label={`${a.action_type} action`} color={colors.onSurface} icon="body" /> : null}
+              <Pill testID="report-camera-view" label={`Camera: ${(a.camera_view ?? "unknown").replace("_", " ")}`} color={colors.muted} icon="camera" />
               <Pill label={new Date(a.created_at).toLocaleDateString()} color={colors.muted} icon="calendar" />
             </View>
             <Text style={s.summary} testID="report-summary">{a.summary}</Text>
