@@ -43,6 +43,7 @@ export type Analysis = {
     video?: { rating?: string; flags?: string[]; samples?: number; mean_luminance?: number | null; median_sharpness?: number | null; method?: string };
     event_methods?: Record<string, string>;
     event_confidence?: Record<string, number>;
+    release_evidence?: { ball_separation_visible?: boolean; confidence?: string; notes?: string };
     limitations?: string[];
   };
 };
