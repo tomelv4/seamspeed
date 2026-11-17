@@ -386,6 +386,16 @@ class TestMeasured:
         assert "ffc" not in metrics
         assert "delivery_stride" not in metrics
 
+    def test_negative_release_wrist_height_is_omitted(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
+        i_rel = track.idx(ev["release"])
+        track.xy[i_rel, track.arm["wrist"], 1] = track.ground_y + 20.0
+
+        metrics = biomech.measured(track, ev)
+
+        assert "finger_roll_release" not in metrics
+
     def test_event_measurement_is_omitted_when_nearest_pose_frame_is_too_far(self):
         pose = synth_pose("right", fps=30)
         pose["frames"] = [f for f in pose["frames"] if not 1.4 <= f["t"] <= 1.6]
