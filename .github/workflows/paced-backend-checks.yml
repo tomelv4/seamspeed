@@ -24,7 +24,7 @@ jobs:
       - name: Compile backend modules
         run: python -m compileall -q backend
       - name: Run biomechanics unit tests
-        run: pytest -c backend/pytest.ini -n 0 backend/tests/test_biomech_unit.py backend/tests/test_validation_metrics.py
+        run: pytest -c backend/pytest.ini -n 0 backend/tests/test_biomech_unit.py backend/tests/test_validation_metrics.py backend/tests/test_analysis_contract.py
 
   frontend-typecheck:
     runs-on: ubuntu-latest
