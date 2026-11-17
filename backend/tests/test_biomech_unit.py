@@ -270,16 +270,18 @@ class TestMeasured:
         ev = biomech.merge_events(biomech.detect_events(tr), [], 2.5)
         m = biomech.measured(tr, ev)
         print("measured", m)
-        for k in ("bfc", "back_knee_compression", "posterior_trunk_tilt", "ffc", "delivery_stride",
-                  "finger_roll_release"):
+        for k in ("bfc", "back_knee_compression", "posterior_trunk_tilt", "ffc", "delivery_stride"):
             assert k in m, k
+        # The wrist-apex proxy is not confirmed ball release, so it must not
+        # generate release-anchored measurements under a ball-release step.
         assert set(m) <= set(KEYS)
         txt = biomech.measured_text(ev, m)
         assert "BFC=" in txt and "release=" in txt
         assert "pose-derived" in txt
         assert ev["event_methods"]["release"] == "wrist_apex_proxy"
         assert "not confirmed ball release" in txt
-        assert "wrist_height_at_apex_pct" in m["finger_roll_release"]
+        assert "finger_roll_release" not in m
+        assert "forward_trunk_flexion" not in m
         assert "peak_approach_velocity" not in m
         assert "arm_circumduction" not in m
         assert pose_lib.metrics_at(p, ev["release"], "right")["front_knee"] >= 0
