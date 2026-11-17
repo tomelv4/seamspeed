@@ -134,7 +134,7 @@ export default function Report() {
           <Animated.View entering={FadeInDown} style={s.scoreCard}>
             <Text style={s.kicker}>OVERALL SCORE</Text>
             <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
-              <Text style={[s.bigScore, { color: scoreColor(a.overall_score, colors) }]} testID="report-overall-score">{a.overall_score.toFixed(1)}</Text>
+              <Text style={[s.bigScore, { color: scoreColor(a.overall_score, colors) }]} testID="report-overall-score">{a.overall_score_assessable === false ? "—" : a.overall_score.toFixed(1)}</Text>
               <Text style={s.outOf}>/10</Text>
             </View>
             <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
@@ -143,6 +143,7 @@ export default function Report() {
               <Pill label={new Date(a.created_at).toLocaleDateString()} color={colors.muted} icon="calendar" />
             </View>
             <Text style={s.summary} testID="report-summary">{a.summary}</Text>
+            {a.overall_score_assessable === false ? <Text style={s.note}>Not enough clear, assessable movement to provide a reliable overall score.</Text> : null}
           </Animated.View>
 
           {a.is_bowling_video ? (
@@ -177,10 +178,10 @@ export default function Report() {
                     <View key={p.key} style={s.phase} testID={`phase-card-${p.key}`}>
                       <View style={s.phaseHead}>
                         <Text style={s.phaseName}>{p.name || phaseLabel(p.key)}</Text>
-                        <Text style={[s.phaseScore, { color: scoreColor(p.score, colors) }]}>{Number(p.score).toFixed(1)}</Text>
+                        <Text style={[s.phaseScore, { color: p.assessable === false ? colors.muted : scoreColor(p.score, colors) }]}>{p.assessable === false ? "—" : Number(p.score).toFixed(1)}</Text>
                       </View>
                       <View style={s.track}>
-                        <View style={[s.fill, { width: `${p.score * 10}%`, backgroundColor: scoreColor(p.score, colors) }]} />
+                        {p.assessable === false ? null : <View style={[s.fill, { width: `${p.score * 10}%`, backgroundColor: scoreColor(p.score, colors) }]} />}
                       </View>
                       <Text style={s.phaseFeedback}>{p.feedback}</Text>
                     </View>
