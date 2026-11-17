@@ -154,7 +154,8 @@ class Track:
         k = np.array([f["k"] for f in fr], dtype=float) if fr else np.zeros((0, 17, 3))
         self.xy = k[..., :2] * [self.w, self.h]
         self.c = k[..., 2]
-        self.arm = RA if bowling_arm.lower().startswith("r") else LA
+        arm_label = str(bowling_arm or "right").strip().lower()
+        self.arm = RA if arm_label.startswith("r") or not arm_label.startswith("l") else LA
         self.front = LA if self.arm is RA else RA
         if len(fr):
             seg = lambda a, b: np.linalg.norm(self.xy[:, a] - self.xy[:, b], axis=1)
@@ -244,24 +245,59 @@ def detect_events(track):
     return ev
 
 
+def _valid_event_time(value, duration=None):
+    """Return a finite, in-clip event time or None."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    value = float(value)
+    if not math.isfinite(value) or value < 0:
+        return None
+    if duration is not None and value > duration:
+        return None
+    return value
+
+
 def merge_events(pose_ev, ai_steps, duration):
-    """Prefer measured events; fall back to the AI's timestamps, then to typical gaps."""
-    ai = {s.get("key"): s.get("t") for s in ai_steps if isinstance(s, dict) and isinstance(s.get("t"), (int, float))}
-    ev = {}
-    for k, ai_key in (("release", "finger_roll_release"), ("ffc", "ffc"), ("bfc", "bfc"), ("take_off", "take_off")):
-        ev[k] = pose_ev.get(k) if pose_ev.get(k) is not None else ai.get(ai_key)
-    if ev["release"] is None:
-        ev["release"] = ai.get("wrist_snap")
+    """Merge event timings while preserving whether each came from pose, AI, or a template."""
+    duration = _valid_event_time(duration)
+    limit = duration if duration and duration > 0 else None
+    pose_ev = pose_ev if isinstance(pose_ev, dict) else {}
+    ai = {}
+    for step in ai_steps or []:
+        if isinstance(step, dict):
+            value = _valid_event_time(step.get("t"), limit)
+            if value is not None:
+                ai[step.get("key")] = value
+
+    ev, sources = {}, {}
+    for key, ai_key in (("release", "finger_roll_release"), ("ffc", "ffc"),
+                        ("bfc", "bfc"), ("take_off", "take_off")):
+        pose_time = _valid_event_time(pose_ev.get(key), limit)
+        ai_time = ai.get(ai_key)
+        if pose_time is not None:
+            ev[key], sources[key] = pose_time, "skeleton"
+        elif ai_time is not None:
+            ev[key], sources[key] = ai_time, "ai"
+        else:
+            ev[key], sources[key] = None, None
+
+    if ev["release"] is None and ai.get("wrist_snap") is not None:
+        ev["release"], sources["release"] = ai["wrist_snap"], "ai"
     if ev["release"] is None:
         return None
+
     if ev["ffc"] is None or not (ev["release"] - 0.5 < ev["ffc"] < ev["release"]):
-        ev["ffc"] = ev["release"] - 0.13
+        ev["ffc"], sources["ffc"] = max(0.0, ev["release"] - 0.13), "template"
     if ev["bfc"] is None or not (ev["ffc"] - 0.6 < ev["bfc"] < ev["ffc"]):
-        ev["bfc"] = ev["ffc"] - 0.22
+        ev["bfc"], sources["bfc"] = max(0.0, ev["ffc"] - 0.22), "template"
     if ev["take_off"] is None or not (ev["bfc"] - 0.8 < ev["take_off"] < ev["bfc"]):
-        ev["take_off"] = ev["bfc"] - 0.32
-    ev["start"], ev["end"] = 0.0, float(duration or ev["release"] + 1.5)
-    ev["measured"] = sorted(k for k in ("release", "ffc", "bfc", "take_off") if pose_ev.get(k) is not None)
+        ev["take_off"], sources["take_off"] = max(0.0, ev["bfc"] - 0.32), "template"
+
+    ev["start"] = 0.0
+    ev["end"] = limit if limit is not None else max(float(duration or 0), ev["release"] + 1.5)
+    ev["sources"] = sources
+    ev["measured"] = sorted(k for k, source in sources.items() if source == "skeleton")
+    ev["estimated"] = sorted(k for k, source in sources.items() if source != "skeleton")
     return ev
 
 
@@ -341,7 +377,6 @@ def measured(track, ev):
         ground = max(track.xy[i_rel, 15, 1], track.xy[i_rel, 16, 1])
         rel_h = (ground - track.xy[i_rel, arm["wrist"], 1]) / H * 100
         m["finger_roll_release"] = {"release_height_pct": round(rel_h)}
-        m["wrist_snap"] = {"release_height_pct": round(rel_h)}
         post = track.range(ev["release"], ev["release"] + 0.15)
         if len(post):
             m["forward_trunk_flexion"] = {"forward_lean_max": round(max(0, max(track.trunk_lean(i) for i in post)))}
@@ -369,8 +404,14 @@ def measured(track, ev):
 
 
 def measured_text(ev, meas):
-    lines = [f"Detected events (s): take_off={ev['take_off']:.2f}, BFC={ev['bfc']:.2f}, FFC={ev['ffc']:.2f}, release={ev['release']:.2f}"
-             f" (measured from skeleton: {', '.join(ev['measured']) or 'none - estimated'})"]
+    source_labels = {"skeleton": "skeleton-detected", "ai": "AI-estimated", "template": "typical-gap estimate"}
+    sources = ev.get("sources", {})
+    source_text = ", ".join(f"{key}={source_labels.get(sources.get(key), 'unavailable')}"
+                            for key in ("take_off", "bfc", "ffc", "release"))
+    lines = [f"Event timings (s): take_off={ev['take_off']:.2f}, BFC={ev['bfc']:.2f}, FFC={ev['ffc']:.2f}, release={ev['release']:.2f}"
+             f" (measured from skeleton: {', '.join(ev.get('measured', [])) or 'none'}; sources: {source_text})"]
+    if not ev.get("measured"):
+        lines.append("No key events were detected from the skeleton. Treat all event timings as estimates, not measured evidence.")
     lines.append(f"BFC->FFC {ev['ffc'] - ev['bfc']:.2f}s, FFC->release {ev['release'] - ev['ffc']:.2f}s")
     for key, vals in meas.items():
         lines.append(f"{key}: " + ", ".join(f"{k}={v}" for k, v in vals.items()))
