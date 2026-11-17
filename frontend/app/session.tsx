@@ -22,7 +22,7 @@ import { ErrorBanner, Ionicons, PressScale, PrimaryButton, scoreColor } from "@/
 import { useSubscription } from "@/src/revenuecat";
 import { makeStyles, useTheme } from "@/src/theme";
 
-const FOCUSES = ["Pace", "Accuracy", "Safe Action", "Swing", "Yorkers"];
+const FOCUSES = ["Pace", "Accuracy", "Efficient Action", "Swing", "Yorkers"];
 
 export default function LiveSession() {
   const s = useStyles();
@@ -145,7 +145,7 @@ export default function LiveSession() {
   };
 
   const avg = balls.length ? balls.reduce((a, b) => a + b.score, 0) / balls.length : 0;
-  const topPace = Math.max(0, ...balls.map((b) => b.pace_kmh ?? 0));
+  const targetHits = balls.filter((b) => b.hit_target).length;
   const ended = session?.status === "ended";
   const plan = session?.plan ?? {};
   const stageIdx = STAGES.findIndex((x) => x.key === stage);
@@ -321,7 +321,7 @@ export default function LiveSession() {
               <View style={s.stats}>
                 <View style={s.stat}><Text style={s.statValue} testID="session-ball-count">{balls.length}</Text><Text style={s.statLabel}>Balls</Text></View>
                 <View style={s.stat}><Text style={[s.statValue, { color: scoreColor(avg, colors) }]}>{avg.toFixed(1)}</Text><Text style={s.statLabel}>Avg score</Text></View>
-                <View style={s.stat}><Text style={s.statValue}>{topPace || "—"}</Text><Text style={s.statLabel}>Top km/h</Text></View>
+                <View style={s.stat}><Text style={s.statValue}>{targetHits}/{balls.length}</Text><Text style={s.statLabel}>Targets hit</Text></View>
               </View>
             ) : null}
 
@@ -332,7 +332,6 @@ export default function LiveSession() {
                   <Text style={s.ballTitle}>Ball {b.n}{b.pace_kmh ? ` · ~${b.pace_kmh} km/h` : ""}</Text>
                   <Text style={s.ballBody} numberOfLines={2}>{b.fault || b.good}</Text>
                 </View>
-                {b.injury_flag ? <Ionicons name="warning" size={18} color={colors.error} /> : null}
               </View>
             ))}
 
