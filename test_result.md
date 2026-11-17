@@ -140,3 +140,11 @@
 ## Iteration 7 CI checkpoint 2
 - GitHub Actions run 44088422794 on the current feature-branch snapshot: backend compile passed and 29/29 biomechanics tests passed in 0.20s.
 - Frontend typecheck did not start because the repository has no committed yarn.lock; setup-node's Yarn cache path therefore failed. Workflow corrected to install from the exact package.json versions without lockfile caching. Frontend typecheck remains pending.
+
+
+## Iteration 7 follow-on work
+- Real progress reporting: backend analysis records stage/percent/message updates; the Analyze screen now polls and displays those actual stages instead of a 40-second timer that advanced regardless of work.
+- Frontend typecheck exposed a pre-existing React Native 0.88 typing incompatibility in frontend/src/theme.ts (StyleSheet.NamedStyles no longer exported); makeStyles typing was updated to a compatible generic.
+- Validation tooling added on the feature branch: manual event annotation schema, event timing evaluator, and unit tests. CI now includes those evaluator tests.
+- Repository safety correction: three validation files were briefly created on main because the branch argument was omitted from a file-creation call. They were immediately deleted from main and recreated on the feature branch. The files are confirmed absent from main. GitHub retains the add/delete commits in main's history; no app code or configuration was left changed there.
+- Full backend and frontend CI rerun required after these latest changes.
