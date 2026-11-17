@@ -137,6 +137,10 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
             "observation": observation.strip(), "cue": cue.strip(),
         })
 
+    assessable_step_phases = {step["phase"] for step in steps if step["status"] != "not_visible"}
+    for phase in phases:
+        phase["assessable"] = bool(phase["assessable"] and phase["key"] in assessable_step_phases)
+
     faults = []
     raw_faults = payload.get("faults") if isinstance(payload.get("faults"), list) else []
     assessable_phase_keys = {phase["key"] for phase in phases if phase["assessable"]}
