@@ -251,6 +251,7 @@ EVIDENCE AND SCORING RULES:
   confidence "unavailable" unless a calibrated speed source is provided.
 - Do not report elbow-extension legality from 2D pose angles.
 
+When identifying a fault, link it to the single most relevant step_key from the 27-step list. Do not invent a step key.
 Break the action into 6 phases: run_up, load (bound/gather), back_foot (back-foot contact), front_foot (front-foot contact / delivery stride), release, follow_through.
 Score each phase 0-10 (one decimal). Identify faults with severity (low|medium|high), linked phase key and a short fix.
 Classify the visible action type as side-on, front-on, semi-open, mixed or unknown only when the view supports it. Separately classify the CAMERA VIEW as side_on, rear, front_on, oblique or unknown, and provide camera_view_confidence as high, medium or low. Do not infer 3D counter-rotation from a single 2D camera view.
@@ -267,7 +268,7 @@ Return ONLY valid JSON, no markdown, matching exactly:
  "release_evidence": {"ball_separation_visible": false, "confidence": "low", "notes": "Ball separation not clearly visible"},
  "phases": [{{"key":"run_up","name":"Run-up","score":7.5,"feedback":"..."}}, ... all 6 in order],
  "steps": [{{"key":"run_up_acceleration","t":0.4,"score":7,"status":"good","observation":"...","cue":"..."}}, ... all 27 in order],
- "faults": [{{"title":"Collapsing front knee","phase":"front_foot","severity":"medium","description":"...","fix":"..."}}],
+ "faults": [{{"title":"Collapsing front knee","phase":"front_foot","step_key":"front_knee_bracing","severity":"medium","description":"...","fix":"..."}}],
  "strengths": ["..."],
  "tips": ["...", "...", "..."],
  "pace_band": {{"label":"Unavailable","min_kmh":null,"max_kmh":null,"confidence":"unavailable"}},
