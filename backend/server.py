@@ -452,7 +452,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         # Prefer the AI's visible ball-separation timestamp over the wrist-apex proxy.
         pose_ev = dict(pose_ev)
         pose_ev.pop("release", None)
-        for field in ("event_methods", "event_confidence"):
+        for field in ("event_methods", "joint_confidence"):
             values = dict(pose_ev.get(field) or {})
             values.pop("release", None)
             pose_ev[field] = values
@@ -497,7 +497,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
             {k: round(ev[k], 3) for k in ("take_off", "bfc", "ffc", "release")}
             | {"measured": ev["measured"], "pose_detected": ev.get("pose_detected", []),
                "estimated": ev.get("estimated", []), "sources": ev.get("sources", {}),
-               "methods": ev.get("event_methods", {}), "confidence": ev.get("event_confidence", {})}
+               "methods": ev.get("event_methods", {}), "confidence": ev.get("joint_confidence", {})}
         )
 
     await set_progress("saving", 95, "Saving your analysis")
@@ -538,7 +538,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         "pose": pose_quality,
         "video": video_quality,
         "event_methods": (ev or {}).get("event_methods", {}),
-        "event_confidence": (ev or {}).get("event_confidence", {}),
+        "joint_confidence": (ev or {}).get("joint_confidence", {}),
         "release_evidence": release_evidence,
         "limitations": [
             "Single-camera 2D pose estimates cannot establish 3D joint loading or rotation.",
