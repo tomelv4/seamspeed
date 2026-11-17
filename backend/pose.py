@@ -203,7 +203,25 @@ def extract_pose(path: str, target_fps: int = 30, max_frames: int = 420) -> dict
             if have[fi] and scs[fi].mean() >= 0.25:
                 frames[fi]["k"] = [[round(float(x) / sw, 4), round(float(y) / sh, 4), round(float(s), 2)]
                                    for (x, y), s in zip(kps[fi], scs[fi])]
-    return {"width": width, "height": height, "frames": frames, "detected": sum(1 for f in frames if f["k"])}
+    detected = sum(1 for f in frames if f["k"])
+    critical = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    visible_scores = [f["k"][j][2] for f in frames if f["k"] for j in critical]
+    critical_slots = max(1, len(frames) * len(critical))
+    reliable_slots = sum(1 for f in frames if f["k"] for j in critical if f["k"][j][2] >= 0.45)
+    coverage = detected / max(1, len(frames))
+    joint_coverage = reliable_slots / critical_slots
+    mean_confidence = float(np.mean(visible_scores)) if visible_scores else 0.0
+    quality = "good" if coverage >= 0.80 and joint_coverage >= 0.70 and mean_confidence >= 0.55 else (
+        "usable" if coverage >= 0.50 and joint_coverage >= 0.45 and mean_confidence >= 0.40 else "limited"
+    )
+    return {
+        "width": width, "height": height, "frames": frames, "detected": detected,
+        "quality": {
+            "rating": quality, "frame_count": len(frames), "detected_frames": detected,
+            "frame_coverage": round(coverage, 3), "critical_joint_coverage": round(joint_coverage, 3),
+            "mean_joint_confidence": round(mean_confidence, 3),
+        },
+    }
 
 
 def _angle(a, b, c, w, h) -> int:
