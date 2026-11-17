@@ -117,3 +117,9 @@
 - Frontend: report now displays pose quality and wrist-apex release limitation; step metric panel identifies values as 2D pose estimates.
 - CI: added .github/workflows/paced-backend-checks.yml to compile backend and run focused biomechanics unit tests on the feature branch / PR.
 - Retesting required: all changes above are pending automated execution. Do not mark working=true until the workflow passes.
+
+
+## Iteration 7 test update
+- First GitHub Actions run (PR #1, run 44086941159): backend compilation passed; biomechanics unit tests failed (7 failures, 22 passed).
+- Failures were test/contract mismatches: one confidence fixture lowered the wrong knee keypoint; release-proxy timestamps were being asserted as confirmed release; the template-anchor test did not distinguish an AI-estimated release from template-generated BFC/FFC/take-off; event-method wording assertion needs verification against the updated event payload.
+- Corrective test changes committed; rerun required. Do not mark these tasks working until a clean run.
