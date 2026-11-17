@@ -86,6 +86,10 @@ export default function Report() {
                 Pose coverage {Math.round((a.analysis_quality.pose.frame_coverage ?? 0) * 100)}% ·
                 critical-joint coverage {Math.round((a.analysis_quality.pose.critical_joint_coverage ?? 0) * 100)}%
               </Text>
+              <Text style={s.note}>
+                Score confidence: {(a.analysis_quality.score_confidence ?? "unknown").toUpperCase()} ·
+                {a.analysis_quality.assessable_steps ?? 0}/27 steps assessable
+              </Text>
               <Text style={s.note}>Single-camera 2D coaching estimates only. These are not 3D biomechanical measurements or medical assessments.</Text>
               {a.analysis_quality.event_methods?.release === "wrist_apex_proxy" ? (
                 <Text style={s.note}>Release timing uses the wrist's highest point as a visual proxy; it does not confirm when the ball left the hand.</Text>
