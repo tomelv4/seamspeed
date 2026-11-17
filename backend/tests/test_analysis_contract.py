@@ -60,9 +60,22 @@ def test_normalise_produces_all_27_steps_and_sanitises_faults():
     assert len({step["key"] for step in result["steps"]}) == 27
     assert len(result["faults"]) == 2
     assert result["faults"][0]["title"] == "High priority"
-    assert result["overall_score"] == 7.5
+    assert result["overall_score"] == 7.0
     assert result["overall_score_assessable"] is True
     assert result["strengths"] == ["Good rhythm"]
+
+
+def test_overall_and_phase_scores_are_derived_from_step_evidence():
+    payload = valid_payload()
+    payload["overall_score"] = 10
+    for step in payload["steps"]:
+        step["score"] = 5
+        if step["phase"] == "run_up":
+            step["score"] = 9
+    result = normalise_model_payload(payload, duration=4.0)
+    run_up = next(phase for phase in result["phases"] if phase["key"] == "run_up")
+    assert run_up["score"] == 9
+    assert result["overall_score"] == 5.7
 
 
 def test_normalise_marks_missing_and_unassessable_steps_not_visible():
