@@ -409,6 +409,10 @@ def measured(track, ev):
     at = lambda t: track.idx(t) if t is not None and abs(track.t[track.idx(t)] - t) < 0.12 else None
 
     real = set(ev.get("measured", []))  # only judge from events actually measured on the skeleton
+    # A wrist-height apex is only a proxy for release. Do not use it as a true release
+    # anchor for release-phase measurements such as wrist action or trunk flexion.
+    if ev.get("event_methods", {}).get("release") == "wrist_apex_proxy":
+        real.discard("release")
     i_bfc, i_ffc, i_rel = [at(ev.get(k)) if k in real else None for k in ("bfc", "ffc", "release")]
     if i_bfc is not None:
         bk = track.knee(i_bfc, arm)
