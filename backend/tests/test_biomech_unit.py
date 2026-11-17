@@ -298,6 +298,8 @@ class TestMeasured:
         assert "finger_roll_release" not in m
         assert "forward_trunk_flexion" not in m
         assert "peak_approach_velocity" not in m
+        assert "arm_circumduction" not in m
+        assert pose_lib.metrics_at(p, ev["release"], "right")["front_knee"] >= 0
 
     def test_release_metric_is_explicitly_wrist_height_not_finger_roll(self):
         track = biomech.Track(synth_pose("right"), "right")
@@ -309,8 +311,6 @@ class TestMeasured:
         assert "wrist_height_at_release_pct" in metrics["finger_roll_release"]
         assert "wrist_height_at_apex_pct" not in metrics["finger_roll_release"]
 
-        assert "arm_circumduction" not in m
-        assert pose_lib.metrics_at(p, ev["release"], "right")["front_knee"] >= 0
 
     @pytest.mark.parametrize("hidden_ankle", [15, 16])
     def test_release_wrist_height_survives_single_ankle_occlusion(self, hidden_ankle):
