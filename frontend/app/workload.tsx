@@ -95,7 +95,8 @@ export default function WorkloadScreen() {
                 {d.acwr != null ? <View style={[s.needle, { left: `${acwrPct}%`, backgroundColor: riskColor(d.status, colors) }]} /> : null}
               </View>
               <View style={s.zoneLabels}><Text style={s.tiny}>0</Text><Text style={s.tiny}>0.8–1.3 reference range</Text><Text style={s.tiny}>2.0</Text></View>
-              <Text style={s.tiny}>{d.acwr == null ? "Ratio appears after 3+ weeks of logged bowling." : `This week ${d.acute} vs ${d.chronic_weekly}/week 4-week average. This is a load comparison, not an injury-risk score.`}</Text>
+              <Text style={s.tiny}>{d.acwr == null ? "Ratio appears after 3+ weeks of logged bowling." : `This week ${d.acute} vs ${d.chronic_weekly}/week 4-week average.`}</Text>
+              <Text style={s.tiny}>Workload flags are descriptive training-load prompts, not injury predictions. Consider intensity, recovery and individual context.</Text>
             </View>
 
             <View style={s.card} testID="workload-weekly-chart">
