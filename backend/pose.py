@@ -223,6 +223,39 @@ def _smooth(kps, scs, observed=None):
                              blend[confident] * alpha[confident, None])
     return out
 
+COCO_JOINT_NAMES = (
+    "nose", "left_eye", "right_eye", "left_ear", "right_ear",
+    "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+    "left_wrist", "right_wrist", "left_hip", "right_hip",
+    "left_knee", "right_knee", "left_ankle", "right_ankle",
+)
+
+
+def _joint_visibility_summary(scores, observed, threshold: float = 0.45) -> dict:
+    """Report per-joint detector visibility using observed frames only (never interpolations)."""
+    scores = np.asarray(scores, dtype=float)
+    observed = np.asarray(observed, dtype=bool)
+    if scores.ndim != 2 or scores.shape[1] != len(COCO_JOINT_NAMES):
+        raise ValueError("scores must have shape (frames, 17)")
+    if observed.ndim != 1 or len(observed) != len(scores):
+        raise ValueError("observed must contain one flag per frame")
+
+    observed_scores = scores[observed]
+    count = int(len(observed_scores))
+    result = {}
+    for index, name in enumerate(COCO_JOINT_NAMES):
+        values = observed_scores[:, index] if count else np.array([], dtype=float)
+        finite = values[np.isfinite(values)]
+        visible = int(np.sum(finite >= threshold))
+        result[name] = {
+            "observed_frames": count,
+            "visible_frames": visible,
+            "coverage": round(visible / count, 3) if count else 0.0,
+            "mean_confidence": round(float(np.mean(finite)), 3) if len(finite) else 0.0,
+        }
+    return result
+
+
 def _serialise_pose_keypoints(raw, display, scores, width, height):
     """Keep measurement coordinates raw; expose a separate smoothed skeleton for display."""
     def encode(points):
@@ -342,6 +375,7 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dic
             "interpolated_frames": interpolated_frames, "frame_coverage": round(coverage, 3),
             "critical_joint_coverage": round(joint_coverage, 3),
             "mean_joint_confidence": round(mean_confidence, 3),
+            "joint_visibility": _joint_visibility_summary(scs, observed),
             "subject_selection_confidence": selection_quality["confidence"],
             "competing_tracks": selection_quality["competing_tracks"],
         },
