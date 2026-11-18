@@ -13,6 +13,7 @@ export type CoachingPriority = {
   priority: number; type: "fault" | "opportunity"; step_key: string; phase: string;
   title: string; reason: string; action: string; severity: "low" | "medium" | "high" | null;
   why_it_matters?: string; feel_cue?: string; drill?: string; success_check?: string;
+  drill_name?: string; drill_setup?: string; drill_action?: string; drill_dose?: string;
 };
 export type AnalysisProgress = { stage?: string; percent?: number; message?: string };
 export type Analysis = {
