@@ -34,7 +34,6 @@ export default function LiveSession() {
   const todayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date().getDay()];
   const todayProgramme = programmeData?.programme?.days?.find((d) => d.day === todayName);
   const programmeBlocksTraining = !!todayProgramme && ["rest", "match"].includes(todayProgramme.type);
-  const programmeMode = todayProgramme?.type === "gym" || todayProgramme?.type === "recovery" ? todayProgramme.type : "bowling";
   const { isSubscribed, isLoading: subLoading } = useSubscription();
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
