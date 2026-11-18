@@ -165,7 +165,7 @@ export default function LiveSession() {
     stopCoach();
     setStage(next);
     const text =
-      next === "warm_up" ? "Readiness checks complete. Let's raise your temperature and prepare to bowl."
+      next === "warm_up" ? (nonBowlingMode ? "Readiness checks complete. Let's prepare for today's scheduled activity." : "Readiness checks complete. Let's raise your temperature and prepare to bowl.")
       : next === "drills" ? nonBowlingMode
         ? `Warm-up complete. Now today's ${plan.session_mode} activities: ${(plan.activities ?? []).map((d) => d.name).join(", ")}.`
         : `Warm-up done. Now technique drills: ${(plan.drills ?? []).map((d) => d.name).join(", ")}.`
@@ -267,7 +267,7 @@ export default function LiveSession() {
               <PlanStage stageKey="preparation" title="Session Preparation" subtitle="Check readiness, recent workload, hydration and your training intention before you start." items={plan.pre_session ?? []} nextLabel="Start warm-up" onNext={() => advance("warm_up")} />
             ) : null}
             {!ended && stage === "warm_up" ? (
-              <PlanStage stageKey="warm_up" title="Progressive Warm-up" subtitle={nonBowlingMode ? "Prepare gradually for today's scheduled training without adding bowling." : "Raise temperature, mobilise, activate and build gradually into bowling. Do not rush straight to full pace."} items={plan.warm_up ?? []} nextLabel={nonBowlingMode ? (plan.session_mode === "gym" ? "Start gym session" : "Start recovery activities") : "Start drills"} onNext={() => advance("drills")} />
+              <PlanStage stageKey="warm_up" title={nonBowlingMode ? (plan.session_mode === "gym" ? "Gym Warm-up" : "Gentle Preparation") : "Progressive Warm-up"} subtitle={nonBowlingMode ? "Prepare gradually for today's scheduled training without adding bowling." : "Raise temperature, mobilise, activate and build gradually into bowling. Do not rush straight to full pace."} items={plan.warm_up ?? []} nextLabel={nonBowlingMode ? (plan.session_mode === "gym" ? "Start gym session" : "Start recovery activities") : "Start drills"} onNext={() => advance("drills")} />
             ) : null}
             {!ended && stage === "drills" ? (
               <PlanStage stageKey="drills" title={nonBowlingMode ? (plan.session_mode === "gym" ? "Strength & Conditioning" : "Recovery Activities") : "Technique Drills"} subtitle={nonBowlingMode ? (session.scheduled_session?.details ?? "Follow today's saved programme at a controlled, comfortable effort.") : `Targeting today's focus: ${session.focus}.`} items={nonBowlingMode ? (plan.activities ?? []) : (plan.drills ?? [])} nextLabel={nonBowlingMode ? "Start cool-down" : "Start bowling block"} onNext={() => advance(nonBowlingMode ? "cool_down" : "bowling")} />
