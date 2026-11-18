@@ -66,6 +66,13 @@ export type Progress = {
   phase_avg: Record<string, number | null>;
   top_faults: { title: string; count: number }[];
   best_score: number; best_pace: number; total: number;
+  step_trends?: {
+    step_key: string; name: string; camera_view: string;
+    current_analysis_id: string; previous_analysis_id: string;
+    current_date: string; previous_date: string;
+    current_score: number; previous_score: number; delta: number;
+    direction: "improved" | "declined" | "stable";
+  }[];
 };
 export type CoachMessage = { id: string; role: "user" | "assistant"; content: string; created_at: string };
 
