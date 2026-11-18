@@ -9,7 +9,7 @@ import uuid
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Any, List, Optional
+from typing import Annotated, Any, List, Literal, Optional
 
 from bson import ObjectId
 from dotenv import load_dotenv
@@ -158,6 +158,21 @@ class ChatIn(BaseModel):
 
 
 class DrillCompletionIn(BaseModel):
+    notes: str = Field(default="", max_length=500)
+
+
+class SessionActivityCompletionIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    completed: bool = False
+    actual_sets: Optional[int] = Field(default=None, ge=0, le=20)
+    actual_reps: Optional[str] = Field(default=None, max_length=50)
+    effort: Optional[Literal["easy", "moderate", "hard"]] = None
+    notes: str = Field(default="", max_length=300)
+
+
+class SessionCompletionIn(BaseModel):
+    activities: List[SessionActivityCompletionIn] = Field(default_factory=list, max_length=10)
+    overall_feeling: Optional[Literal["fresh", "normal", "tired", "rough"]] = None
     notes: str = Field(default="", max_length=500)
 
 
@@ -924,6 +939,8 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
         "deliveries": len([ball for ball in item.get("balls", []) if ball.get("is_bowling", True)]),
         "recovery_guidance": [step.get("name") for step in (item.get("plan", {}).get("recovery", {}).get("items", []))],
         "summary": item.get("summary", ""),
+        "session_mode": (item.get("plan") or {}).get("session_mode", "bowling"),
+        "completion": item.get("completion", {}),
     } for item in recent_sessions]
     practice_context = []
     for key, item in practice_by_step.items():
@@ -1094,6 +1111,7 @@ class Session(BaseDocument):
     plan: dict = {}
     achievements: List[dict] = []
     test_result: dict = {}
+    completion: dict = {}
 
 
 # ---------------------------------------------------------------- workload tracker
@@ -1501,21 +1519,43 @@ def compute_achievements(session: Session) -> tuple[list, dict]:
 
 
 @api_router.post("/sessions/{session_id}/end")
-async def end_session(session_id: str, x_device_id: str = Header(...)):
+async def end_session(session_id: str, body: Optional[SessionCompletionIn] = None, x_device_id: str = Header(...)):
     session = await _owned_session(session_id, x_device_id)
     if session.status == "ended":
         return session.public()
+    session_mode = (session.plan or {}).get("session_mode", "bowling")
+    completion = {}
+    if session_mode in {"gym", "recovery"}:
+        planned = (session.plan or {}).get("activities", [])
+        planned_names = [str(item.get("name", "")).strip() for item in planned if isinstance(item, dict)]
+        submitted = body.activities if body else []
+        submitted_names = [item.name.strip() for item in submitted]
+        if len(submitted_names) != len(set(submitted_names)):
+            raise HTTPException(422, "Each planned activity can only be logged once")
+        if set(submitted_names) - set(planned_names):
+            raise HTTPException(422, "Completion contains an activity that was not in this session")
+        by_name = {item.name.strip(): item.model_dump() for item in submitted}
+        completion = {
+            "activities": [
+                {"name": name, **by_name.get(name, {"completed": False, "actual_sets": None, "actual_reps": None, "effort": None, "notes": ""})}
+                for name in planned_names
+            ],
+            "overall_feeling": body.overall_feeling if body else None,
+            "notes": body.notes if body else "",
+            "logged_at": now_iso(),
+        }
     profile = await get_profile(x_device_id)
     balls = [{"n": b["n"], "block": b.get("block", "bowling"), "score": b["score"], "pace": b.get("pace_kmh"), "fault": b.get("fault"), "good": b.get("good")} for b in session.balls]
     achievements, test_result = compute_achievements(session)
     try:
         session_mode = (session.plan or {}).get("session_mode", "bowling")
         if session_mode in {"gym", "recovery"}:
-            activities = (session.plan or {}).get("activities", [])
             summary_prompt = (
-                f"The {session_mode} session is complete. Planned activities: {json.dumps(activities)}. "
+                f"The {session_mode} session is complete. Planned activities: {json.dumps((session.plan or {}).get('activities', []))}. "
+                f"What actually happened: {json.dumps(completion)}. "
                 f"Programme focus: {session.scheduled_session.get('focus', session.focus)}. "
-                "In under 65 words, give a supportive recap of the completed session, reinforce controlled quality rather than extra volume, "
+                "Only describe activities marked completed as performed. Distinguish skipped or modified work from planned work. "
+                "Acknowledge the reported effort/feeling if present. In under 65 words, give a supportive recap, reinforce controlled quality rather than extra volume, "
                 "and give one practical recovery or next-session note. Do not mention bowling balls or a bowling test."
             )
         else:
@@ -1532,7 +1572,8 @@ async def end_session(session_id: str, x_device_id: str = Header(...)):
         summary, audio = "Session saved. Great work today.", ""
     await db.sessions.update_one({"_id": ObjectId(session_id)}, {"$set": {
         "status": "ended", "summary": summary, "summary_audio": audio, "ended_at": now_iso(),
-        "achievements": achievements, "test_result": test_result}})
+        "achievements": achievements, "test_result": test_result,
+        **({"completion": completion} if session_mode in {"gym", "recovery"} else {})}})
     return (await _owned_session(session_id, x_device_id)).public()
 
 
