@@ -123,7 +123,13 @@ class TestSession:
         s = r.json()
         plan = s["plan"]
         assert s["intro_audio"] and s["status"] == "active"
-        assert isinstance(plan["warm_up"], list) and len(plan["warm_up"]) >= 3
+        assert isinstance(plan["pre_session"], list) and len(plan["pre_session"]) == 4
+        assert {item["name"] for item in plan["pre_session"]} >= {"Readiness check", "Review recent workload", "Hydrate and set up"}
+        assert isinstance(plan["warm_up"], list) and len(plan["warm_up"]) == 5
+        assert isinstance(plan["recovery"]["items"], list) and len(plan["recovery"]["items"]) == 4
+        assert {item["name"] for item in plan["recovery"]["items"]} >= {"Rehydrate", "Refuel", "Restore", "Review response"}
+        assert len(plan["cool_down"]) == 3
+        assert 1 <= plan["bowling"]["balls"] <= 12
         assert isinstance(plan["drills"], list) and len(plan["drills"]) >= 2
         assert "balls" in plan["bowling"] and "target" in plan["bowling"]
         for k in ("name", "balls", "target"):
