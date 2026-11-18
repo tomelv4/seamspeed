@@ -76,6 +76,7 @@ def reconcile_synced_evidence(payload: dict) -> dict:
             step["observation"] = "The relevant movement moment could not be located reliably in the video."
             step["cue"] = ""
             step["evidence_level"] = "insufficient"
+            step["coaching_classification"] = "none"
 
     phases = payload.get("phases") if isinstance(payload.get("phases"), list) else []
     assessable_phase_count = 0
