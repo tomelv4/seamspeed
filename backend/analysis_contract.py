@@ -115,8 +115,96 @@ def _build_coaching_priorities(steps: list[dict], faults: list[dict], limit: int
 
 
 
+STEP_SPECIFIC_DRILLS = {
+    "run_up_acceleration": {
+        "name": "Progressive run-up rhythm",
+        "setup": "Mark your normal starting point and delivery crease; keep the same run-up length.",
+        "action": "Complete two walk-throughs, then four run-ups building gradually from easy to normal pace. Focus on an even rhythm rather than sprinting.",
+        "dose": "6 run-throughs; rest fully between efforts.",
+        "success_check": "Your final steps flow into the bound without a visible stutter or sudden braking across three side-on clips.",
+    },
+    "peak_approach_velocity": {
+        "name": "Controlled build-in",
+        "setup": "Use your usual run-up marks and a clear, safe run-off.",
+        "action": "Build speed progressively through the approach and run through the crease without delivering the ball. Keep the approach controlled and repeatable.",
+        "dose": "4 run-throughs at comfortable intensity, with full recovery.",
+        "success_check": "The approach looks progressively faster without a late reach, stumble or obvious deceleration.",
+    },
+    "pre_delivery_stride": {
+        "name": "Last-three-step transition",
+        "setup": "Use your normal run-up and identify the final three steps on video.",
+        "action": "Rehearse the final three steps at walking pace, then at half pace, letting the bound emerge naturally instead of forcing a longer step.",
+        "dose": "2 sets of 4 walk-throughs; stop if the rhythm deteriorates.",
+        "success_check": "The final running step transitions into take-off smoothly and consistently.",
+    },
+    "take_off": {
+        "name": "Three-step bound rehearsal",
+        "setup": "Start three comfortable steps behind your usual take-off point on a clear, level surface.",
+        "action": "Walk in, perform your natural bound and land in a balanced gather. Do not chase extra jump height or distance.",
+        "dose": "2 sets of 4 repetitions with a short reset between reps.",
+        "success_check": "You can repeat the bound and gather without an uncontrolled landing or loss of balance.",
+    },
+    "gather": {
+        "name": "Gather-and-freeze walk-through",
+        "setup": "Use a three-step approach at low intensity with no ball.",
+        "action": "Move through your normal gather, pause briefly in the position you naturally arrive in, then step through. Do not force a textbook arm or trunk position.",
+        "dose": "2 sets of 4 repetitions.",
+        "success_check": "The gather is balanced and repeatable, with no extra adjustment step before back-foot contact.",
+    },
+    "front_arm_elevation": {
+        "name": "Front-arm rhythm rehearsal",
+        "setup": "Stand in your normal delivery stance, then progress to a slow walk-in.",
+        "action": "Rehearse the front arm moving in time with your gather and delivery. Keep the path comfortable; do not force the hand higher or pull aggressively.",
+        "dose": "2 sets of 5 shadow repetitions, then 4 easy walk-ins.",
+        "success_check": "The front arm contributes to a repeatable rhythm without disrupting balance or timing.",
+    },
+    "delivery_stride": {
+        "name": "Repeatable landing-zone drill",
+        "setup": "Film three comfortable deliveries and note your natural front-foot landing area; place a flat marker beside that area, never where it could be stepped on.",
+        "action": "Use a short walk-in and aim to land in your own repeatable zone. Do not lengthen the stride to hit an arbitrary body-height ratio.",
+        "dose": "2 sets of 4 walk-in deliveries at easy intensity.",
+        "success_check": "Front-foot contact returns to a similar area without reaching or losing control.",
+    },
+    "front_knee_bracing": {
+        "name": "Front-leg support progression",
+        "setup": "Start with a short step into your normal front-foot landing position on a non-slip surface.",
+        "action": "Accept the landing with a controlled knee bend, hold your balance for two seconds, then progress to a three-step walk-in delivery. Do not force the knee to lock straight.",
+        "dose": "2 sets of 4 step-and-holds, then 4 easy walk-ins if comfortable.",
+        "success_check": "The front leg supports the finish with less visible collapse while retaining a natural amount of knee flexion.",
+    },
+    "front_arm_pull_down": {
+        "name": "Front-arm timing walk-through",
+        "setup": "Use a no-ball shadow action at half speed, viewed from the same camera angle as the analysis.",
+        "action": "Move from front-foot contact through trunk turn while allowing the front arm to fold naturally. Avoid yanking the arm down or forcing the shoulders to rotate.",
+        "dose": "2 sets of 5 slow repetitions, then 4 easy walk-throughs.",
+        "success_check": "The front arm moves in time with the rest of the action without a sudden isolated pull.",
+    },
+    "arm_follow_through": {
+        "name": "Natural arm-finish drill",
+        "setup": "Use a three-step walk-in with a soft ball or shadow action in a clear space.",
+        "action": "Complete the delivery movement at easy intensity and allow the bowling arm to continue its natural path after release. Do not deliberately stop or wrench the arm.",
+        "dose": "2 sets of 4 controlled repetitions.",
+        "success_check": "The arm finishes smoothly and the bowler remains balanced after the delivery.",
+    },
+    "back_leg_swing": {
+        "name": "Balanced finish walk-through",
+        "setup": "Start with a slow shadow delivery on a level, non-slip surface.",
+        "action": "Move through front-foot contact and allow the rear leg to follow its natural path while you regain balance. Do not force a particular leg height or direction.",
+        "dose": "2 sets of 5 repetitions.",
+        "success_check": "The rear leg follows through without an extra recovery hop or uncontrolled sideways step.",
+    },
+    "deceleration_strides": {
+        "name": "Controlled run-off rehearsal",
+        "setup": "Use a clear, unobstructed run-off area beyond the crease.",
+        "action": "Complete a low-intensity walk-in delivery and continue moving naturally after release, reducing speed over several comfortable steps.",
+        "dose": "4 repetitions with full walk-back recovery.",
+        "success_check": "You decelerate under control and remain within the available run-off space.",
+    },
+}
+
+
 def _attach_coaching_guidance(priorities: list[dict], raw_guidance: Any) -> list[dict]:
-    """Attach concise coaching detail only to the exact timestamped priority step."""
+    """Attach exact-step coaching explanation and a vetted step-specific drill."""
     guidance_by_key = {}
     if isinstance(raw_guidance, list):
         for item in raw_guidance:
@@ -127,10 +215,34 @@ def _attach_coaching_guidance(priorities: list[dict], raw_guidance: Any) -> list
                 continue
             guidance_by_key[key] = {
                 field: value.strip()[:500]
-                for field in ("why_it_matters", "feel_cue", "drill", "success_check")
+                for field in ("why_it_matters", "feel_cue")
                 if isinstance((value := item.get(field)), str) and value.strip()
             }
-    return [{**priority, **guidance_by_key.get(priority["step_key"], {})} for priority in priorities]
+
+    enriched = []
+    for priority in priorities:
+        key = priority["step_key"]
+        item = {**priority, **guidance_by_key.get(key, {})}
+        drill = STEP_SPECIFIC_DRILLS.get(key)
+        if drill:
+            item.update({
+                "drill_name": drill["name"],
+                "drill_setup": drill["setup"],
+                "drill_action": drill["action"],
+                "drill_dose": drill["dose"],
+                "success_check": drill["success_check"],
+            })
+            item["drill"] = f'{drill["name"]}: {drill["action"]} {drill["dose"]}'
+        else:
+            # A generic model-generated drill is less useful than honestly withholding one.
+            item.pop("drill", None)
+            item.pop("drill_name", None)
+            item.pop("drill_setup", None)
+            item.pop("drill_action", None)
+            item.pop("drill_dose", None)
+            item.pop("success_check", None)
+        enriched.append(item)
+    return enriched
 
 def reconcile_synced_evidence(payload: dict) -> dict:
     """Remove coaching judgements whose exact movement frame could not be anchored."""
