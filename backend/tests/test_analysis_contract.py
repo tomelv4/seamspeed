@@ -1,3 +1,14 @@
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import biomech
+from analysis_contract import normalise_model_payload, parse_model_json, reconcile_synced_evidence
+
+
 def test_recurring_fault_history_requires_exact_timestamped_fault_step():
     from analysis_contract import build_recurring_fault_history
 
@@ -48,17 +59,6 @@ def test_recurring_fault_history_requires_exact_timestamped_fault_step():
     assert result[0]["step_key"] == "front_knee_bracing"
     assert result[0]["count"] == 2
     assert result[0]["last_seen"] == "2026-11-02T10:00:00Z"
-
-
-import json
-import sys
-from pathlib import Path
-
-import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import biomech
-from analysis_contract import normalise_model_payload, parse_model_json, reconcile_synced_evidence
 
 
 def valid_payload():
