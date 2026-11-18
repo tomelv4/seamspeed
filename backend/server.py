@@ -249,6 +249,7 @@ EVIDENCE AND SCORING RULES:
 - Classify coaching significance separately from the status: "fault" = a clearly visible, materially important technical problem with a plausible downside; "opportunity" = an optional refinement that may help but is not proof the current movement is wrong; "effective_variation" = a non-textbook movement pattern that appears controlled or functional and has no clear visible downside; "none" = no specific coaching intervention justified.
 - A non-standard action is not automatically a fault. Do not prescribe textbook positions as universal requirements. Only use "effective_variation" when the footage supports that it is controlled/effective; otherwise use "none" or "not_visible".
 - Status "fault" is permitted only with coaching_classification "fault". Status "ok" may carry "opportunity" or "effective_variation". Do not manufacture opportunities just to fill the report.
+- For each genuine fault or opportunity that could be a priority, optionally provide one coaching_guidance item linked to its exact step_key. Keep why_it_matters tied to the visible finding and plausible performance or consistency relevance; never claim injury prevention. Give a short feel_cue, a practical drill with setup, action and modest dose, and an observable success_check. Do not invent a drill or fill these fields when the footage does not justify it; use empty strings when uncertain. Do not provide guidance for effective_variation, none or not_visible steps.
 - Scores should reflect only assessable technique. If several important steps are not assessable, lower confidence in
   the overall assessment and say so in the summary rather than filling gaps with assumptions.
 - Use consistent step-score anchors: 0-2 = clear major breakdown; 3-4 = clear technical problem; 5-6 = mixed or
@@ -278,6 +279,7 @@ Return ONLY valid JSON, no markdown, matching exactly:
  "phases": [{{"key":"run_up","name":"Run-up","score":7.5,"feedback":"..."}}, ... all 6 in order],
  "steps": [{{"key":"run_up_acceleration","t":0.4,"score":7,"status":"good","coaching_classification":"none","observation":"...","cue":"..."}}, ... all 27 in order],
  "faults": [{{"title":"Collapsing front knee","phase":"front_foot","step_key":"front_knee_bracing","severity":"medium","description":"...","fix":"..."}}],
+ "coaching_guidance": [{{"step_key":"front_knee_bracing","why_it_matters":"...","feel_cue":"...","drill":"...","success_check":"..."}}],
  "strengths": ["..."],
  "tips": ["...", "...", "..."],
  "pace_band": {{"label":"Unavailable","min_kmh":null,"max_kmh":null,"confidence":"unavailable"}},
