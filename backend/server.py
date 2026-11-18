@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 import pose as pose_lib
-from analysis_contract import normalise_model_payload, parse_model_json
+from analysis_contract import normalise_model_payload, parse_model_json, reconcile_synced_evidence
 from storage import APP_NAME, CACHE_DIR, cache_path, cached_file, init_storage, put_object
 from emergentintegrations.llm.openai import OpenAITextToSpeech
 from emergentintegrations.llm.chat import (
@@ -505,6 +505,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
             ),
         })
     data["steps"] = steps
+    data = reconcile_synced_evidence(data)
     if ev:
         data["events"] = (
             {k: round(ev[k], 3) for k in ("take_off", "bfc", "ffc", "release")}
