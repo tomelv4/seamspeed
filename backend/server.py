@@ -458,6 +458,8 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
             pose_ev[field] = values
     ev = biomech.merge_events(pose_ev, ai_steps, meta.get("duration"))
     times = biomech.sync_times(ai_steps, ev) if ev else {}
+    event_timing = biomech.event_timing_quality(ev, release_evidence)
+    timing_rank = {"unavailable": 0, "low": 1, "medium": 2, "high": 3}
     meas = biomech.measured(track, ev) if ev and camera_view == "side_on" and camera_view_confidence == "high" else {}
     steps = []
     last_ai_time = 0.0
@@ -479,10 +481,21 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         score = max(0.0, min(10.0, score))
         observation = s.get("observation", "") if isinstance(s.get("observation", ""), str) else ""
         cue = s.get("cue", "") if isinstance(s.get("cue", ""), str) else ""
+        anchor = biomech.WINDOWS[key][0]
+        required_events = [anchor]
+        if biomech.WINDOWS[key][2] is None and key in biomech.NEXT:
+            required_events.append(biomech.NEXT[key][0])
+        step_timing = min(
+            (event_timing["events"].get(event, "unavailable") for event in required_events if event not in {"start", "end"}),
+            key=lambda value: timing_rank[value],
+            default="high",
+        )
         steps.append({
             "key": key, "name": name, "phase": phase, "description": when, "ideal": ideal, "t": t,
             "score": 0 if status == "not_visible" else score, "status": status,
             "observation": observation, "cue": cue,
+            "timing_confidence": step_timing,
+            "timing_method": (ev or {}).get("event_methods", {}).get(anchor, "unavailable"),
             "metrics": meas.get(key, {}),
             "evidence_level": (
                 "insufficient" if status == "not_visible"
@@ -528,6 +541,8 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         else "medium" if assessable_steps < 19 or pose_quality.get("rating") != "good"
         else "high"
     )
+    if timing_rank[event_timing["overall"]] < timing_rank[score_confidence]:
+        score_confidence = event_timing["overall"]
     data["analysis_quality"] = {
         "score_confidence": score_confidence,
         "score_method": data.get("score_method", "not_available"),
@@ -540,6 +555,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         "event_methods": (ev or {}).get("event_methods", {}),
         "joint_confidence": (ev or {}).get("joint_confidence", {}),
         "contact_evidence": (pose_ev or {}).get("contact_evidence", {}),
+        "event_timing": event_timing,
         "release_evidence": release_evidence,
         "limitations": [
             "Single-camera 2D pose estimates cannot establish 3D joint loading or rotation.",
