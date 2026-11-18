@@ -153,7 +153,14 @@ export default function ProgressScreen() {
                   })}
                 </View>
               </View>
-            ) : null}
+            ) : (
+              <View testID="technique-trends-empty">
+                <SectionTitle title="Technique Trends" />
+                <View style={s.card}>
+                  <Text style={s.phaseLabel}>Record at least two clear clips from the same camera view to compare individual movements. PACED skips comparisons when event timing, pose evidence or camera-view confidence is insufficient.</Text>
+                </View>
+              </View>
+            )}
 
             <View>
               <SectionTitle title="Session History" />
