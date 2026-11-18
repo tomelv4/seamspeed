@@ -332,3 +332,54 @@ def test_synced_evidence_rebuilds_priorities_after_dropping_unanchored_fault():
 
     assert result["faults"] == []
     assert result["coaching_priorities"] == []
+
+
+def test_coaching_guidance_is_attached_only_to_exact_priorities_and_survives_evidence_reconciliation():
+    payload = valid_payload()
+    target = next(step for step in payload["steps"] if step["key"] == "front_knee_bracing")
+    target.update({"status": "fault", "coaching_classification": "fault"})
+    payload["faults"] = [{
+        "title": "Front knee fault", "phase": "front_foot", "step_key": "front_knee_bracing",
+        "severity": "medium", "description": "Visible loss of front-leg position.", "fix": "Work on a stable front leg.",
+    }]
+    payload["coaching_guidance"] = [
+        {"step_key": "front_knee_bracing", "why_it_matters": "A stable base may help transfer momentum consistently.",
+         "feel_cue": "Feel the front side firm up at contact.",
+         "drill": "Use a walk-in delivery: 3 sets of 4 controlled reps.",
+         "success_check": "The front knee position looks similar across three side-on clips."},
+        {"step_key": "run_up_acceleration", "why_it_matters": "This is not a selected priority."},
+        {"step_key": "not_a_real_step", "drill": "Ignore this."},
+    ]
+
+    result = normalise_model_payload(payload, duration=4.0)
+    assert len(result["coaching_priorities"]) == 1
+    priority = result["coaching_priorities"][0]
+    assert priority["step_key"] == "front_knee_bracing"
+    assert priority["why_it_matters"].startswith("A stable base")
+    assert priority["feel_cue"].startswith("Feel the front side")
+    assert priority["drill"].startswith("Use a walk-in")
+    assert priority["success_check"].startswith("The front knee")
+
+    result["steps"][-1]["t"] = None
+    result = reconcile_synced_evidence(result)
+    assert result["coaching_priorities"][0]["drill"].startswith("Use a walk-in")
+
+
+def test_coaching_guidance_is_removed_when_its_priority_loses_timestamped_evidence():
+    payload = valid_payload()
+    target = next(step for step in payload["steps"] if step["key"] == "front_knee_bracing")
+    target.update({"status": "fault", "coaching_classification": "fault"})
+    payload["faults"] = [{
+        "title": "Front knee fault", "phase": "front_foot", "step_key": "front_knee_bracing",
+        "severity": "high", "description": "Visible issue.", "fix": "Improve control.",
+    }]
+    payload["coaching_guidance"] = [{
+        "step_key": "front_knee_bracing", "drill": "A drill that must disappear."
+    }]
+    result = normalise_model_payload(payload, duration=4.0)
+    target_result = next(step for step in result["steps"] if step["key"] == "front_knee_bracing")
+    target_result["t"] = None
+
+    result = reconcile_synced_evidence(result)
+
+    assert result["coaching_priorities"] == []
