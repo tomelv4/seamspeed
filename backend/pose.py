@@ -200,17 +200,27 @@ def _subject_selection_confidence(tracks, selected, diag) -> dict:
     return {"confidence": confidence, "competing_tracks": competitors}
 
 
-def _smooth(kps, scs):
-    """Confidence-weighted 3-frame smoothing that keeps fast arm motion intact."""
+def _smooth(kps, scs, observed=None):
+    """Smooth display jitter only across three consecutive observed poses and confident joints."""
     out = kps.copy()
     n = len(kps)
+    observed = np.ones(n, dtype=bool) if observed is None else np.asarray(observed, dtype=bool)
     for i in range(1, n - 1):
+        # Never blend across missing/interpolated frames: doing so pulls visible joints
+        # toward zero-filled coordinates or invents a path through an occlusion.
+        if not (observed[i - 1] and observed[i] and observed[i + 1]):
+            continue
+        confident = (scs[i - 1] >= 0.25) & (scs[i] >= 0.25) & (scs[i + 1] >= 0.25)
+        if not np.any(confident):
+            continue
         w = np.stack([scs[i - 1], scs[i] * 2, scs[i + 1]])[..., None]
         blend = (np.stack([kps[i - 1], kps[i], kps[i + 1]]) * w).sum(0) / np.maximum(w.sum(0), 1e-6)
         jump = np.linalg.norm(kps[i + 1] - kps[i - 1], axis=1, keepdims=True)
-        # only smooth where motion is small (jitter), keep large motion (the bowling arm) raw
+        # only smooth small motion (jitter); preserve fast bowling-arm movement
         alpha = np.clip(1 - jump / 40.0, 0, 1) * 0.6
-        out[i] = kps[i] * (1 - alpha) + blend * alpha
+        alpha = alpha[:, 0] * confident
+        out[i, confident] = (kps[i, confident] * (1 - alpha[confident, None]) +
+                             blend[confident] * alpha[confident, None])
     return out
 
 def _serialise_pose_keypoints(raw, display, scores, width, height):
@@ -302,7 +312,7 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dic
         # Biomechanics and event detection use unsmoothed detector/interpolated coordinates.
         # The smoothed copy is provided only to the video skeleton overlay.
         raw_kps = kps.copy()
-        display_kps = _smooth(kps, scs)
+        display_kps = _smooth(kps, scs, observed=observed)
         for fi in range(n):
             if have[fi] and scs[fi].mean() >= 0.25:
                 frames[fi].update(_serialise_pose_keypoints(raw_kps[fi], display_kps[fi], scs[fi], sw, sh))
