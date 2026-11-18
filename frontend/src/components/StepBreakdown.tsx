@@ -41,6 +41,10 @@ export function StepCard({ step, index }: { step: Step; index: number }) {
         {step.evidence_level === "pose_estimate" ? "2D POSE ESTIMATE" :
           step.evidence_level === "visual_assessment" ? "AI VISUAL ASSESSMENT" : "INSUFFICIENT EVIDENCE"}
       </Text>
+      <Text style={s.evidence}>
+        EVENT TIMING: {(step.timing_confidence ?? "unavailable").replaceAll("_", " ").toUpperCase()}
+        {step.timing_method ? ` · ${step.timing_method.replaceAll("_", " ")}` : ""}
+      </Text>
       <Text style={s.desc}>{step.description}</Text>
       {step.ideal ? (
         <View style={s.ideal} testID="selected-step-ideal">
