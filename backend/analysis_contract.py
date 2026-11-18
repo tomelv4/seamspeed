@@ -270,7 +270,8 @@ def build_recurring_fault_history(analyses: list[dict[str, Any]], limit: int = 6
                     or step.get("evidence_level") == "insufficient"):
                 continue
             seen_in_analysis.add(key)
-            item = grouped.setdefault(key, {
+            group_key = f"{key}:{view}"
+            item = grouped.setdefault(group_key, {
                 "step_key": key,
                 "title": step.get("name") or fault.get("title") or key.replace("_", " ").title(),
                 "count": 0,
