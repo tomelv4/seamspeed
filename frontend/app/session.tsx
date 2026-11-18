@@ -3,7 +3,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Linking, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -45,6 +45,10 @@ export default function LiveSession() {
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>("warm_up");
+  const [showCompletion, setShowCompletion] = useState(false);
+  const [activityLog, setActivityLog] = useState<Record<number, { completed: boolean; sets: string; reps: string }>>({});
+  const [overallFeeling, setOverallFeeling] = useState<"fresh" | "normal" | "tired" | "rough" | null>(null);
+  const [completionNotes, setCompletionNotes] = useState("");
   const canRecord = Platform.OS !== "web";
 
   useFocusEffect(useCallback(() => () => stopCoach(), []));
@@ -69,6 +73,10 @@ export default function LiveSession() {
       const sess = await apiSend<CoachSession>("/sessions", "POST", { focus, local_day: todayName });
       setSession(sess);
       setBalls([]);
+      setActivityLog({});
+      setOverallFeeling(null);
+      setCompletionNotes("");
+      setShowCompletion(false);
       setMessage({ text: sess.intro, audio: sess.intro_audio });
       setStage("preparation");
       say(sess.intro_audio);
@@ -130,7 +138,24 @@ export default function LiveSession() {
     stopCoach();
     setBusy("ending");
     try {
-      const done = await apiSend<CoachSession>(`/sessions/${session.id}/end`, "POST");
+      const activities = session.plan?.activities ?? [];
+      const completion = nonBowlingMode ? {
+        activities: activities.map((item, index) => {
+          const logged = activityLog[index] ?? { completed: false, sets: "", reps: "" };
+          const sets = logged.sets.trim() ? Number(logged.sets) : null;
+          return {
+            name: item.name,
+            completed: logged.completed,
+            ...(plan.session_mode === "gym" ? {
+              actual_sets: sets !== null && Number.isFinite(sets) ? Math.max(0, Math.min(20, Math.round(sets))) : null,
+              actual_reps: logged.reps.trim() || null,
+            } : {}),
+          };
+        }),
+        overall_feeling: overallFeeling,
+        notes: completionNotes.trim(),
+      } : undefined;
+      const done = await apiSend<CoachSession>(`/sessions/${session.id}/end`, "POST", completion);
       setSession(done);
       setMessage({ text: done.summary, audio: done.summary_audio });
       say(done.summary_audio);
@@ -272,8 +297,44 @@ export default function LiveSession() {
             {!ended && stage === "drills" ? (
               <PlanStage stageKey="drills" title={nonBowlingMode ? (plan.session_mode === "gym" ? "Strength & Conditioning" : "Recovery Activities") : "Technique Drills"} subtitle={nonBowlingMode ? (session.scheduled_session?.details ?? "Follow today's saved programme at a controlled, comfortable effort.") : `Targeting today's focus: ${session.focus}.`} items={nonBowlingMode ? (plan.activities ?? []) : (plan.drills ?? [])} nextLabel={nonBowlingMode ? "Start cool-down" : "Start bowling block"} onNext={() => advance(nonBowlingMode ? "cool_down" : "bowling")} />
             ) : null}
-            {!ended && stage === "cool_down" ? (
-              <PlanStage stageKey="cool_down" title="Cool-down" subtitle="Bring the heart rate down and restore range of motion." items={plan.cool_down ?? []} nextLabel="Finish session" onNext={end} />
+            {!ended && stage === "cool_down" && (!nonBowlingMode || !showCompletion) ? (
+              <PlanStage stageKey="cool_down" title="Cool-down" subtitle="Bring the heart rate down and restore range of motion." items={plan.cool_down ?? []} nextLabel={nonBowlingMode ? "Log session completion" : "Finish session"} onNext={nonBowlingMode ? () => setShowCompletion(true) : end} />
+            ) : null}
+            {!ended && stage === "cool_down" && nonBowlingMode && showCompletion ? (
+              <View style={s.coachCard} testID="session-completion-log">
+                <Text style={s.label}>WHAT YOU ACTUALLY COMPLETED</Text>
+                <Text style={s.coachText}>Tick each activity you completed. For gym work, add the sets and reps you actually performed — planned numbers are not assumed.</Text>
+                {(plan.activities ?? []).map((item, index) => {
+                  const logged = activityLog[index] ?? { completed: false, sets: "", reps: "" };
+                  return (
+                    <View key={index} style={{ gap: 8, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
+                      <Pressable testID={`session-completion-activity-${index}`} onPress={() => setActivityLog((prev) => ({ ...prev, [index]: { ...logged, completed: !logged.completed } }))} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        <View style={{ width: 25, height: 25, borderRadius: 7, borderWidth: 1.5, borderColor: logged.completed ? colors.accent : colors.border, backgroundColor: logged.completed ? colors.accent : "transparent", alignItems: "center", justifyContent: "center" }}>
+                          {logged.completed ? <Ionicons name="checkmark" size={16} color={colors.onBrandPrimary} /> : null}
+                        </View>
+                        <Text style={[s.coachText, { flex: 1, fontWeight: "600" }]}>{item.name}</Text>
+                        {item.reps || item.minutes ? <Text style={s.ballBody}>{item.reps ?? `${item.minutes} min`}</Text> : null}
+                      </Pressable>
+                      {plan.session_mode === "gym" && logged.completed ? (
+                        <View style={{ flexDirection: "row", gap: 8, paddingLeft: 35 }}>
+                          <TextInput testID={`session-actual-sets-${index}`} value={logged.sets} onChangeText={(sets) => setActivityLog((prev) => ({ ...prev, [index]: { ...logged, sets } }))} placeholder="Actual sets" placeholderTextColor={colors.muted} keyboardType="number-pad" style={{ flex: 1, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 10 }} />
+                          <TextInput testID={`session-actual-reps-${index}`} value={logged.reps} onChangeText={(reps) => setActivityLog((prev) => ({ ...prev, [index]: { ...logged, reps } }))} placeholder="Actual reps" placeholderTextColor={colors.muted} style={{ flex: 1, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 10 }} />
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+                <Text style={s.label}>HOW DID THE SESSION FEEL?</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {(["fresh", "normal", "tired", "rough"] as const).map((feeling) => (
+                    <Pressable key={feeling} testID={`session-feeling-${feeling}`} onPress={() => setOverallFeeling(feeling)} style={{ paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: overallFeeling === feeling ? colors.accent : colors.border, backgroundColor: overallFeeling === feeling ? colors.surface : "transparent" }}>
+                      <Text style={{ color: overallFeeling === feeling ? colors.accent : colors.onSurface, textTransform: "capitalize", fontSize: 13 }}>{feeling}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <TextInput testID="session-completion-notes" value={completionNotes} onChangeText={setCompletionNotes} placeholder="Optional notes — what changed or how it felt" placeholderTextColor={colors.muted} multiline maxLength={500} style={{ minHeight: 76, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 12, textAlignVertical: "top" }} />
+                <PrimaryButton testID="session-save-completion" label="Save session" icon="checkmark" loading={busy === "ending"} onPress={end} />
+              </View>
             ) : null}
             {!ended && isBowl ? (
               <View style={s.blockCard} testID={`session-block-${stage}`}>
