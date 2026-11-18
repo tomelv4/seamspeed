@@ -539,6 +539,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         "video": video_quality,
         "event_methods": (ev or {}).get("event_methods", {}),
         "joint_confidence": (ev or {}).get("joint_confidence", {}),
+        "contact_evidence": (pose_ev or {}).get("contact_evidence", {}),
         "release_evidence": release_evidence,
         "limitations": [
             "Single-camera 2D pose estimates cannot establish 3D joint loading or rotation.",
