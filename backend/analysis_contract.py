@@ -241,7 +241,10 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
             continue
         requested_step = fault.get("step_key")
         valid_step_keys = {step["key"] for step in phase_steps}
-        step_key = requested_step if requested_step in valid_step_keys else phase_steps[0]["key"]
+        # Never silently attach a fault to an arbitrary step in the same phase.
+        if requested_step not in valid_step_keys:
+            continue
+        step_key = requested_step
         fix = fault.get("fix") if isinstance(fault.get("fix"), str) else ""
         faults.append({
             "title": title.strip(), "phase": phase, "step_key": step_key, "severity": severity,
