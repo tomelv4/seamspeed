@@ -271,6 +271,30 @@ export default function Report() {
                             <Text style={[s.body, { flex: 1, color: colors.onSurface }]}>{item.action}</Text>
                           </View>
                         ) : null}
+                        {item.why_it_matters ? (
+                          <View style={{ gap: 3, paddingTop: 4 }}>
+                            <Text style={s.faultPhase}>WHY IT MATTERS</Text>
+                            <Text style={s.body}>{item.why_it_matters}</Text>
+                          </View>
+                        ) : null}
+                        {item.feel_cue ? (
+                          <View style={{ gap: 3, paddingTop: 4 }}>
+                            <Text style={s.faultPhase}>WHAT TO FEEL</Text>
+                            <Text style={s.body}>{item.feel_cue}</Text>
+                          </View>
+                        ) : null}
+                        {item.drill ? (
+                          <View style={{ gap: 3, paddingTop: 4 }}>
+                            <Text style={s.faultPhase}>PRACTISE IT</Text>
+                            <Text style={s.body}>{item.drill}</Text>
+                          </View>
+                        ) : null}
+                        {item.success_check ? (
+                          <View style={{ gap: 3, paddingTop: 4 }}>
+                            <Text style={s.faultPhase}>CHECK YOUR NEXT VIDEO</Text>
+                            <Text style={s.body}>{item.success_check}</Text>
+                          </View>
+                        ) : null}
                       </PressScale>
                     ))}
                   </View>
