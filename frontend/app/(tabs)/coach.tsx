@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, TextInput, Vi
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { apiGet, apiSend, CoachMessage, streamCoach, useDrillPracticeHistory, useWorkload } from "@/src/api";
+import { apiGet, apiSend, CoachMessage, streamCoach, useDrillPracticeHistory, useWorkload, useWeeklyProgramme } from "@/src/api";
 import { fonts, radius, space } from "@/src/constants";
 import { ErrorBanner, Ionicons, PressScale, PrimaryButton } from "@/src/components/ui";
 import { ProLocked } from "@/src/components/ProLocked";
@@ -30,6 +30,7 @@ export default function Coach() {
   const history = useQuery({ queryKey: ["coach"], queryFn: () => apiGet<CoachMessage[]>("/coach/messages") });
   const practice = useDrillPracticeHistory();
   const workload = useWorkload();
+  const weeklyProgramme = useWeeklyProgramme();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -125,6 +126,14 @@ export default function Coach() {
                     <Text style={s.practiceHint}>balls · 7 days</Text>
                   </View>
                 </View>
+                <PressScale testID="coach-open-programme" style={s.hubAction} onPress={() => router.push("/programme")}>
+                  <View style={s.hubActionIcon}><Ionicons name="calendar" size={17} color={colors.accent} /></View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={s.hubActionTitle}>{weeklyProgramme.data?.programme?.title ?? "Create your weekly programme"}</Text>
+                    <Text style={s.hubActionBody}>{weeklyProgramme.data?.programme ? "Saved weekly schedule · tap to review or adjust" : "Schedule bowling, gym, skill work, matches and rest"}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+                </PressScale>
                 <PressScale testID="coach-start-session" style={s.hubAction} onPress={() => router.push("/session")}>
                   <View style={s.hubActionIcon}><Ionicons name="play" size={17} color={colors.accent} /></View>
                   <View style={{ flex: 1, gap: 2 }}>
