@@ -915,6 +915,7 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
     comparable_trends = _step_progress_trends([Analysis.from_mongo(item) for item in recent])
     trend_by_step = {item["step_key"]: item for item in comparable_trends}
     training_load = await workload_summary(x_device_id, profile)
+    saved_programme = await db.coach_programmes.find_one({"device_id": x_device_id}, {"_id": 0, "device_id": 0})
     recent_sessions = await db.sessions.find({"device_id": x_device_id}).sort("created_at", -1).limit(5).to_list(5)
     training_sessions = [{
         "date": item.get("created_at", "")[:10],
@@ -960,7 +961,7 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
         "Distinguish a full training session from a short technical practice and include rest days / low-load "
         "days in longer plans. Never claim a session was logged unless the app recorded it. "
         f"Recent prescribed-drill practice log: {json.dumps(practice_context)}. "
-        f"Recent bowling workload: {json.dumps(training_load)}. Recent structured training sessions: {json.dumps(training_sessions)}. "
+        f"Recent bowling workload: {json.dumps(training_load)}. Saved weekly programme: {json.dumps(saved_programme) if saved_programme else 'No saved programme yet'}. Recent structured training sessions: {json.dumps(training_sessions)}. "
         "Use this history when advising session intensity, recovery gaps and whether today should be a bowling, low-load or recovery day. "
         "Do not infer readiness from workload numbers alone: ask how the bowler feels today. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. "
