@@ -62,6 +62,63 @@ def parse_model_json(raw: str) -> dict:
     return payload
 
 
+
+def reconcile_synced_evidence(payload: dict) -> dict:
+    """Remove coaching judgements whose exact movement frame could not be anchored."""
+    steps = payload.get("steps") if isinstance(payload.get("steps"), list) else []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        if step.get("status") != "not_visible" and step.get("t") is None:
+            step["status"] = "not_visible"
+            step["score"] = 0.0
+            step["observation"] = "The relevant movement moment could not be located reliably in the video."
+            step["cue"] = ""
+            step["evidence_level"] = "insufficient"
+
+    phases = payload.get("phases") if isinstance(payload.get("phases"), list) else []
+    assessable_phase_count = 0
+    for phase in phases:
+        if not isinstance(phase, dict):
+            continue
+        phase_steps = [
+            step for step in steps
+            if isinstance(step, dict) and step.get("phase") == phase.get("key")
+            and step.get("status") != "not_visible" and step.get("t") is not None
+        ]
+        phase["assessable"] = bool(phase_steps)
+        phase["score"] = round(
+            sum(float(step.get("score", 0)) for step in phase_steps) / len(phase_steps), 1
+        ) if phase_steps else 0.0
+        if phase_steps:
+            assessable_phase_count += 1
+        elif phase.get("feedback") and phase.get("feedback") != "Not enough clear visual evidence to assess this phase.":
+            phase["feedback"] = "Not enough timestamped visual evidence to assess this phase."
+
+    assessable_steps = [
+        step for step in steps
+        if isinstance(step, dict) and step.get("status") != "not_visible" and step.get("t") is not None
+    ]
+    overall_assessable = len(assessable_steps) >= 10 and assessable_phase_count >= 4
+    payload["overall_score_assessable"] = overall_assessable
+    payload["overall_score"] = (
+        round(sum(phase["score"] for phase in phases if isinstance(phase, dict) and phase.get("assessable"))
+              / assessable_phase_count, 1)
+        if overall_assessable else 0.0
+    )
+
+    assessable_fault_steps = {
+        step["key"]: step for step in assessable_steps if step.get("status") == "fault"
+    }
+    payload["faults"] = [
+        fault for fault in (payload.get("faults") or [])
+        if isinstance(fault, dict)
+        and fault.get("step_key") in assessable_fault_steps
+        and assessable_fault_steps[fault["step_key"]].get("phase") == fault.get("phase")
+    ]
+    payload["score_method"] = "equal_weight_mean_of_timestamped_assessable_phase_step_scores"
+    return payload
+
 def normalise_model_payload(payload: dict, duration: float | None = None) -> dict:
     """Validate model fields, clamp numeric ranges and make missing evidence explicit."""
     if not isinstance(payload, dict):
