@@ -44,10 +44,12 @@ function interpolate(frames: PoseData["frames"], t: number): number[][] | null {
     if (frames[mid].t <= t) lo = mid; else hi = mid - 1;
   }
   const a = frames[lo], b = frames[lo + 1];
-  if (!a.k) return b?.k && b.t - t < 0.1 ? b.k : null;
-  if (!b || !b.k || b.t === a.t) return t - a.t < 0.2 ? a.k : null;
+  const ak = a.display_k ?? a.k;
+  const bk = b ? (b.display_k ?? b.k) : null;
+  if (!ak) return bk && b && b.t - t < 0.1 ? bk : null;
+  if (!b || !bk || b.t === a.t) return t - a.t < 0.2 ? ak : null;
   const r = Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t)));
-  return a.k.map((p, i) => [p[0] + (b.k![i][0] - p[0]) * r, p[1] + (b.k![i][1] - p[1]) * r, Math.min(p[2], b.k![i][2])]);
+  return ak.map((p, i) => [p[0] + (bk[i][0] - p[0]) * r, p[1] + (bk[i][1] - p[1]) * r, Math.min(p[2], bk[i][2])]);
 }
 
 function PlayerInner({ analysisId, meta, steps, pose, bowlingArm, selected, seekNonce, onSelect, deviceId, compact }: Props & { deviceId: string }) {
