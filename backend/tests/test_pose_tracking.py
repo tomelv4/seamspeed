@@ -49,3 +49,26 @@ def test_subject_selection_counts_tracks_with_shared_observed_frames():
     result = pose._subject_selection_confidence([selected, competitor], selected, 200.0)
     assert result["competing_tracks"] == 1
     assert result["confidence"] == "low"
+
+
+
+def test_pose_serialisation_keeps_raw_measurements_separate_from_smoothed_display():
+    raw = np.array([[10.0, 20.0], [30.0, 40.0]], dtype=float)
+    display = np.array([[12.0, 18.0], [32.0, 38.0]], dtype=float)
+    scores = np.array([0.9, 0.8], dtype=float)
+
+    frame = pose._serialise_pose_keypoints(raw, display, scores, 100, 200)
+
+    assert frame["k"] == [[0.1, 0.1, 0.9], [0.3, 0.2, 0.8]]
+    assert frame["display_k"] == [[0.12, 0.09, 0.9], [0.32, 0.19, 0.8]]
+    assert frame["k"] != frame["display_k"]
+
+
+def test_pose_serialisation_does_not_mutate_raw_coordinates():
+    raw = np.array([[10.0, 20.0]], dtype=float)
+    original = raw.copy()
+    display = np.array([[15.0, 25.0]], dtype=float)
+
+    pose._serialise_pose_keypoints(raw, display, np.array([0.9]), 100, 100)
+
+    np.testing.assert_array_equal(raw, original)
