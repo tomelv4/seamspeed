@@ -6,6 +6,11 @@ import { Pill, SectionTitle, scoreColor } from "@/src/components/ui";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const STATUS_LABEL: Record<string, string> = { good: "Good", ok: "Work on", fault: "Fault", not_visible: "Not visible" };
+const COACHING_LABEL: Record<string, string> = {
+  fault: "TECHNICAL FAULT",
+  opportunity: "OPTIONAL IMPROVEMENT",
+  effective_variation: "EFFECTIVE VARIATION",
+};
 const METRIC_LABEL: Record<string, [string, string]> = {
   front_knee: ["Front knee", "°"], back_knee: ["Back knee", "°"], bowling_elbow: ["Bowling elbow", "°"], trunk_lean: ["Trunk lean", "°"],
   back_knee_min: ["Back knee min", "°"], knee_flex_after_bfc: ["Knee flex after BFC", "°"], stride_pct_height: ["Projected stride (2D)", "% height"],
@@ -37,6 +42,11 @@ export function StepCard({ step, index }: { step: Step; index: number }) {
         {step.status !== "not_visible" ? <Text style={[s.score, { color: scoreColor(step.score, colors) }]}>{Number(step.score).toFixed(0)}</Text> : null}
       </View>
       <Pill label={STATUS_LABEL[step.status] ?? step.status} color={statusColor(step.status)} />
+      {step.coaching_classification && step.coaching_classification !== "none" ? (
+        <Text style={s.classification} testID="step-coaching-classification">
+          {COACHING_LABEL[step.coaching_classification] ?? "COACHING NOTE"}
+        </Text>
+      ) : null}
       <Text style={s.evidence}>
         {step.evidence_level === "pose_estimate" ? "2D POSE ESTIMATE" :
           step.evidence_level === "visual_assessment" ? "AI VISUAL ASSESSMENT" : "INSUFFICIENT EVIDENCE"}
@@ -111,6 +121,7 @@ const useStyles = makeStyles((c) => ({
   name: { fontFamily: fonts.display, fontSize: 22, color: c.onSurface, textTransform: "uppercase" },
   meta: { fontFamily: fonts.text, fontSize: 12, color: c.muted },
   score: { fontFamily: fonts.display, fontSize: 36 },
+  classification: { fontFamily: fonts.textXBold, fontSize: 10, letterSpacing: 1, color: c.accent },
   evidence: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 0.8, color: c.muted },
   desc: { fontFamily: fonts.text, fontSize: 13, lineHeight: 19, color: c.muted, fontStyle: "italic" },
   body: { fontFamily: fonts.text, fontSize: 14, lineHeight: 21, color: c.onSurfaceSecondary },
