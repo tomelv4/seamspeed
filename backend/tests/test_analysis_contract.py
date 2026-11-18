@@ -206,3 +206,57 @@ def test_synced_evidence_gate_requires_fault_to_match_timestamped_fault_step():
 
     assert target_result["status"] == "not_visible"
     assert result["faults"] == []
+
+
+def test_coaching_classification_separates_fault_opportunity_and_effective_variation():
+    payload = valid_payload()
+    by_key = {step["key"]: step for step in payload["steps"]}
+    by_key["run_up_acceleration"].update({
+        "status": "fault", "coaching_classification": "fault",
+        "observation": "Visible loss of rhythm through the final strides.",
+    })
+    by_key["run_up_posture"].update({
+        "status": "ok", "coaching_classification": "opportunity",
+        "observation": "A small posture adjustment may improve consistency.",
+    })
+    by_key["run_up_stride_pattern"].update({
+        "status": "ok", "coaching_classification": "effective_variation",
+        "observation": "A compact stride pattern remains controlled and repeatable.",
+    })
+
+    result = normalise_model_payload(payload, duration=4.0)
+    steps = {step["key"]: step for step in result["steps"]}
+
+    assert steps["run_up_acceleration"]["status"] == "fault"
+    assert steps["run_up_acceleration"]["coaching_classification"] == "fault"
+    assert steps["run_up_posture"]["coaching_classification"] == "opportunity"
+    assert steps["run_up_stride_pattern"]["coaching_classification"] == "effective_variation"
+
+
+def test_fault_status_cannot_conflict_with_opportunity_or_effective_variation():
+    payload = valid_payload()
+    by_key = {step["key"]: step for step in payload["steps"]}
+    by_key["run_up_acceleration"].update({
+        "status": "fault", "coaching_classification": "effective_variation",
+        "observation": "A different but controlled movement pattern.",
+    })
+
+    result = normalise_model_payload(payload, duration=4.0)
+    step = next(step for step in result["steps"] if step["key"] == "run_up_acceleration")
+
+    assert step["status"] == "ok"
+    assert step["coaching_classification"] == "effective_variation"
+
+
+def test_unassessable_step_cannot_keep_a_coaching_classification():
+    payload = valid_payload()
+    by_key = {step["key"]: step for step in payload["steps"]}
+    by_key["run_up_acceleration"].update({
+        "status": "not_visible", "t": None, "coaching_classification": "fault",
+    })
+
+    result = normalise_model_payload(payload, duration=4.0)
+    step = next(step for step in result["steps"] if step["key"] == "run_up_acceleration")
+
+    assert step["status"] == "not_visible"
+    assert step["coaching_classification"] == "none"
