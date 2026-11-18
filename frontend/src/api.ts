@@ -190,6 +190,20 @@ export const useAnalysis = (id: string) =>
   useQuery({ queryKey: ["analysis", id], queryFn: () => apiGet<Analysis>(`/analyses/${id}`), enabled: !!id });
 export const useDrills = () => useQuery({ queryKey: ["drills"], queryFn: () => apiGet<Drill[]>("/drills") });
 export const useProgress = () => useQuery({ queryKey: ["progress"], queryFn: () => apiGet<Progress>("/progress") });
+export type WeeklyProgramme = {
+  title: string;
+  rationale: string;
+  days: { day: string; type: "bowling" | "gym" | "skill" | "match" | "recovery" | "rest"; title: string; focus: string; details: string; intensity: string }[];
+  constraints: { bowling_days: number; gym_days: number; skill_days: number; match_days: number; unavailable_days: string[]; notes: string };
+  workload_at_generation: { status: "low" | "medium" | "high"; headline: string; acute: number };
+  created_at: string;
+};
+export type WeeklyProgrammeResponse = { programme: WeeklyProgramme | null };
+export const useWeeklyProgramme = () => useQuery({
+  queryKey: ["coach-programme"],
+  queryFn: () => apiGet<WeeklyProgrammeResponse>("/coach/programme"),
+});
+
 export const useDrillPracticeHistory = () => useQuery({ queryKey: ["coach-drill-history"], queryFn: () => apiGet<DrillPracticeHistory>("/coach/drills/history") });
 export const useProfile = () => useQuery({ queryKey: ["profile"], queryFn: () => apiGet<Profile>("/profile") });
 
