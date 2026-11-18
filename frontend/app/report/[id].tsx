@@ -283,10 +283,12 @@ export default function Report() {
                             <Text style={s.body}>{item.feel_cue}</Text>
                           </View>
                         ) : null}
-                        {item.drill ? (
-                          <View style={{ gap: 3, paddingTop: 4 }}>
-                            <Text style={s.faultPhase}>PRACTISE IT</Text>
-                            <Text style={s.body}>{item.drill}</Text>
+                        {item.drill_name ? (
+                          <View style={{ gap: 5, paddingTop: 5 }}>
+                            <Text style={s.faultPhase}>TARGETED DRILL · {item.drill_name.toUpperCase()}</Text>
+                            {item.drill_setup ? <Text style={s.body}>Setup: {item.drill_setup}</Text> : null}
+                            {item.drill_action ? <Text style={s.body}>Do: {item.drill_action}</Text> : null}
+                            {item.drill_dose ? <Text style={s.body}>Dose: {item.drill_dose}</Text> : null}
                           </View>
                         ) : null}
                         {item.success_check ? (
