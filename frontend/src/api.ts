@@ -177,7 +177,7 @@ export type Step = {
   metrics: Record<string, number>;
   evidence_level?: "pose_estimate" | "visual_assessment" | "insufficient";
 };
-export type PoseData = { width: number; height: number; frames: { t: number; k: number[][] | null }[] };
+export type PoseData = { width: number; height: number; frames: { t: number; k: number[][] | null; display_k?: number[][] | null }[] };
 export type Ball = {
   n: number; created_at: string; is_bowling: boolean; score: number; pace_kmh?: number | null; hit_target?: boolean;
   good: string; fault: string; phase: string; observation: string; feedback: string; next_target: string; audio: string; block?: "bowling" | "test";
