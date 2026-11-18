@@ -378,7 +378,14 @@ def merge_events(pose_ev, ai_steps, duration):
                         ("bfc", "bfc"), ("take_off", "take_off")):
         pose_time = _valid_event_time(pose_ev.get(key), limit)
         ai_time = ai.get(ai_key)
-        if pose_time is not None:
+        # A wrist-height apex is only a proxy for release. If the vision model
+        # supplies a separate ball-release timestamp, prefer that estimate over
+        # the proxy; keep pose-first precedence for actual contact detections.
+        if (key == "release" and pose_time is not None
+                and pose_methods.get(key) == "wrist_apex_proxy" and ai_time is not None):
+            ev[key], sources[key] = ai_time, "ai"
+            methods[key], confidences[key] = "ai_visual_estimate", None
+        elif pose_time is not None:
             ev[key], sources[key] = pose_time, "skeleton"
             methods[key] = pose_methods.get(key, "pose_heuristic")
             confidences[key] = float(pose_confidence.get(key, 0.0))
