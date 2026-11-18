@@ -52,6 +52,32 @@ def test_subject_selection_counts_tracks_with_shared_observed_frames():
 
 
 
+def test_joint_visibility_is_reported_independently_for_each_joint():
+    scores = np.full((3, 17), 0.9, dtype=float)
+    scores[:, 9] = [0.9, 0.1, 0.1]  # left wrist mostly obscured
+    scores[1, 15] = 0.0  # one missing left ankle observation
+    observed = np.array([True, True, False])
+
+    summary = pose._joint_visibility_summary(scores, observed)
+
+    assert summary["left_wrist"] == {
+        "observed_frames": 2, "visible_frames": 1,
+        "coverage": 0.5, "mean_confidence": 0.5,
+    }
+    assert summary["left_knee"]["coverage"] == 1.0
+    assert summary["left_ankle"]["coverage"] == 0.5
+    assert summary["left_knee"]["observed_frames"] == 2
+
+
+def test_joint_visibility_handles_no_observed_frames():
+    summary = pose._joint_visibility_summary(np.zeros((2, 17)), np.array([False, False]))
+
+    assert summary["right_wrist"] == {
+        "observed_frames": 0, "visible_frames": 0,
+        "coverage": 0.0, "mean_confidence": 0.0,
+    }
+
+
 def test_pose_serialisation_keeps_raw_measurements_separate_from_smoothed_display():
     raw = np.array([[10.0, 20.0], [30.0, 40.0]], dtype=float)
     display = np.array([[12.0, 18.0], [32.0, 38.0]], dtype=float)
