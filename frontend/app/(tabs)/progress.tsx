@@ -191,6 +191,34 @@ export default function ProgressScreen() {
               </View>
             ) : null}
 
+            {(p.top_faults.length > 0 || (p.step_trends ?? []).some((trend) => trend.direction === "declined")) ? (
+              <View testID="development-review-priorities">
+                <SectionTitle title="What to Review Next" />
+                <View style={s.card}>
+                  {p.top_faults.slice(0, 2).map((fault, index) => (
+                    <View key={"fault-" + fault.step_key + "-" + (fault.camera_view ?? "unknown")} style={[s.reviewRow, index > 0 && s.divider]}>
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Text style={s.faultTitle}>{fault.title}</Text>
+                        <Text style={s.developmentSubtext}>Observed in {fault.count} comparable analysis{fault.count === 1 ? "" : "es"} · last seen {fault.last_seen ? new Date(fault.last_seen).toLocaleDateString() : "date unavailable"}</Text>
+                      </View>
+                      <Text style={s.reviewLabel}>REVIEW</Text>
+                    </View>
+                  ))}
+                  {(p.step_trends ?? []).filter((trend) => trend.direction === "declined").slice(0, 2).map((trend, index) => (
+                    <Pressable key={"decline-" + trend.step_key} onPress={() => router.push("/report/" + trend.current_analysis_id)} style={[s.reviewRow, (p.top_faults.length > 0 || index > 0) && s.divider]}>
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Text style={s.faultTitle}>{trend.name}</Text>
+                        <Text style={s.developmentSubtext}>Comparable score moved {trend.delta.toFixed(1)} · {trend.camera_view.replace("_", " ")} view</Text>
+                      </View>
+                      <Text style={[s.reviewLabel, { color: colors.warning }]}>RECHECK</Text>
+                      <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+                    </Pressable>
+                  ))}
+                  <Text style={s.developmentDisclaimer}>These are prompts to review the footage, not automatic diagnoses or instructions to change technique. Confirm adjustments with a qualified coach.</Text>
+                </View>
+              </View>
+            ) : null}
+
             {p.step_trends?.length ? (
               <View testID="technique-trends">
                 <SectionTitle title="Technique Trends" />
@@ -204,6 +232,8 @@ export default function ProgressScreen() {
                         <View style={{ flex: 1, gap: 3 }}>
                           <Text style={s.faultTitle}>{trend.name}</Text>
                           <Text style={s.phaseLabel}>{trend.camera_view.replace("_", " ")} · {new Date(trend.previous_date).toLocaleDateString()} → {new Date(trend.current_date).toLocaleDateString()}</Text>
+                          <Text style={s.developmentSubtext}>{(trend.practice_between_count ?? 0) > 0 ? `${trend.practice_between_count} targeted practice session${trend.practice_between_count === 1 ? "" : "s"} logged between clips` : "No matching targeted practice logged between clips"}</Text>
+                          {(trend.practice_drill_names ?? []).length > 0 ? <Text style={s.developmentHint}>{trend.practice_drill_names.join(" · ")}</Text> : null}
                         </View>
                         <View style={{ alignItems: "flex-end", gap: 2 }}>
                           <Text style={[s.trendDelta, { color: tint }]}>{change}</Text>
@@ -260,6 +290,8 @@ const useStyles = makeStyles((c) => ({
   developmentSubtext: { fontFamily: fonts.text, fontSize: 12, lineHeight: 17, color: c.onSurfaceSecondary },
   activityDetail: { fontFamily: fonts.text, fontSize: 12, lineHeight: 16, color: c.onSurfaceSecondary, flex: 1 },
   developmentDisclaimer: { fontFamily: fonts.text, fontSize: 11, lineHeight: 16, color: c.muted },
+  reviewRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.sm },
+  reviewLabel: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1, color: c.accent },
   activityRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.sm },
   activityDot: { width: 8, height: 8, borderRadius: 4 },
   activityDate: { fontFamily: fonts.mono, fontSize: 11, color: c.muted },
