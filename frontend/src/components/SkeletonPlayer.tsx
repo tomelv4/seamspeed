@@ -44,10 +44,15 @@ function interpolate(frames: PoseData["frames"], t: number): number[][] | null {
     if (frames[mid].t <= t) lo = mid; else hi = mid - 1;
   }
   const a = frames[lo], b = frames[lo + 1];
-  if (!a.k) return b?.k && b.t - t < 0.1 ? b.k : null;
-  if (!b || !b.k || b.t === a.t) return t - a.t < 0.2 ? a.k : null;
+  const ak = a.display_k ?? a.k;
+  const bk = b ? (b.display_k ?? b.k) : null;
+  // The selected frame is the latest sample at or before playback time. Never
+  // borrow a future pose when this frame is missing: that draws the bowler
+  // through an occlusion or tracking dropout.
+  if (!ak) return null;
+  if (!b || !bk || b.t === a.t) return ak;
   const r = Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t)));
-  return a.k.map((p, i) => [p[0] + (b.k![i][0] - p[0]) * r, p[1] + (b.k![i][1] - p[1]) * r, Math.min(p[2], b.k![i][2])]);
+  return ak.map((p, i) => [p[0] + (bk[i][0] - p[0]) * r, p[1] + (bk[i][1] - p[1]) * r, Math.min(p[2], bk[i][2])]);
 }
 
 function PlayerInner({ analysisId, meta, steps, pose, bowlingArm, selected, seekNonce, onSelect, deviceId, compact }: Props & { deviceId: string }) {
@@ -154,13 +159,54 @@ function PlayerInner({ analysisId, meta, steps, pose, bowlingArm, selected, seek
                 </>
               ) : null}
               {EDGES.map(([a, b]) => {
-                if (kp[a][2] < 0.3 || kp[b][2] < 0.3) return null;
+                const confidence = Math.min(kp[a][2], kp[b][2]);
+                if (confidence < 0.3) return null;
                 const id = `${a}-${b}`;
                 const stroke = armEdges.includes(id) ? colors.accent : frontLegEdges.includes(id) ? colors.info : colors.onSurface;
-                return <Line key={id} x1={kp[a][0] * boxW} y1={kp[a][1] * boxH} x2={kp[b][0] * boxW} y2={kp[b][1] * boxH} stroke={stroke} strokeWidth={compact ? 2.5 : 4} strokeLinecap="round" />;
+                const uncertain = confidence < 0.6;
+                return (
+                  <Line
+                    key={id}
+                    x1={kp[a][0] * boxW}
+                    y1={kp[a][1] * boxH}
+                    x2={kp[b][0] * boxW}
+                    y2={kp[b][1] * boxH}
+                    stroke={stroke}
+                    strokeWidth={compact ? 2.5 : 4}
+                    strokeLinecap="round"
+                    strokeDasharray={uncertain ? "4 3" : undefined}
+                    opacity={uncertain ? 0.4 + confidence * 0.5 : 1}
+                  />
+                );
               })}
-              {kp.slice(5).map((p, i) => (p[2] < 0.3 ? null : <Circle key={i} cx={p[0] * boxW} cy={p[1] * boxH} r={compact ? 2 : 4} fill={colors.surface} stroke={colors.onSurface} strokeWidth={compact ? 1 : 2} />))}
-              {kp[0][2] > 0.3 ? <Circle cx={kp[0][0] * boxW} cy={kp[0][1] * boxH} r={compact ? 6 : 10} fill="none" stroke={colors.onSurface} strokeWidth={compact ? 2 : 3} /> : null}
+              {kp.slice(5).map((p, i) => {
+                if (p[2] < 0.3) return null;
+                const uncertain = p[2] < 0.6;
+                return (
+                  <Circle
+                    key={i}
+                    cx={p[0] * boxW}
+                    cy={p[1] * boxH}
+                    r={compact ? 2 : 4}
+                    fill={colors.surface}
+                    stroke={colors.onSurface}
+                    strokeWidth={compact ? 1 : 2}
+                    opacity={uncertain ? 0.4 + p[2] * 0.5 : 1}
+                  />
+                );
+              })}
+              {kp[0][2] > 0.3 ? (
+                <Circle
+                  cx={kp[0][0] * boxW}
+                  cy={kp[0][1] * boxH}
+                  r={compact ? 6 : 10}
+                  fill="none"
+                  stroke={colors.onSurface}
+                  strokeWidth={compact ? 2 : 3}
+                  strokeDasharray={kp[0][2] < 0.6 ? "4 3" : undefined}
+                  opacity={kp[0][2] < 0.6 ? 0.4 + kp[0][2] * 0.5 : 1}
+                />
+              ) : null}
               {atStep && step && !compact ? (
                 <>
                   {label(right ? 13 : 14, step.metrics.front_knee)}
@@ -216,6 +262,7 @@ function PlayerInner({ analysisId, meta, steps, pose, bowlingArm, selected, seek
         </Pressable>
       </View>
       {showPro ? <Text style={s.hint}>Dashed silver = elite reference model at {refStep ? refStep.name : "this step"}, scaled to your body.</Text> : null}
+      {pose && showSkeleton ? <Text style={s.hint}>Skeleton confidence: solid = stronger tracking · faded/dashed = lower confidence · hidden = not reliably tracked.</Text> : null}
       </>) : null}
       {!pose ? <Text style={s.hint}>Body tracking unavailable for this clip — film side-on with the full body in frame.</Text> : null}
     </View>

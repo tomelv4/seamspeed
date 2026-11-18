@@ -2,13 +2,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Linking, Text, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { uploadDelivery, useAnalyses } from "@/src/api";
+import { uploadDelivery, useAnalyses, type AnalysisProgress } from "@/src/api";
 import { useSubscription } from "@/src/revenuecat";
 import { IMAGES, fonts, radius, space } from "@/src/constants";
 import { ErrorBanner, Ionicons, PressScale, PrimaryButton } from "@/src/components/ui";
@@ -18,8 +18,7 @@ import { makeStyles, useTheme } from "@/src/theme";
 type Picked = { uri: string; name?: string; mimeType?: string; duration?: number | null; size?: number };
 type PermState = "idle" | "explain" | "blocked";
 
-const STEPS = ["Uploading clip", "Detecting run-up & gather", "Tracking front-foot contact", "Measuring release & pace", "Building your report"];
-const MAX_BYTES = 60 * 1024 * 1024;
+ const MAX_BYTES = 60 * 1024 * 1024;
 
 export default function Analyze() {
   const s = useStyles();
@@ -31,20 +30,13 @@ export default function Analyze() {
   const [video, setVideo] = useState<Picked | null>(null);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState(0);
+  const [progress, setProgress] = useState<AnalysisProgress>({ stage: "uploading", percent: 0, message: "Uploading your video" });
   const [error, setError] = useState<string | null>(null);
   const [perm, setPerm] = useState<PermState>("idle");
   const { isSubscribed, isLoading: subLoading } = useSubscription();
   const analyses = useAnalyses();
   const freeUsed = !subLoading && !isSubscribed && (analyses.data ?? []).filter((x) => x.is_bowling_video).length >= 1;
   const gate = (fn: () => void) => (subLoading || analyses.isLoading ? undefined : freeUsed ? router.push("/paywall") : fn());
-
-  useEffect(() => {
-    if (!busy) return;
-    setStep(0);
-    const t = setInterval(() => setStep((v) => Math.min(v + 1, STEPS.length - 1)), 40000);
-    return () => clearInterval(t);
-  }, [busy]);
 
   const accept = (res: ImagePicker.ImagePickerResult) => {
     if (res.canceled || !res.assets?.[0]) return;
@@ -85,8 +77,9 @@ export default function Analyze() {
     if (freeUsed) return router.push("/paywall");
     setBusy(true);
     setError(null);
+    setProgress({ stage: "uploading", percent: 0, message: "Uploading your video" });
     try {
-      const result = await uploadDelivery(video, notes.trim());
+      const result = await uploadDelivery(video, notes.trim(), setProgress);
       qc.invalidateQueries();
       setVideo(null);
       setNotes("");
@@ -109,17 +102,11 @@ export default function Analyze() {
         {busy ? (
           <Animated.View entering={FadeIn} style={s.busyCard} testID="analysis-progress">
             <Text style={s.busyTitle}>Analyzing delivery…</Text>
-            <Text style={s.busyBody}>Tracking the bowler and running a full Pro AI review. This usually takes 2-4 minutes - keep the app open.</Text>
-            {STEPS.map((label, i) => (
-              <View key={label} style={s.stepRow}>
-                <Ionicons
-                  name={i < step ? "checkmark-circle" : i === step ? "ellipse" : "ellipse-outline"}
-                  size={20}
-                  color={i <= step ? colors.accent : colors.borderStrong}
-                />
-                <Text style={[s.stepText, i <= step && { color: colors.onSurface }]}>{label}</Text>
-              </View>
-            ))}
+            <Text style={s.busyBody}>{progress.message ?? "Processing your bowling video"}</Text>
+            <View style={s.progressTrack}>
+              <View style={[s.progressFill, { width: `${Math.max(0, Math.min(100, progress.percent ?? 0))}%` }]} />
+            </View>
+            <Text style={s.progressMeta}>{Math.round(progress.percent ?? 0)}% · {progress.stage ?? "processing"}</Text>
           </Animated.View>
         ) : video ? (
           <Animated.View entering={FadeInDown} style={s.previewCard} testID="video-selected-card">
@@ -248,8 +235,9 @@ const useStyles = makeStyles((c) => ({
   busyCard: { padding: space.xl, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.md },
   busyTitle: { fontFamily: fonts.display, fontSize: 28, color: c.onSurface, textTransform: "uppercase" },
   busyBody: { fontFamily: fonts.text, fontSize: 13, color: c.muted, marginBottom: space.sm },
-  stepRow: { flexDirection: "row", alignItems: "center", gap: space.md },
-  stepText: { fontFamily: fonts.textBold, fontSize: 14, color: c.muted },
+  progressTrack: { height: 7, borderRadius: 4, backgroundColor: c.surfaceTertiary, overflow: "hidden" },
+  progressFill: { height: 7, borderRadius: 4, backgroundColor: c.accent },
+  progressMeta: { fontFamily: fonts.mono, fontSize: 11, color: c.muted, textAlign: "right" },
   label: { fontFamily: fonts.textBold, fontSize: 13, color: c.onSurfaceTertiary },
   input: { minHeight: 90, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, color: c.onSurface, padding: space.md, fontFamily: fonts.text, fontSize: 14, textAlignVertical: "top", borderWidth: 1, borderColor: c.border },
   permCard: { flexDirection: "row", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.borderStrong },

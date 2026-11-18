@@ -3,26 +3,26 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Linking, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { apiSend, Ball, CoachSession, ttsUrl, uploadBall } from "@/src/api";
+import { apiSend, Ball, CoachSession, ttsUrl, uploadBall, useWeeklyProgramme } from "@/src/api";
 import { playCoach, stopCoach } from "@/src/coachAudio";
 import { fonts, radius, space } from "@/src/constants";
 import { ProLocked } from "@/src/components/ProLocked";
 import { PlanStage } from "@/src/components/PlanStage";
 
-type Stage = "warm_up" | "drills" | "bowling" | "test" | "cool_down";
+type Stage = "preparation" | "warm_up" | "drills" | "bowling" | "test" | "cool_down";
 const STAGES: { key: Stage; label: string }[] = [
-  { key: "warm_up", label: "Warm-up" }, { key: "drills", label: "Drills" }, { key: "bowling", label: "Bowling" },
+  { key: "preparation", label: "Prepare" }, { key: "warm_up", label: "Warm-up" }, { key: "drills", label: "Drills" }, { key: "bowling", label: "Bowling" },
   { key: "test", label: "Test" }, { key: "cool_down", label: "Cool-down" },
 ];
 import { ErrorBanner, Ionicons, PressScale, PrimaryButton, scoreColor } from "@/src/components/ui";
 import { useSubscription } from "@/src/revenuecat";
 import { makeStyles, useTheme } from "@/src/theme";
 
-const FOCUSES = ["Pace", "Accuracy", "Safe Action", "Swing", "Yorkers"];
+const FOCUSES = ["Pace", "Accuracy", "Efficient Action", "Swing", "Yorkers"];
 
 export default function LiveSession() {
   const s = useStyles();
@@ -30,6 +30,10 @@ export default function LiveSession() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const qc = useQueryClient();
+  const { data: programmeData } = useWeeklyProgramme();
+  const todayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date().getDay()];
+  const todayProgramme = programmeData?.programme?.days?.find((d) => d.day === todayName);
+  const programmeBlocksTraining = !!todayProgramme && ["rest", "match"].includes(todayProgramme.type);
   const { isSubscribed, isLoading: subLoading } = useSubscription();
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
@@ -41,6 +45,11 @@ export default function LiveSession() {
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>("warm_up");
+  const [showCompletion, setShowCompletion] = useState(false);
+  const [activityLog, setActivityLog] = useState<Record<number, { completed: boolean; sets: string; reps: string }>>({});
+  const [sessionEffort, setSessionEffort] = useState<"easy" | "moderate" | "hard" | null>(null);
+  const [overallFeeling, setOverallFeeling] = useState<"fresh" | "normal" | "tired" | "rough" | null>(null);
+  const [completionNotes, setCompletionNotes] = useState("");
   const canRecord = Platform.OS !== "web";
 
   useFocusEffect(useCallback(() => () => stopCoach(), []));
@@ -62,11 +71,16 @@ export default function LiveSession() {
     setBusy("starting");
     setError(null);
     try {
-      const sess = await apiSend<CoachSession>("/sessions", "POST", { focus });
+      const sess = await apiSend<CoachSession>("/sessions", "POST", { focus, local_day: todayName });
       setSession(sess);
       setBalls([]);
+      setActivityLog({});
+      setSessionEffort(null);
+      setOverallFeeling(null);
+      setCompletionNotes("");
+      setShowCompletion(false);
       setMessage({ text: sess.intro, audio: sess.intro_audio });
-      setStage("warm_up");
+      setStage("preparation");
       say(sess.intro_audio);
     } catch (e: any) {
       setError(e?.message ?? "Could not start the session");
@@ -126,7 +140,25 @@ export default function LiveSession() {
     stopCoach();
     setBusy("ending");
     try {
-      const done = await apiSend<CoachSession>(`/sessions/${session.id}/end`, "POST");
+      const activities = session.plan?.activities ?? [];
+      const completion = nonBowlingMode ? {
+        activities: activities.map((item, index) => {
+          const logged = activityLog[index] ?? { completed: false, sets: "", reps: "" };
+          const sets = logged.sets.trim() ? Number(logged.sets) : null;
+          return {
+            name: item.name,
+            completed: logged.completed,
+            ...(plan.session_mode === "gym" ? {
+              actual_sets: sets !== null && Number.isInteger(sets) && sets >= 0 && sets <= 20 ? sets : null,
+              actual_reps: logged.reps.trim() || null,
+            } : {}),
+          };
+        }),
+        session_effort: sessionEffort,
+        overall_feeling: overallFeeling,
+        notes: completionNotes.trim(),
+      } : undefined;
+      const done = await apiSend<CoachSession>(`/sessions/${session.id}/end`, "POST", completion);
       setSession(done);
       setMessage({ text: done.summary, audio: done.summary_audio });
       say(done.summary_audio);
@@ -145,20 +177,29 @@ export default function LiveSession() {
   };
 
   const avg = balls.length ? balls.reduce((a, b) => a + b.score, 0) / balls.length : 0;
-  const topPace = Math.max(0, ...balls.map((b) => b.pace_kmh ?? 0));
+  const targetHits = balls.filter((b) => b.hit_target).length;
   const ended = session?.status === "ended";
   const plan = session?.plan ?? {};
-  const stageIdx = STAGES.findIndex((x) => x.key === stage);
-  const isBowl = stage === "bowling" || stage === "test";
+  const nonBowlingMode = plan.session_mode === "gym" || plan.session_mode === "recovery";
+  const activeStages = nonBowlingMode
+    ? STAGES.filter((x) => x.key !== "bowling" && x.key !== "test").map((x) =>
+        x.key === "drills" ? { ...x, label: plan.session_mode === "gym" ? "Gym" : "Recovery" } : x)
+    : STAGES;
+  const stageIdx = activeStages.findIndex((x) => x.key === stage);
+  const isBowl = !nonBowlingMode && (stage === "bowling" || stage === "test");
   const blockBalls = balls.filter((b) => (b.block ?? "bowling") === (stage === "test" ? "test" : "bowling"));
 
   const advance = async (next: Stage) => {
     stopCoach();
     setStage(next);
     const text =
-      next === "drills" ? `Warm-up done. Now technique drills: ${(plan.drills ?? []).map((d) => d.name).join(", ")}.`
+      next === "warm_up" ? (nonBowlingMode ? "Readiness checks complete. Let's prepare for today's scheduled activity." : "Readiness checks complete. Let's raise your temperature and prepare to bowl.")
+      : next === "drills" ? nonBowlingMode
+        ? `Warm-up complete. Now today's ${plan.session_mode} activities: ${(plan.activities ?? []).map((d) => d.name).join(", ")}.`
+        : `Warm-up done. Now technique drills: ${(plan.drills ?? []).map((d) => d.name).join(", ")}.`
       : next === "bowling" ? `Drills done. Bowling block: ${plan.bowling?.balls ?? 6} balls. First target: ${plan.bowling?.target ?? "hit a good length"}. Bowl when ready.`
       : next === "test" ? `Time for the test: ${plan.test?.name ?? "skills test"}. ${plan.test?.balls ?? 6} balls. Success means ${plan.test?.target ?? "hitting the target"}. Bowl when ready.`
+      : nonBowlingMode ? "Good work. Let's finish with a gentle cool-down and recovery check."
       : "Great bowling. Let's cool down properly to protect your body.";
     setMessage({ text });
     try {
@@ -198,6 +239,21 @@ export default function LiveSession() {
         {!session ? (
           <Animated.View entering={FadeInDown} style={{ gap: space.lg }}>
             <Text style={s.lead}>Set up your phone side-on at the nets. Your coach gives you a target, you bowl, it watches and talks you through every ball.</Text>
+            {todayProgramme ? (
+              <View style={s.coachCard} testID="session-programme-context">
+                <Text style={s.label}>TODAY'S SAVED PROGRAMME</Text>
+                <Text style={s.permTitle}>{todayProgramme.title} · {todayProgramme.type.toUpperCase()}</Text>
+                <Text style={s.lead}>{todayProgramme.focus}</Text>
+                <Text style={s.coachText}>{todayProgramme.details}</Text>
+                {programmeBlocksTraining ? (
+                  <Text style={s.ballBody}>PACED has protected today's {todayProgramme.type} day from additional training load.</Text>
+                ) : todayProgramme.type === "gym" || todayProgramme.type === "recovery" ? (
+                  <Text style={s.ballBody}>Start a guided {todayProgramme.type} session. PACED will not add bowling deliveries.</Text>
+                ) : (
+                  <Text style={s.ballBody}>Your AI session will use this programme focus and intensity when building today's bowling plan.</Text>
+                )}
+              </View>
+            ) : null}
             <Text style={s.label}>TODAY'S FOCUS</Text>
             <View style={s.focusRow}>
               {FOCUSES.map((f) => (
@@ -220,13 +276,13 @@ export default function LiveSession() {
                 </View>
               </View>
             ) : null}
-            <PrimaryButton testID="session-start-button" label="Start Session" icon="mic" loading={busy === "starting"} onPress={start} />
+            <PrimaryButton testID="session-start-button" label={programmeBlocksTraining ? "Training paused for today's programme" : todayProgramme?.type === "gym" ? "Start gym session" : todayProgramme?.type === "recovery" ? "Start recovery session" : "Start Session"} icon="mic" loading={busy === "starting"} disabled={programmeBlocksTraining} onPress={start} />
           </Animated.View>
         ) : (
           <>
             {!ended ? (
               <View style={s.stageBar} testID="session-stage-bar">
-                {STAGES.map((st, i) => (
+                {activeStages.map((st, i) => (
                   <View key={st.key} style={{ flex: 1, gap: 4 }}>
                     <View style={[s.stageSeg, i <= stageIdx && { backgroundColor: colors.accent }]} />
                     <Text style={[s.stageLabel, i === stageIdx && { color: colors.onSurface }]} numberOfLines={1}>{st.label}</Text>
@@ -235,14 +291,61 @@ export default function LiveSession() {
               </View>
             ) : null}
 
+            {!ended && stage === "preparation" ? (
+              <PlanStage stageKey="preparation" title="Session Preparation" subtitle="Check readiness, recent workload, hydration and your training intention before you start." items={plan.pre_session ?? []} nextLabel="Start warm-up" onNext={() => advance("warm_up")} />
+            ) : null}
             {!ended && stage === "warm_up" ? (
-              <PlanStage stageKey="warm_up" title="Warm-up" subtitle="Raise temperature and mobilise before any fast bowling." items={plan.warm_up ?? []} nextLabel="Start drills" onNext={() => advance("drills")} />
+              <PlanStage stageKey="warm_up" title={nonBowlingMode ? (plan.session_mode === "gym" ? "Gym Warm-up" : "Gentle Preparation") : "Progressive Warm-up"} subtitle={nonBowlingMode ? "Prepare gradually for today's scheduled training without adding bowling." : "Raise temperature, mobilise, activate and build gradually into bowling. Do not rush straight to full pace."} items={plan.warm_up ?? []} nextLabel={nonBowlingMode ? (plan.session_mode === "gym" ? "Start gym session" : "Start recovery activities") : "Start drills"} onNext={() => advance("drills")} />
             ) : null}
             {!ended && stage === "drills" ? (
-              <PlanStage stageKey="drills" title="Technique Drills" subtitle={`Targeting today's focus: ${session.focus}.`} items={plan.drills ?? []} nextLabel="Start bowling block" onNext={() => advance("bowling")} />
+              <PlanStage stageKey="drills" title={nonBowlingMode ? (plan.session_mode === "gym" ? "Strength & Conditioning" : "Recovery Activities") : "Technique Drills"} subtitle={nonBowlingMode ? (session.scheduled_session?.details ?? "Follow today's saved programme at a controlled, comfortable effort.") : `Targeting today's focus: ${session.focus}.`} items={nonBowlingMode ? (plan.activities ?? []) : (plan.drills ?? [])} nextLabel={nonBowlingMode ? "Start cool-down" : "Start bowling block"} onNext={() => advance(nonBowlingMode ? "cool_down" : "bowling")} />
             ) : null}
-            {!ended && stage === "cool_down" ? (
-              <PlanStage stageKey="cool_down" title="Cool-down" subtitle="Bring the heart rate down and restore range of motion." items={plan.cool_down ?? []} nextLabel="Finish session" onNext={end} />
+            {!ended && stage === "cool_down" && (!nonBowlingMode || !showCompletion) ? (
+              <PlanStage stageKey="cool_down" title="Cool-down" subtitle="Bring the heart rate down and restore range of motion." items={plan.cool_down ?? []} nextLabel={nonBowlingMode ? "Log session completion" : "Finish session"} onNext={nonBowlingMode ? () => setShowCompletion(true) : end} />
+            ) : null}
+            {!ended && stage === "cool_down" && nonBowlingMode && showCompletion ? (
+              <View style={s.coachCard} testID="session-completion-log">
+                <Text style={s.label}>WHAT YOU ACTUALLY COMPLETED</Text>
+                <Text style={s.coachText}>Tick each activity you completed. For gym work, add the sets and reps you actually performed — planned numbers are not assumed.</Text>
+                {(plan.activities ?? []).map((item, index) => {
+                  const logged = activityLog[index] ?? { completed: false, sets: "", reps: "" };
+                  return (
+                    <View key={index} style={{ gap: 8, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
+                      <Pressable testID={`session-completion-activity-${index}`} onPress={() => setActivityLog((prev) => ({ ...prev, [index]: { ...logged, completed: !logged.completed } }))} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        <View style={{ width: 25, height: 25, borderRadius: 7, borderWidth: 1.5, borderColor: logged.completed ? colors.accent : colors.border, backgroundColor: logged.completed ? colors.accent : "transparent", alignItems: "center", justifyContent: "center" }}>
+                          {logged.completed ? <Ionicons name="checkmark" size={16} color={colors.onBrandPrimary} /> : null}
+                        </View>
+                        <Text style={[s.coachText, { flex: 1, fontWeight: "600" }]}>{item.name}</Text>
+                        {item.reps || item.minutes ? <Text style={s.ballBody}>{item.reps ?? `${item.minutes} min`}</Text> : null}
+                      </Pressable>
+                      {plan.session_mode === "gym" ? (
+                        <View style={{ flexDirection: "row", gap: 8, paddingLeft: 35 }}>
+                          <TextInput testID={`session-actual-sets-${index}`} value={logged.sets} onChangeText={(sets) => setActivityLog((prev) => ({ ...prev, [index]: { ...logged, sets } }))} placeholder="Sets performed" placeholderTextColor={colors.muted} keyboardType="number-pad" style={{ flex: 1, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 10 }} />
+                          <TextInput testID={`session-actual-reps-${index}`} value={logged.reps} onChangeText={(reps) => setActivityLog((prev) => ({ ...prev, [index]: { ...logged, reps } }))} placeholder="Reps performed" placeholderTextColor={colors.muted} style={{ flex: 1, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 10 }} />
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+                <Text style={s.label}>OVERALL SESSION EFFORT</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {(["easy", "moderate", "hard"] as const).map((effort) => (
+                    <Pressable key={effort} testID={`session-effort-${effort}`} onPress={() => setSessionEffort(effort)} style={{ paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: sessionEffort === effort ? colors.accent : colors.border, backgroundColor: sessionEffort === effort ? colors.surface : "transparent" }}>
+                      <Text style={{ color: sessionEffort === effort ? colors.accent : colors.onSurface, textTransform: "capitalize", fontSize: 13 }}>{effort}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={s.label}>HOW DO YOU FEEL NOW?</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {(["fresh", "normal", "tired", "rough"] as const).map((feeling) => (
+                    <Pressable key={feeling} testID={`session-feeling-${feeling}`} onPress={() => setOverallFeeling(feeling)} style={{ paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: overallFeeling === feeling ? colors.accent : colors.border, backgroundColor: overallFeeling === feeling ? colors.surface : "transparent" }}>
+                      <Text style={{ color: overallFeeling === feeling ? colors.accent : colors.onSurface, textTransform: "capitalize", fontSize: 13 }}>{feeling}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <TextInput testID="session-completion-notes" value={completionNotes} onChangeText={setCompletionNotes} placeholder="Optional notes — what changed or how it felt" placeholderTextColor={colors.muted} multiline maxLength={500} style={{ minHeight: 76, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 12, textAlignVertical: "top" }} />
+                <PrimaryButton testID="session-save-completion" label="Save session" icon="checkmark" loading={busy === "ending"} onPress={end} />
+              </View>
             ) : null}
             {!ended && isBowl ? (
               <View style={s.blockCard} testID={`session-block-${stage}`}>
@@ -252,6 +355,9 @@ export default function LiveSession() {
                     {blockBalls.length}/{stage === "test" ? plan.test?.balls ?? 6 : plan.bowling?.balls ?? 6} balls
                     {stage === "test" && plan.test?.target ? ` · Success: ${plan.test.target}` : ""}
                   </Text>
+                  {stage === "bowling" && plan.bowling?.rest_between_deliveries ? (
+                    <Text style={s.ballBody}>{plan.bowling.rest_between_deliveries}</Text>
+                  ) : null}
                 </View>
                 <Pressable testID="session-finish-block" style={s.blockBtn} disabled={!!busy || recording} onPress={() => advance(stage === "test" ? "cool_down" : "test")}>
                   <Text style={s.blockBtnText}>{stage === "test" ? "To cool-down" : "To test"}</Text>
@@ -321,7 +427,7 @@ export default function LiveSession() {
               <View style={s.stats}>
                 <View style={s.stat}><Text style={s.statValue} testID="session-ball-count">{balls.length}</Text><Text style={s.statLabel}>Balls</Text></View>
                 <View style={s.stat}><Text style={[s.statValue, { color: scoreColor(avg, colors) }]}>{avg.toFixed(1)}</Text><Text style={s.statLabel}>Avg score</Text></View>
-                <View style={s.stat}><Text style={s.statValue}>{topPace || "—"}</Text><Text style={s.statLabel}>Top km/h</Text></View>
+                <View style={s.stat}><Text style={s.statValue}>{targetHits}/{balls.length}</Text><Text style={s.statLabel}>Targets hit</Text></View>
               </View>
             ) : null}
 
@@ -332,7 +438,6 @@ export default function LiveSession() {
                   <Text style={s.ballTitle}>Ball {b.n}{b.pace_kmh ? ` · ~${b.pace_kmh} km/h` : ""}</Text>
                   <Text style={s.ballBody} numberOfLines={2}>{b.fault || b.good}</Text>
                 </View>
-                {b.injury_flag ? <Ionicons name="warning" size={18} color={colors.error} /> : null}
               </View>
             ))}
 
@@ -360,9 +465,23 @@ export default function LiveSession() {
                     ))}
                   </View>
                 ) : null}
+                {(plan.recovery?.items ?? []).length ? (
+                  <View style={{ gap: space.sm }} testID="session-recovery-guidance">
+                    <Text style={s.label}>RECOVERY CHECKLIST</Text>
+                    {plan.recovery!.items!.map((item, i) => (
+                      <View key={i} style={s.achievement}>
+                        <View style={s.badge}><Ionicons name="checkmark-circle-outline" size={16} color={colors.accent} /></View>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text style={s.ballTitle}>{item.name}</Text>
+                          <Text style={s.ballBody}>{item.cue}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
                 {(plan.tips ?? []).length ? (
                   <View style={{ gap: space.sm }}>
-                    <Text style={s.label}>TIPS</Text>
+                    <Text style={s.label}>COACH NOTES</Text>
                     {plan.tips!.map((t, i) => <Text key={i} style={s.lead}>• {t}</Text>)}
                   </View>
                 ) : null}

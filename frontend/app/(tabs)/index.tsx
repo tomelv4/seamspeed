@@ -10,7 +10,6 @@ import { IMAGES, fonts, phaseLabel, radius, space } from "@/src/constants";
 import { SessionRow } from "@/src/components/SessionRow";
 import { EmptyState, ErrorBanner, Ionicons, Loading, Pill, PressScale, PrimaryButton, SectionTitle, Wordmark, riskColor } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
-import { useRequirePro, useSubscription } from "@/src/revenuecat";
 import { makeStyles, useTheme } from "@/src/theme";
 
 export default function Home() {
@@ -23,8 +22,6 @@ export default function Home() {
   const profile = useProfile();
   const list = analyses.data ?? [];
   const latest = list.find((a) => a.is_bowling_video);
-  const { isSubscribed } = useSubscription();
-  const requirePro = useRequirePro();
 
   return (
     <View style={s.screen}>
@@ -50,12 +47,12 @@ export default function Home() {
               <>
                 <Text style={s.heroLabel}>LATEST DELIVERY</Text>
                 <View style={s.heroScoreRow}>
-                  <Text style={s.heroScore} testID="home-latest-score">{latest.overall_score.toFixed(1)}</Text>
+                  <Text style={s.heroScore} testID="home-latest-score">{latest.overall_score_assessable === false ? "—" : latest.overall_score.toFixed(1)}</Text>
                   <Text style={s.heroOutOf}>/10</Text>
                 </View>
                 <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
                   <Pill label={latest.pace_band?.label || "Pace n/a"} color={colors.onSurface} icon="speedometer" />
-                  <Pill label={`${latest.injury_risk?.level || "low"} risk`} color={riskColor(latest.injury_risk?.level, colors)} icon="shield-checkmark" />
+                  <Pill label={latest.injury_risk?.level === "not_assessed" ? "Injury risk not assessed" : `${latest.injury_risk?.level || "Not assessed"} risk`} color={latest.injury_risk?.level === "not_assessed" ? colors.muted : riskColor(latest.injury_risk?.level, colors)} icon="shield-checkmark" />
                 </View>
               </>
             ) : (
@@ -68,37 +65,14 @@ export default function Home() {
           </View>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(100).duration(400)} style={{ gap: space.md }}>
-          <PressScale testID="home-session-card" style={[s.coach, s.sessionCard]} onPress={() => requirePro(() => router.push("/session"))}>
+        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+          <PressScale testID="home-coach-card" style={s.coach} onPress={() => router.push("/coach")}>
             <View style={[s.coachIcon, { backgroundColor: colors.brandPrimary }]}>
-              <Ionicons name="mic" size={22} color={colors.onBrandPrimary} />
+              <Ionicons name="chatbubbles" size={22} color={colors.onBrandPrimary} />
             </View>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                <Text style={s.coachTitle}>Live Session</Text>
-                {!isSubscribed ? <Pill label="Pro" color={colors.accent} /> : null}
-              </View>
-              <Text style={s.coachBody}>Ball-by-ball capture with real-time voice feedback</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={20} color={colors.muted} />
-          </PressScale>
-          <PressScale testID="home-workload-card" style={s.coach} onPress={() => requirePro(() => router.push("/workload"))}>
-            <View style={s.coachIcon}>
-              <Ionicons name="pulse" size={22} color={colors.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.coachTitle}>Workload Tracker</Text>
-              <Text style={s.coachBody}>Weekly balls, rest days and overuse-risk flags</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={20} color={colors.muted} />
-          </PressScale>
-          <PressScale testID="home-coach-card" style={s.coach} onPress={() => requirePro(() => router.push("/coach"))}>
-            <View style={s.coachIcon}>
-              <Ionicons name="chatbubbles" size={22} color={colors.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.coachTitle}>AI Performance Assistant</Text>
-              <Text style={s.coachBody}>ChatGPT-powered insight on pace, action and load management</Text>
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={s.coachTitle}>AI Coach</Text>
+              <Text style={s.coachBody}>Your complete training hub for technique, guided sessions, workload, strength and conditioning, and recovery.</Text>
             </View>
             <Ionicons name="arrow-forward" size={20} color={colors.muted} />
           </PressScale>
@@ -106,7 +80,7 @@ export default function Home() {
 
         {latest && latest.faults.length > 0 ? (
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-            <SectionTitle title="Focus Areas" action="Drills" onAction={() => router.push("/drills")} testID="focus-see-drills" />
+            <SectionTitle title="Focus Areas" action="Coach" onAction={() => router.push("/coach")} testID="focus-see-drills" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md }}>
               {latest.faults.map((f, i) => (
                 <PressScale key={i} testID={`focus-fault-${i}`} style={s.fault} onPress={() => router.push(`/report/${latest.id}`)}>
@@ -152,7 +126,6 @@ const useStyles = makeStyles((c) => ({
   heroOutOf: { fontFamily: fonts.displaySemi, fontSize: 28, color: c.muted, marginBottom: 10, marginLeft: 4 },
   heroTitle: { fontFamily: fonts.display, fontSize: 28, lineHeight: 34, color: c.onSurface, letterSpacing: -0.3 },
   coach: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
-  sessionCard: { borderColor: c.accentLine },
   coachIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
   coachTitle: { fontFamily: fonts.textXBold, fontSize: 16, color: c.onSurface },
   coachBody: { fontFamily: fonts.text, fontSize: 12, color: c.muted, marginTop: 2 },

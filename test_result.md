@@ -105,3 +105,80 @@
 - Step timing sync: backend/biomech.py detects take_off/BFC/FFC/release from tracked skeleton (ankle landings, highest bowling wrist), each of 27 steps snapped into a window relative to those events, monotonic order. Measured values per step (knee angles, stride % height, release height %, elbow extension est, approach speed est) stored in step.metrics. analysis.events saved.
 - Prompt: critical coach, judge vs ideal ranges supplied by user (STEPS now have when + ideal; step.ideal shown in StepCard as IDEAL box).
 - Pose sampling 30fps.
+
+
+## Iteration 7 context (main agent)
+- Backend pose quality: extract_pose now reports frame coverage, critical-joint coverage and mean confidence for shoulders, elbows, wrists, hips, knees and ankles. Rating is a transparent capture-quality heuristic, not a calibrated probability.
+- Measurement gating: Track.knee, Track.joint and Track.trunk_lean reject low-confidence keypoints; ankle contact heuristic now uses a clip-wide ground reference and requires sustained near-ground frames.
+- Event provenance: event methods and keypoint confidence are persisted. The wrist's highest point is explicitly a wrist-apex proxy, not confirmed ball release. AI and typical-gap estimates are distinguished.
+- Measurement scope: removed uncalibrated approach-speed and 2D elbow-extension/legality proxies; renamed wrist height at apex and trunk lean metrics to make their 2D estimate nature explicit.
+- Timestamp integrity: sync_times no longer manufactures timestamps from template event anchors; AI timestamps are preserved when pose anchors cannot safely constrain a step, otherwise unavailable times remain null.
+- AI guardrails: prompt now forbids invented numeric measurements, uncalibrated pace estimates, 2D elbow legality claims and injury predictions from a single visual proxy.
+- Frontend: report now displays pose quality and wrist-apex release limitation; step metric panel identifies values as 2D pose estimates.
+- CI: added .github/workflows/paced-backend-checks.yml to compile backend and run focused biomechanics unit tests on the feature branch / PR.
+- Retesting required: all changes above are pending automated execution. Do not mark working=true until the workflow passes.
+
+
+## Iteration 7 test update
+- First GitHub Actions run (PR #1, run 44086941159): backend compilation passed; biomechanics unit tests failed (7 failures, 22 passed).
+- Failures were test/contract mismatches: one confidence fixture lowered the wrong knee keypoint; release-proxy timestamps were being asserted as confirmed release; the template-anchor test did not distinguish an AI-estimated release from template-generated BFC/FFC/take-off; event-method wording assertion needs verification against the updated event payload.
+- Corrective test changes committed; rerun required. Do not mark these tasks working until a clean run.
+
+
+## Iteration 7 retest note
+- Follow-up changes: preserve original 30/60 fps capture sampling up to 900 frames; interpolated pose frames are explicitly low-confidence and excluded from biomechanics; capture-quality coverage counts observed frames only; body-scale estimate requires confident keypoints; foot contact requires a visible swing before ground contact.
+- Corrected a test fixture to lower the actual front-knee keypoint and aligned timestamp assertions with the rule that wrist apex is not a confirmed release.
+- CI rerun pending after these commits.
+
+
+## Iteration 7 CI checkpoint
+- GitHub Actions run 44087518569: backend compile passed and 29/29 biomechanics unit tests passed in 0.10s on the commit tested by that run.
+- Subsequent commits added 60fps sampling, stricter observed-vs-interpolated confidence handling, qualitative coaching references, evidence-level metadata, pace/injury guardrails, and frontend UI/type changes. These later commits still require a fresh CI run.
+- Frontend TypeScript validation has now been added to the workflow.
+
+
+## Iteration 7 CI checkpoint 2
+- GitHub Actions run 44088422794 on the current feature-branch snapshot: backend compile passed and 29/29 biomechanics tests passed in 0.20s.
+- Frontend typecheck did not start because the repository has no committed yarn.lock; setup-node's Yarn cache path therefore failed. Workflow corrected to install from the exact package.json versions without lockfile caching. Frontend typecheck remains pending.
+
+
+## Iteration 7 follow-on work
+- Real progress reporting: backend analysis records stage/percent/message updates; the Analyze screen now polls and displays those actual stages instead of a 40-second timer that advanced regardless of work.
+- Frontend typecheck exposed a pre-existing React Native 0.88 typing incompatibility in frontend/src/theme.ts (StyleSheet.NamedStyles no longer exported); makeStyles typing was updated to a compatible generic.
+- Validation tooling added on the feature branch: manual event annotation schema, event timing evaluator, and unit tests. CI now includes those evaluator tests.
+- Repository safety correction: three validation files were briefly created on main because the branch argument was omitted from a file-creation call. They were immediately deleted from main and recreated on the feature branch. The files are confirmed absent from main. GitHub retains the add/delete commits in main's history; no app code or configuration was left changed there.
+- Full backend and frontend CI rerun required after these latest changes.
+
+
+## Iteration 7 CI checkpoint 3
+- GitHub Actions run 44089428450: backend compile passed and 33/33 tests passed, including the new event-validation evaluator.
+- Frontend dependency install passed. TypeScript then reported widespread RN 0.88 style-prop widening errors across existing screens; the shared makeStyles helper has been updated to restore contextual ViewStyle/TextStyle/ImageStyle inference. A fresh typecheck is required.
+- Added camera-view classification and only exposes 2D sagittal-plane metrics when Gemini reports a high-confidence side-on camera view. Other views retain visual coaching feedback without misleading side-plane measurements.
+- Increased pose sampling capacity to cover 20-second clips at up to 60fps.
+
+
+## Iteration 7 CI checkpoint 4
+- Backend test suite: 33/33 passing on the latest tested snapshot (run 44089428450); backend compile also passed.
+- Frontend typecheck identified that the shared style helper needed stronger contextual typing; the helper was adjusted again to preserve React Native style literal types. Retest pending.
+- Actual progress reporting is now wired from backend stages through API polling into the Analyze screen; the previous timer-driven fake progress sequence has been removed.
+- Added camera-view classification confidence. Side-plane measurements are only exposed for high-confidence side-on footage; other views are limited to visual assessment.
+- Hardened report assembly: invalid statuses are downgraded to not_visible, scores are finite and clamped, and raw AI timestamps are only accepted when there are no event anchors and the time is in-clip and monotonic.
+- Added 20-second/60fps pose capacity and interpolated frames are excluded from measured confidence.
+
+
+## Iteration 7 CI checkpoint 5
+- GitHub Actions run 44090235338: backend compilation passed; 33/33 backend unit tests passed; frontend TypeScript check passed.
+- The current code then removed the unvalidated take-off pose heuristic entirely. Take-off now comes from AI visual estimation or remains an explicitly marked typical-gap estimate; it is no longer presented as pose-detected. Tests updated accordingly.
+- The server now preserves pose_detected as a distinct event list while retaining the legacy measured field for compatibility.
+- Latest take-off/provenance commits require one final CI rerun.
+
+
+## PACED evidence-first engineering checkpoint
+- GitHub Actions run 44095900583 on commit b3f600fe9b038cdceba52b18c15959e54a29f129: backend compile passed; 60/60 focused biomechanics, validation-metric and AI-contract tests passed; frontend `yarn tsc --noEmit` passed.
+- Pose metrics now require confident source joints; interpolated poses remain display-only and are excluded from measured confidence. Capture screening and competing-person track ambiguity lower analysis confidence.
+- BFC/FFC remain explicitly labelled ankle-ground heuristics. Wrist apex is not treated as ball release. An AI release time is accepted only when the model explicitly reports visible ball separation, and the UI states that this is not sensor-confirmed.
+- Step and phase scores are derived from assessable movement-step scores; phase means are equally weighted. Reports suppress unassessable scores and unsupported faults, rank faults by severity and link them to a video step.
+- Pace is unavailable without calibrated radar/ball tracking. Video injury prediction has been removed; workload flags describe logged training-load trends only.
+- Real-video validation has **not** been completed. The annotation protocol and multi-clip event evaluator are in `docs/VALIDATION_DATASET.md` and `backend/validation_metrics.py`. Synthetic tests are not a substitute for consented, manually labelled bowling footage.
+- The preview-dependent integration suites in `backend/tests/` were not run in GitHub CI; the current workflow runs the deterministic unit/contract suites and frontend typecheck. A separate preview integration pass is still required.
+- Original `main` has not been merged or deployed. The feature branch remains a draft PR and is still 6 commits behind `main`; do not merge until the branch divergence is reviewed.

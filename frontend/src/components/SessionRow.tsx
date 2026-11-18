@@ -13,8 +13,8 @@ export function SessionRow({ item }: { item: Analysis }) {
   const date = new Date(item.created_at);
   return (
     <PressScale testID={`session-row-${item.id}`} style={s.row} onPress={() => router.push(`/report/${item.id}`)}>
-      <View style={[s.score, { borderColor: scoreColor(item.overall_score, colors) }]}>
-        <Text style={[s.scoreText, { color: scoreColor(item.overall_score, colors) }]}>{item.overall_score.toFixed(1)}</Text>
+      <View style={[s.score, { borderColor: item.overall_score_assessable === false ? colors.muted : scoreColor(item.overall_score, colors) }]}>
+        <Text style={[s.scoreText, { color: item.overall_score_assessable === false ? colors.muted : scoreColor(item.overall_score, colors) }]}>{item.overall_score_assessable === false ? "—" : item.overall_score.toFixed(1)}</Text>
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={s.title} numberOfLines={1}>
@@ -24,7 +24,7 @@ export function SessionRow({ item }: { item: Analysis }) {
           {date.toLocaleDateString(undefined, { day: "numeric", month: "short" })} · {item.pace_band?.label || "—"} · {item.faults.length} faults
         </Text>
       </View>
-      <View style={[s.dot, { backgroundColor: item.is_bowling_video ? riskColor(item.injury_risk?.level, colors) : colors.muted }]} />
+      <View style={[s.dot, { backgroundColor: item.is_bowling_video && item.injury_risk?.level !== "not_assessed" ? riskColor(item.injury_risk?.level, colors) : colors.muted }]} />
       <Ionicons name="chevron-forward" size={18} color={colors.muted} />
     </PressScale>
   );

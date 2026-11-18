@@ -1,14 +1,15 @@
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import tempfile
 import uuid
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated, Any, List, Optional
+from typing import Annotated, Any, List, Literal, Optional
 
 from bson import ObjectId
 from dotenv import load_dotenv
@@ -26,6 +27,7 @@ from fastapi.responses import FileResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 import pose as pose_lib
+from analysis_contract import attach_practice_to_step_trends, build_development_overview, build_recurring_fault_history, build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
 from storage import APP_NAME, CACHE_DIR, cache_path, cached_file, init_storage, put_object
 from emergentintegrations.llm.openai import OpenAITextToSpeech
 from emergentintegrations.llm.chat import (
@@ -51,6 +53,8 @@ INDEXES: dict[str, list[IndexModel]] = {
     "poses": [IndexModel([("analysis_id", ASCENDING)], name="analysis_id")],
     "sessions": [IndexModel([("device_id", ASCENDING), ("created_at", DESCENDING)], name="device_created")],
     "workload": [IndexModel([("device_id", ASCENDING), ("date", DESCENDING)], name="device_date")],
+    "drill_completions": [IndexModel([("device_id", ASCENDING), ("completed_at", DESCENDING)], name="device_completed")],
+    "coach_programmes": [IndexModel([("device_id", ASCENDING)], name="device_id", unique=True)],
 }
 
 
@@ -119,10 +123,14 @@ class Analysis(BaseDocument):
     notes: str = ""
     is_bowling_video: bool = True
     overall_score: float = 0
+    overall_score_assessable: bool = True
     summary: str = ""
     action_type: str = ""
+    camera_view: str = "unknown"
+    camera_view_confidence: str = "low"
     phases: List[dict] = []
     faults: List[dict] = []
+    coaching_priorities: List[dict] = []
     strengths: List[str] = []
     tips: List[str] = []
     pace_band: dict = {}
@@ -132,6 +140,8 @@ class Analysis(BaseDocument):
     video_meta: dict = {}
     has_pose: bool = False
     events: dict = {}
+    analysis_quality: dict = {}
+    progress: dict = Field(default_factory=lambda: {"stage": "queued", "percent": 0, "message": "Waiting to start"})
     status: str = "done"  # processing | done | failed
     error: str = ""
 
@@ -145,6 +155,35 @@ class CoachMessage(BaseDocument):
 
 class ChatIn(BaseModel):
     message: str
+
+
+class DrillCompletionIn(BaseModel):
+    notes: str = Field(default="", max_length=500)
+
+
+class SessionActivityCompletionIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    completed: bool = False
+    actual_sets: Optional[int] = Field(default=None, ge=0, le=20)
+    actual_reps: Optional[str] = Field(default=None, max_length=50)
+    effort: Optional[Literal["easy", "moderate", "hard"]] = None
+    notes: str = Field(default="", max_length=300)
+
+
+class SessionCompletionIn(BaseModel):
+    activities: List[SessionActivityCompletionIn] = Field(default_factory=list, max_length=10)
+    session_effort: Optional[Literal["easy", "moderate", "hard"]] = None
+    overall_feeling: Optional[Literal["fresh", "normal", "tired", "rough"]] = None
+    notes: str = Field(default="", max_length=500)
+
+
+class WeeklyProgrammeIn(BaseModel):
+    bowling_days: int = Field(default=2, ge=1, le=4)
+    gym_days: int = Field(default=2, ge=0, le=4)
+    skill_days: int = Field(default=1, ge=0, le=4)
+    match_days: int = Field(default=0, ge=0, le=2)
+    unavailable_days: List[str] = Field(default_factory=list, max_length=7)
+    notes: str = Field(default="", max_length=600)
 
 
 # ---------------------------------------------------------------- drills library
@@ -210,32 +249,55 @@ The video is {duration} seconds long.
 
 STEP-BY-STEP BIOMECHANICS: assess EVERY one of these 27 chronological steps and give the timestamp (seconds from the start of the video, 2 decimals) where it is best seen:
 {steps}
-INJURY SCANNER - rate each area from what you see:
-- lumbar_spine (spondylolysis): spinal extension + side-bending + twisting under load; mixed action / counter-rotation; higher risk under age 22 (bowler age band: {age}).
-- side_strain: oblique tear on the NON-bowling side from violent trunk stretch/snap (hip-shoulder separation, lateral flexion).
-- front_leg: patellar tendinopathy, tibial stress, ankle impingement from 5-9x bodyweight at FFC (stiff/hyperextended or collapsing knee, heel slam, long stride).
-- shoulder: posterior shoulder / rotator cuff from braking the arm in follow-through (cut-off follow-through, arm not decelerating across body).
-- hamstring_groin: high-speed run-up sprinting and over-striding at the crease.
-For each step return {{"key","t","score" (0-10),"status" ("good"|"ok"|"fault"|"not_visible"),"observation" (what you see, 1-2 sentences),"cue" (one short coaching cue)}}.
+TECHNIQUE & LOAD OBSERVATIONS (not injury prediction):
+- Describe only visible movement patterns that may be relevant to coaching. Do not diagnose tissue damage, infer internal forces,
+  or predict injury probability from a single video.
+- Do not infer spinal loading, side-strain risk, tendon loading, shoulder pathology or hamstring injury likelihood from 2D joint positions.
+- If an area cannot be assessed from this camera angle, say so. Workload can only be assessed from the separately logged workload history.
+For each step return {{"key","t","score" (0-10),"status" ("good"|"ok"|"fault"|"not_visible"),"coaching_classification" ("fault"|"opportunity"|"effective_variation"|"none"),"observation" (what you see, 1-2 sentences),"cue" (one short coaching cue)}}.
 Timestamps must be increasing and each must be the exact moment described in WHEN (scrub frame by frame around
 back-foot contact, front-foot contact and release). Use "not_visible" with t null if the step is out of frame.
 
-BE A CRITICAL, DEMANDING COACH. Judge every step against its IDEAL numbers, not against "looks fine":
-- In every observation state your estimate of the key number (angle, %, distance, timing) and the ideal range,
-  e.g. "Front knee collapses ~20° after landing (ideal < 10°)".
-- status "good" only when the step is inside the ideal range; "ok" when slightly outside; "fault" when clearly outside
-  or when it creates injury risk. Do not give the benefit of the doubt.
-- Scores: 9-10 international standard, 7-8 strong first-class, 5-6 typical club bowler, 3-4 clear technical
-  problems, 0-2 major breakdown. Most amateur actions should land 4-7.
-- Actively hunt for faults: front-knee collapse, mixed action / counter-rotation > 30°, short or over-long delivery
-  stride, front arm falling away early, falling away at release, low release, elbow flexion near or above 15°,
-  jumping too high in the bound, poor alignment, cut-off follow-through. Report every real fault you find
-  with its measured value; do not invent faults that are not visible.
+EVIDENCE AND SCORING RULES:
+- Never invent or guess a numeric angle, distance, speed, timing, joint position or ideal-range deviation.
+- Quote a number only when it is explicitly supplied by measured skeleton data or is a clearly labelled visual estimate.
+- A 2D skeleton value is a camera-plane estimate, not a 3D biomechanical measurement. Do not infer rotation, joint loading,
+  legal elbow extension, ball speed, spin or injury probability from a single uncalibrated view.
+- Actual ball release is the moment the ball visibly separates from the fingers. A wrist apex is not ball release.
+  If separation is not clearly visible, mark finger_roll_release as not_visible with t null and score 0.
+  Return release_evidence.ball_separation_visible=true only when the ball leaving the hand is clearly visible;
+  also return confidence (high|medium|low) and a short note. If uncertain, return false and low confidence.
+- Mark a step "not_visible" when the relevant body part or event cannot be judged reliably. Do not force a score.
+- A scored step must have a timestamp that lands on the exact visible movement being judged. If you cannot identify that frame,
+  return status "not_visible", t null, score 0 and do not write a technique judgement for that step.
+- A fault must identify an exact step_key whose own status is "fault". Never attach a fault to a neighbouring or generic phase step.
+  If no single step clearly supports the fault, omit it. Keep the description specific to what is visible at that moment.
+- Phase feedback and the summary must be supported by assessable step observations. Do not introduce new faults or technique
+  claims in the summary that are absent from the step evidence. Phase scores are calculated by the backend from assessable steps.
+- For 3D rotation, ground-reaction force, angular velocity, ball spin, elbow legality or close-up finger/wrist mechanics,
+  use "not_visible" unless the supplied footage and measurements genuinely support that assessment.
+- The coaching reference text is qualitative guidance, not a set of universal numeric thresholds.
+- "good", "ok" and "fault" require visible evidence; uncertainty is not a fault.
+- Classify coaching significance separately from the status: "fault" = a clearly visible, materially important technical problem with a plausible downside; "opportunity" = an optional refinement that may help but is not proof the current movement is wrong; "effective_variation" = a non-textbook movement pattern that appears controlled or functional and has no clear visible downside; "none" = no specific coaching intervention justified.
+- A non-standard action is not automatically a fault. Do not prescribe textbook positions as universal requirements. Only use "effective_variation" when the footage supports that it is controlled/effective; otherwise use "none" or "not_visible".
+- Status "fault" is permitted only with coaching_classification "fault". Status "ok" may carry "opportunity" or "effective_variation". Do not manufacture opportunities just to fill the report.
+- For each genuine fault or opportunity that could be a priority, optionally provide one coaching_guidance item linked to its exact step_key. Keep why_it_matters tied to the visible finding and plausible performance or consistency relevance; never claim injury prevention. Give a short feel_cue only when a useful physical cue is justified. Do not generate a drill: the backend selects a vetted drill matched to the exact step_key. Do not provide guidance for effective_variation, none or not_visible steps. Do not provide guidance for effective_variation, none or not_visible steps.
+- Scores should reflect only assessable technique. If several important steps are not assessable, lower confidence in
+  the overall assessment and say so in the summary rather than filling gaps with assumptions.
+- Use consistent step-score anchors: 0-2 = clear major breakdown; 3-4 = clear technical problem; 5-6 = mixed or
+  inconsistent execution; 7-8 = controlled, repeatable execution; 9-10 = exceptional execution clearly supported by
+  the footage. Do not award 9-10 merely because the action looks acceptable.
+- Injury scanner outputs are coaching observations only, never a diagnosis or prediction. Do not label a medical injury
+  risk high based on a single visual proxy. State when there is insufficient evidence.
+- Do not estimate bowling speed from body motion or ball flight. Return pace_band with null min_kmh/max_kmh and
+  confidence "unavailable" unless a calibrated speed source is provided.
+- Do not report elbow-extension legality from 2D pose angles.
 
+When identifying a fault, link it to the single most relevant step_key from the 27-step list. Do not invent a step key.
 Break the action into 6 phases: run_up, load (bound/gather), back_foot (back-foot contact), front_foot (front-foot contact / delivery stride), release, follow_through.
 Score each phase 0-10 (one decimal). Identify faults with severity (low|medium|high), linked phase key and a short fix.
-Classify the action type: side-on, front-on, semi-open, or mixed. Mixed actions (hip/shoulder mismatch, counter-rotation >30 deg) raise lumbar injury risk.
-Estimate the pace band from approach speed, arm speed and ball flight (e.g. "125-135 km/h"). Be honest if uncertain.
+Classify the visible action type as side-on, front-on, semi-open, mixed or unknown only when the view supports it. Separately classify the CAMERA VIEW as side_on, rear, front_on, oblique or unknown, and provide camera_view_confidence as high, medium or low. Do not infer 3D counter-rotation from a single 2D camera view.
+Do not estimate bowling speed from run-up movement, arm speed or ball flight. A calibrated radar or ball-tracking measurement is required.
 
 Return ONLY valid JSON, no markdown, matching exactly:
 {{
@@ -243,29 +305,35 @@ Return ONLY valid JSON, no markdown, matching exactly:
  "overall_score": 7.2,
  "summary": "2-3 sentence coach summary",
  "action_type": "semi-open",
+ "camera_view": "side_on|rear|front_on|oblique|unknown",
+ "camera_view_confidence": "high|medium|low",
+ "release_evidence": {"ball_separation_visible": false, "confidence": "low", "notes": "Ball separation not clearly visible"},
  "phases": [{{"key":"run_up","name":"Run-up","score":7.5,"feedback":"..."}}, ... all 6 in order],
- "steps": [{{"key":"run_up_acceleration","t":0.4,"score":7,"status":"good","observation":"...","cue":"..."}}, ... all 27 in order],
- "faults": [{{"title":"Collapsing front knee","phase":"front_foot","severity":"medium","description":"...","fix":"..."}}],
+ "steps": [{{"key":"run_up_acceleration","t":0.4,"score":7,"status":"good","coaching_classification":"none","observation":"...","cue":"..."}}, ... all 27 in order],
+ "faults": [{{"title":"Collapsing front knee","phase":"front_foot","step_key":"front_knee_bracing","severity":"medium","description":"...","fix":"..."}}],
+ "coaching_guidance": [{{"step_key":"front_knee_bracing","why_it_matters":"...","feel_cue":"..."}}],
  "strengths": ["..."],
  "tips": ["...", "...", "..."],
- "pace_band": {{"label":"Fast-medium","min_kmh":125,"max_kmh":135,"confidence":"medium"}},
- "injury_risk": {{"level":"low|medium|high","mixed_action":false,"counter_rotation":"low|moderate|high","notes":"...",
-   "areas": [{{"key":"lumbar_spine|side_strain|front_leg|shoulder|hamstring_groin","level":"low|medium|high","score":0-100,"drivers":"what in THIS video drives the risk (1-2 sentences)","prevention":"one specific prevention action"}}, ... all 5 keys]}}
+ "pace_band": {{"label":"Unavailable","min_kmh":null,"max_kmh":null,"confidence":"unavailable"}},
+ "injury_risk": {{"level":"not_assessed","mixed_action":null,"counter_rotation":"not_assessed","notes":"A single video cannot predict injury likelihood.",
+   "areas": [{{"key":"lumbar_spine|side_strain|front_leg|shoulder|hamstring_groin","level":"not_assessed","score":0,"drivers":"visible coaching observation only, or insufficient evidence","prevention":"general training guidance, not medical advice"}}, ... all 5 keys]}}
 }}
 If the video does not show a bowling action, set is_bowling_video to false, overall_score 0 and explain in summary."""
 
 MEASURED_PROMPT = """
 
-MEASURED SKELETON DATA of the tracked bowler (2D pose tracking at 30 fps):
+MEASURED SKELETON DATA of the tracked bowler (2D pose tracking at up to 60 fps):
 {events}
 
 Frame-by-frame timeline (angles in degrees; fk=front knee, bk=back knee, el=bowling elbow, lean=trunk lean from
 vertical, hip_x=hip position across the frame 0-1):
 {timeline}
-Use the detected events as the anchors for your timestamps (BFC, FFC and release steps MUST use those times when
-they were measured) and place every other step at its correct moment relative to them. Use the measured values
-when judging each step against its ideal and quote them. 2D angles can be distorted by camera angle, so say so when
-the view is not side-on, but do not ignore a measured fault."""
+Use event times as approximate anchors only. The event metadata includes the detection method and confidence.
+Only use sagittal-plane knee, trunk-lean and stride measurements as coaching evidence when the camera view is side_on AND
+camera_view_confidence is high. For rear, front-on, oblique or uncertain views, treat these side-plane values as unsuitable.
+a wrist-apex proxy is not confirmed ball release, and ankle-ground heuristics are not force-plate contact measurements.
+Use a measured value only when it is present and the relevant joints have adequate confidence. Do not fill absent values
+with guessed numbers. Treat 2D angles as camera-plane estimates; do not infer 3D rotation or injury loading from them."""
 
 
 def now_iso() -> str:
@@ -275,13 +343,6 @@ def now_iso() -> str:
 async def get_profile(device_id: str) -> Profile:
     doc = await db.profiles.find_one({"device_id": device_id})
     return Profile.from_mongo(doc) if doc else Profile(device_id=device_id, updated_at="")
-
-
-def parse_json(text: str) -> dict:
-    match = re.search(r"\{.*\}", text, re.S)
-    if not match:
-        raise ValueError("No JSON in model response")
-    return json.loads(match.group(0))
 
 
 # ---------------------------------------------------------------- routes
@@ -342,10 +403,23 @@ async def process_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x
         logger.exception("analysis failed")
         with suppress(OSError):
             os.remove(path)
-        await db.analyses.update_one({"_id": ObjectId(analysis_id)}, {"$set": {"status": "failed", "error": f"Analysis failed: {exc}"}})
+        await db.analyses.update_one(
+            {"_id": ObjectId(analysis_id)},
+            {"$set": {
+                "status": "failed", "error": f"Analysis failed: {exc}",
+                "progress": {"stage": "failed", "percent": 100, "message": "Analysis failed"},
+            }},
+        )
 
 
 async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_device_id, profile):
+    async def set_progress(stage: str, percent: int, message: str):
+        await db.analyses.update_one(
+            {"_id": ObjectId(analysis_id)},
+            {"$set": {"progress": {"stage": stage, "percent": percent, "message": message}}},
+        )
+
+    await set_progress("preparing", 5, "Preparing your video")
     meta = await run_in_threadpool(pose_lib.video_meta, path)
 
     async def run_pose():
@@ -373,38 +447,117 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         response = await chat.send_message(
             UserMessage(text=prompt, file_contents=[FileContentWithMimeType(file_path=path, mime_type=mime)])
         )
-        return parse_json(response)
+        return parse_model_json(response)
 
+    await set_progress("tracking", 20, "Tracking your bowling action")
     pose_data = await run_pose()
+    await set_progress("reviewing", 55, "Reviewing technique and movement")
     track = biomech.Track(pose_data or {}, profile.bowling_arm)
     pose_ev = biomech.detect_events(track)
     pre_ev = biomech.merge_events(pose_ev, [], meta.get("duration"))
     pre_text = biomech.measured_text(pre_ev, biomech.measured(track, pre_ev)) if pre_ev else "Key events could not be detected from the skeleton."
-    data = await run_gemini(pose_data)
+    pose_quality = (pose_data or {}).get("quality", {"rating": "limited", "frame_coverage": 0.0, "critical_joint_coverage": 0.0, "mean_joint_confidence": 0.0})
+    data = normalise_model_payload(await run_gemini(pose_data), meta.get("duration"))
+    await set_progress("report", 82, "Building your coaching report")
+    camera_view = str(data.get("camera_view") or "unknown").strip().lower()
+    if camera_view not in {"side_on", "rear", "front_on", "oblique", "unknown"}:
+        camera_view = "unknown"
+    data["camera_view"] = camera_view
+    camera_view_confidence = str(data.get("camera_view_confidence") or "low").strip().lower()
+    if camera_view_confidence not in {"high", "medium", "low"}:
+        camera_view_confidence = "low"
+    data["camera_view_confidence"] = camera_view_confidence
+
+    # Never publish uncalibrated AI guesses as bowling speed or injury probability.
+    data["pace_band"] = {
+        "label": "Unavailable — calibrated speed measurement required",
+        "min_kmh": None, "max_kmh": None, "confidence": "unavailable",
+    }
+    risk = data.get("injury_risk") if isinstance(data.get("injury_risk"), dict) else {}
+    risk["level"] = "not_assessed"
+    risk["mixed_action"] = None
+    risk["counter_rotation"] = "not_assessed"
+    risk["notes"] = (
+        "A single-camera video cannot predict injury likelihood or diagnose a condition. "
+        "Only visible coaching observations are shown; recorded workload is assessed separately."
+    )
+    risk["areas"] = [
+        {**area, "level": "not_assessed", "score": 0}
+        for area in risk.get("areas", []) if isinstance(area, dict)
+    ]
+    data["injury_risk"] = risk
 
     # sync every step to its biomechanical moment (measured events first, AI timestamps as fallback)
     ai_steps = data.get("steps", [])
     by_key = {s.get("key"): s for s in ai_steps if isinstance(s, dict)}
+    release_evidence = data.get("release_evidence", {})
+    if release_evidence.get("ball_separation_visible") is True and release_evidence.get("confidence") in {"high", "medium"}:
+        # Prefer the AI's visible ball-separation timestamp over the wrist-apex proxy.
+        pose_ev = dict(pose_ev)
+        pose_ev.pop("release", None)
+        for field in ("event_methods", "joint_confidence"):
+            values = dict(pose_ev.get(field) or {})
+            values.pop("release", None)
+            pose_ev[field] = values
     ev = biomech.merge_events(pose_ev, ai_steps, meta.get("duration"))
     times = biomech.sync_times(ai_steps, ev) if ev else {}
-    meas = biomech.measured(track, ev) if ev else {}
+    event_timing = biomech.event_timing_quality(ev, release_evidence)
+    timing_rank = {"unavailable": 0, "low": 1, "medium": 2, "high": 3}
+    meas = biomech.measured(track, ev) if ev and camera_view == "side_on" and camera_view_confidence == "high" else {}
     steps = []
+    last_ai_time = 0.0
     for key, name, phase, when, ideal in STEPS:
         s = by_key.get(key, {})
         status = s.get("status", "not_visible")
+        if status not in {"good", "ok", "fault", "not_visible"}:
+            status = "not_visible"
         t = times.get(key)
-        if t is None:
-            t = s.get("t") if isinstance(s.get("t"), (int, float)) else None
+        # Only use raw AI timestamps when no event anchors exist at all. If anchors exist,
+        # sync_times returning None means the timestamp failed validation and must stay unavailable.
+        if t is None and not ev:
+            raw_t = biomech._valid_event_time(s.get("t"), meta.get("duration"))
+            if raw_t is not None and raw_t >= last_ai_time:
+                t = round(raw_t, 3)
+                last_ai_time = raw_t
+        raw_score = s.get("score", 0)
+        score = float(raw_score) if isinstance(raw_score, (int, float)) and not isinstance(raw_score, bool) and math.isfinite(float(raw_score)) else 0.0
+        score = max(0.0, min(10.0, score))
+        observation = s.get("observation", "") if isinstance(s.get("observation", ""), str) else ""
+        cue = s.get("cue", "") if isinstance(s.get("cue", ""), str) else ""
+        anchor = biomech.WINDOWS[key][0]
+        required_events = [anchor]
+        if biomech.WINDOWS[key][2] is None and key in biomech.NEXT:
+            required_events.append(biomech.NEXT[key][0])
+        step_timing = min(
+            (event_timing["events"].get(event, "unavailable") for event in required_events if event not in {"start", "end"}),
+            key=lambda value: timing_rank[value],
+            default="high",
+        )
         steps.append({
             "key": key, "name": name, "phase": phase, "description": when, "ideal": ideal, "t": t,
-            "score": 0 if status == "not_visible" else s.get("score", 0), "status": status,
-            "observation": s.get("observation", ""), "cue": s.get("cue", ""),
+            "score": 0 if status == "not_visible" else score, "status": status,
+            "observation": observation, "cue": cue,
+            "timing_confidence": step_timing,
+            "timing_method": (ev or {}).get("event_methods", {}).get(anchor, "unavailable"),
             "metrics": meas.get(key, {}),
+            "evidence_level": (
+                "insufficient" if status == "not_visible"
+                else "pose_estimate" if meas.get(key)
+                else "visual_assessment" if observation
+                else "insufficient"
+            ),
         })
     data["steps"] = steps
+    data = reconcile_synced_evidence(data)
     if ev:
-        data["events"] = {k: round(ev[k], 3) for k in ("take_off", "bfc", "ffc", "release")} | {"measured": ev["measured"]}
+        data["events"] = (
+            {k: round(ev[k], 3) for k in ("take_off", "bfc", "ffc", "release")}
+            | {"measured": ev["measured"], "pose_detected": ev.get("pose_detected", []),
+               "estimated": ev.get("estimated", []), "sources": ev.get("sources", {}),
+               "methods": ev.get("event_methods", {}), "confidence": ev.get("joint_confidence", {})}
+        )
 
+    await set_progress("saving", 95, "Saving your analysis")
     video_path = f"{APP_NAME}/uploads/{x_device_id}/{uuid.uuid4()}{suffix}"
     try:
         await run_in_threadpool(put_object, video_path, data_bytes, mime)
@@ -415,9 +568,45 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         with suppress(OSError):
             os.remove(path)
 
+    data["progress"] = {"stage": "complete", "percent": 100, "message": "Analysis complete"}
     data["video_path"] = video_path
-    data["video_meta"] = {**meta, "width": (pose_data or {}).get("width", 0), "height": (pose_data or {}).get("height", 0), "mime": mime}
+    data["video_meta"] = {
+        **meta,
+        "width": (pose_data or {}).get("width") or meta.get("width", 0),
+        "height": (pose_data or {}).get("height") or meta.get("height", 0),
+        "mime": mime,
+    }
     data["has_pose"] = bool(pose_data and pose_data.get("detected"))
+    assessable_steps = sum(1 for step in steps if step["status"] != "not_visible")
+    video_quality = meta.get("quality", {})
+    capture_needs_review = video_quality.get("rating") != "good"
+    score_confidence = (
+        "low" if not data.get("overall_score_assessable", False) or pose_quality.get("rating") == "limited" or capture_needs_review
+        else "medium" if assessable_steps < 19 or pose_quality.get("rating") != "good"
+        else "high"
+    )
+    if timing_rank[event_timing["overall"]] < timing_rank[score_confidence]:
+        score_confidence = "low" if event_timing["overall"] in {"low", "unavailable"} else event_timing["overall"]
+    data["analysis_quality"] = {
+        "score_confidence": score_confidence,
+        "score_method": data.get("score_method", "not_available"),
+        "camera_view": camera_view,
+        "camera_view_confidence": camera_view_confidence,
+        "assessable_steps": assessable_steps,
+        "step_coverage": round(assessable_steps / max(1, len(steps)), 3),
+        "pose": pose_quality,
+        "video": video_quality,
+        "event_methods": (ev or {}).get("event_methods", {}),
+        "joint_confidence": (ev or {}).get("joint_confidence", {}),
+        "contact_evidence": (pose_ev or {}).get("contact_evidence", {}),
+        "event_timing": event_timing,
+        "release_evidence": release_evidence,
+        "limitations": [
+            "Single-camera 2D pose estimates cannot establish 3D joint loading or rotation.",
+            "Wrist apex is not confirmed ball release unless ball separation is visible.",
+            "Bowling speed is unavailable without a calibrated measurement source.",
+        ],
+    }
     # Workload spikes are non-mechanical: computed from the bowler's logged volume, not the video.
     wl = await workload_summary(x_device_id, profile)
     risk = data.get("injury_risk") or {}
@@ -460,6 +649,7 @@ async def delete_analysis(analysis_id: str, x_device_id: str = Header(...)):
     if not res.deleted_count:
         raise HTTPException(404, "Not found")
     await db.poses.delete_many({"analysis_id": analysis_id})
+    await db.drill_completions.delete_many({"analysis_id": analysis_id, "device_id": x_device_id})
     return {"ok": True}
 
 
@@ -481,38 +671,256 @@ async def get_drill(drill_id: str):
     raise HTTPException(404, "Not found")
 
 
+def _step_progress_trends(items: list[Analysis]) -> list[dict]:
+    """Compare the latest two assessable observations per step from a matching camera view."""
+    observations: dict[str, list[dict]] = {}
+    supported_views = {"side_on", "rear", "front_on", "oblique"}
+    for analysis in items:
+        if analysis.camera_view not in supported_views or analysis.camera_view_confidence not in {"high", "medium"}:
+            continue
+        for step in analysis.steps:
+            if not isinstance(step, dict):
+                continue
+            key = step.get("key")
+            score = step.get("score")
+            timestamp = step.get("t")
+            if (not key or timestamp is None or step.get("status") == "not_visible"
+                    or step.get("evidence_level") == "insufficient"
+                    or not isinstance(score, (int, float)) or not math.isfinite(float(score))):
+                continue
+            observations.setdefault(key, []).append({
+                "analysis_id": analysis.id, "date": analysis.created_at,
+                "camera_view": analysis.camera_view,
+                "name": step.get("name") or key.replace("_", " ").title(),
+                "score": float(score), "status": step.get("status", "unknown"),
+                "evidence_level": step.get("evidence_level", "visual_assessment"),
+            })
+
+    trends = []
+    for key, values in observations.items():
+        values.sort(key=lambda item: item["date"], reverse=True)
+        latest = values[0]
+        previous = next((item for item in values[1:] if item["camera_view"] == latest["camera_view"]
+                            and item["evidence_level"] == latest["evidence_level"]), None)
+        if previous is None:
+            continue
+        delta = round(latest["score"] - previous["score"], 1)
+        direction = "improved" if delta >= 0.5 else "declined" if delta <= -0.5 else "stable"
+        trends.append({
+            "step_key": key, "name": latest["name"], "camera_view": latest["camera_view"],
+            "current_analysis_id": latest["analysis_id"], "previous_analysis_id": previous["analysis_id"],
+            "current_date": latest["date"], "previous_date": previous["date"],
+            "current_score": round(latest["score"], 1), "previous_score": round(previous["score"], 1),
+            "delta": delta, "direction": direction,
+        })
+    trends.sort(key=lambda item: item["current_date"], reverse=True)
+    return trends
+
+
 @api_router.get("/progress")
 async def progress(x_device_id: str = Header(...)):
     docs = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", 1).to_list(200)
     items = [Analysis.from_mongo(d) for d in docs]
+    now = datetime.now(timezone.utc)
+    development_cutoff = (now - timedelta(days=28)).isoformat()
+    workload_docs = await db.workload.find({"device_id": x_device_id, "date": {"$gte": (now.date() - timedelta(days=28)).isoformat()}}).to_list(500)
+    training_docs = await db.sessions.find({"device_id": x_device_id, "status": "ended", "created_at": {"$gte": development_cutoff}, "plan.session_mode": {"$in": ["gym", "recovery"]}}).to_list(100)
+    practice_docs = await db.drill_completions.find({"device_id": x_device_id, "completed_at": {"$gte": development_cutoff}}).sort("completed_at", -1).limit(100).to_list(100)
+    development_overview = build_development_overview([a.model_dump() for a in items], workload_docs, training_docs, practice_docs, now=now)
     points = [{
         "id": a.id,
         "date": a.created_at,
-        "score": a.overall_score,
+        "score": a.overall_score if a.overall_score_assessable else None,
         "pace": ((a.pace_band.get("min_kmh") or 0) + (a.pace_band.get("max_kmh") or 0)) / 2 if a.pace_band else 0,
-        "risk": a.injury_risk.get("level", "low"),
+        "risk": a.injury_risk.get("level", "not_assessed"),
         "faults": len(a.faults),
     } for a in items]
     phase_avg = {}
     for key in PHASES:
-        scores = [p.get("score", 0) for a in items for p in a.phases if p.get("key") == key]
-        phase_avg[key] = round(sum(scores) / len(scores), 1) if scores else 0
-    fault_counts: dict[str, int] = {}
-    for a in items:
-        for f in a.faults:
-            fault_counts[f.get("title", "Unknown")] = fault_counts.get(f.get("title", "Unknown"), 0) + 1
-    top_faults = sorted(fault_counts.items(), key=lambda x: -x[1])[:6]
+        scores = [
+            p.get("score") for a in items for p in a.phases
+            if p.get("key") == key and p.get("assessable", True)
+            and isinstance(p.get("score"), (int, float)) and math.isfinite(float(p.get("score")))
+        ]
+        phase_avg[key] = round(sum(scores) / len(scores), 1) if scores else None
+    top_faults = build_recurring_fault_history([a.model_dump() for a in items])
+    step_trends = attach_practice_to_step_trends(_step_progress_trends(items), practice_docs)
     return {
         "points": points,
         "phase_avg": phase_avg,
-        "top_faults": [{"title": t, "count": c} for t, c in top_faults],
-        "best_score": max((p["score"] for p in points), default=0),
+        "top_faults": top_faults,
+        "best_score": max((p["score"] for p in points if p["score"] is not None), default=0),
         "best_pace": max(((a.pace_band or {}).get("max_kmh") or 0 for a in items), default=0),
         "total": len(points),
+        "step_trends": step_trends,
+        "development_overview": development_overview,
     }
 
 
 # ---------------------------------------------------------------- AI coach (ChatGPT)
+@api_router.post("/coach/drills/{analysis_id}/{step_key}/complete")
+async def complete_coach_drill(analysis_id: str, step_key: str, body: DrillCompletionIn, x_device_id: str = Header(...)):
+    """Record practice only for a drill PACED prescribed in this user's report."""
+    analysis = await _owned_analysis(analysis_id, x_device_id)
+    priority = next((item for item in analysis.get("coaching_priorities", [])
+                     if item.get("step_key") == step_key and item.get("drill_name")), None)
+    if not priority:
+        raise HTTPException(404, "No targeted drill is assigned to this coaching focus")
+    doc = {
+        "device_id": x_device_id, "analysis_id": analysis_id, "step_key": step_key,
+        "focus": priority.get("title", step_key.replace("_", " ").title()),
+        "drill_name": priority["drill_name"], "completed_at": now_iso(),
+        "notes": body.notes.strip(),
+    }
+    result = await db.drill_completions.insert_one(doc)
+    return {"id": str(result.inserted_id), **{k: v for k, v in doc.items() if k != "device_id"}}
+
+
+@api_router.get("/coach/drills/history")
+async def coach_drill_history(x_device_id: str = Header(...), limit: int = Query(100, ge=1, le=300)):
+    docs = await db.drill_completions.find({"device_id": x_device_id}).sort("completed_at", -1).limit(limit).to_list(limit)
+    grouped: dict[str, dict] = {}
+    for item in docs:
+        key = item["step_key"]
+        entry = grouped.setdefault(key, {
+            "step_key": key, "focus": item.get("focus", key.replace("_", " ").title()),
+            "drill_name": item.get("drill_name", ""), "completed_count": 0,
+            "last_completed_at": item["completed_at"], "recent_sessions": [],
+        })
+        entry["completed_count"] += 1
+        if len(entry["recent_sessions"]) < 5:
+            entry["recent_sessions"].append({
+                "completed_at": item["completed_at"], "notes": item.get("notes", ""),
+                "analysis_id": item["analysis_id"],
+            })
+    sessions = [{"id": str(item["_id"]), **{k: v for k, v in item.items() if k not in {"_id", "device_id"}}} for item in docs]
+    return {"total_completions": len(docs), "focuses": list(grouped.values()), "sessions": sessions}
+
+
+@api_router.get("/coach/programme")
+async def get_coach_programme(x_device_id: str = Header(...)):
+    doc = await db.coach_programmes.find_one({"device_id": x_device_id})
+    if not doc:
+        return {"programme": None}
+    return {"programme": {k: v for k, v in doc.items() if k not in {"_id", "device_id"}}}
+
+
+@api_router.post("/coach/programme")
+async def generate_coach_programme(body: WeeklyProgrammeIn, x_device_id: str = Header(...)):
+    """Generate and persist one structured seven-day programme for this device."""
+    valid_days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+    if any(day not in valid_days for day in body.unavailable_days):
+        raise HTTPException(422, "Unavailable days must be full weekday names")
+    if len(set(body.unavailable_days)) != len(body.unavailable_days):
+        raise HTTPException(422, "Unavailable days cannot contain duplicates")
+    planned_days = body.bowling_days + body.gym_days + body.skill_days + body.match_days
+    if body.bowling_days + body.match_days > 3:
+        raise HTTPException(422, "Bowling and match exposures together must not exceed three days so hard sessions can be spaced")
+    if planned_days + len(body.unavailable_days) + 1 > 7:
+        raise HTTPException(422, "Those training targets and unavailable days leave no full rest day. Reduce a target or remove an unavailable day.")
+    profile = await get_profile(x_device_id)
+    workload = await workload_summary(x_device_id, profile)
+    training_cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    recent_training = await db.sessions.find({
+        "device_id": x_device_id, "status": "ended", "created_at": {"$gte": training_cutoff},
+        "plan.session_mode": {"$in": ["gym", "recovery"]},
+    }).sort("created_at", -1).limit(10).to_list(10)
+    training_response = build_training_response_summary(recent_training)
+    recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(3).to_list(3)
+    priorities = []
+    for analysis in recent:
+        priorities.extend([item.get("title") for item in analysis.get("coaching_priorities", [])[:2] if item.get("title")])
+    constraints = body.model_dump()
+    prompt = (
+        "Create a practical, sustainable seven-day fast-bowling development programme. "
+        "Return ONLY valid JSON with keys title, rationale, days. days must contain exactly seven objects in Monday-to-Sunday order. "
+        "Each day object must have day, type, title, focus, details, and intensity. type must be one of bowling, gym, skill, match, recovery, rest. "
+        "Use the requested counts exactly for bowling, gym, skill and match days; unavailable days must be rest. "
+        "Treat match days as high-intensity bowling exposures, space bowling and match days sensibly, include at least one full rest day, "
+        "and do not schedule hard bowling on consecutive days. Do not invent the user's work or study timetable. "
+        "Gym sessions should be general strength and conditioning suggestions, not maximal lifting prescriptions. "
+        "Skill days should be low-intensity technical practice. Include warm-up, cool-down and recovery reminders in relevant details. "
+        "If workload status is high, do not prescribe extra fast bowling; recommend recovery/low intensity and explain the programme needs review before starting. "
+        "Adapt gym intensity and optional volume to the logged training-response summary below. A rough response or repeated hard/fatigued sessions means lower gym intensity and no progression; repeated low completion means make the next plan more achievable, not more demanding. "
+        "Fresh responses across at least two logged sessions may support only a small progression if the bowler also reports good current readiness. Never infer readiness from history alone, never automatically add sets or bowling volume, and do not mistake missing logs for missed sessions. "
+        "Do not diagnose injury or give injury probabilities. Keep details concise and actionable. "
+        f"Bowler profile: {profile.name}, age band {profile.age_band or 'not supplied'}, level {profile.level}, style {profile.bowling_style}. "
+        f"Requested schedule constraints: {json.dumps(constraints)}. "
+        f"Recent logged workload: {json.dumps(workload)}. "
+        f"Recent completed gym/recovery response (last 14 days): {json.dumps(training_response)}. "
+        f"Recent video coaching priorities: {json.dumps(priorities[:6])}. "
+    )
+    try:
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"programme-{uuid.uuid4()}",
+                       system_message="You are PACED Coach, an evidence-informed fast-bowling programme planner. Return valid JSON only.").with_model("openai", "gpt-5.5")
+        raw = await chat.send_message(UserMessage(text=prompt))
+        generated = parse_model_json(raw)
+    except Exception as exc:
+        logger.exception("weekly programme generation failed")
+        raise HTTPException(502, f"Programme generation failed: {exc}")
+    days = generated.get("days") if isinstance(generated, dict) else None
+    allowed_types = {"bowling", "gym", "skill", "match", "recovery", "rest"}
+    if not isinstance(days, list) or len(days) != 7:
+        raise HTTPException(502, "Coach returned an incomplete weekly programme. Please try again.")
+    normalised = []
+    for index, day in enumerate(days):
+        expected_day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][index]
+        if not isinstance(day, dict) or day.get("type") not in allowed_types:
+            raise HTTPException(502, "Coach returned an invalid day in the weekly programme. Please try again.")
+        normalised.append({
+            "day": expected_day,
+            "type": day["type"],
+            "title": str(day.get("title") or day["type"].title())[:80],
+            "focus": str(day.get("focus") or "")[:160],
+            "details": str(day.get("details") or "")[:700],
+            "intensity": str(day.get("intensity") or "moderate")[:24],
+        })
+    if sum(day["type"] == "bowling" for day in normalised) != body.bowling_days:
+        raise HTTPException(502, "Coach did not match the requested bowling-day count. Please regenerate.")
+    if sum(day["type"] == "gym" for day in normalised) != body.gym_days:
+        raise HTTPException(502, "Coach did not match the requested gym-day count. Please regenerate.")
+    if sum(day["type"] == "skill" for day in normalised) != body.skill_days:
+        raise HTTPException(502, "Coach did not match the requested skill-day count. Please regenerate.")
+    if sum(day["type"] == "match" for day in normalised) != body.match_days:
+        raise HTTPException(502, "Coach did not match the requested match-day count. Please regenerate.")
+    if any(day["type"] != "rest" for day in normalised if day["day"] in body.unavailable_days):
+        raise HTTPException(502, "Coach scheduled training on an unavailable day. Please regenerate.")
+    if not any(day["type"] == "rest" for day in normalised):
+        raise HTTPException(502, "Coach did not include a full rest day. Please regenerate.")
+    hard_days = [day["type"] in {"bowling", "match"} for day in normalised]
+    if any(hard_days[index] and hard_days[(index + 1) % 7] for index in range(7)):
+        raise HTTPException(502, "Coach placed hard bowling exposures on consecutive days. Please regenerate.")
+    if workload["status"] == "high":
+        normalised = [
+            {**day, "details": (day["details"] + " Current logged workload is elevated: review readiness and reduce or replace this session if fatigue is present.").strip()}
+            if day["type"] in {"bowling", "match"} else day for day in normalised
+        ]
+    if training_response["adjustment"] == "reduce_next_gym_load":
+        normalised = [
+            {**day, "intensity": "low", "details": (day["details"] + " PACED has lowered this gym session because recent logged training responses include fatigue; use fewer optional sets and do not progress load. Check current readiness before starting.").strip()}
+            if day["type"] == "gym" else day for day in normalised
+        ]
+    elif training_response["adjustment"] == "hold_or_reduce_volume":
+        normalised = [
+            {**day, "intensity": "low" if day["intensity"].lower() == "high" else "moderate",
+             "details": (day["details"] + " Keep this session achievable: do not add volume, and reduce optional work if time or recovery is limited.").strip()}
+            if day["type"] == "gym" else day for day in normalised
+        ]
+    programme = {
+        "title": str(generated.get("title") or "Your weekly development plan")[:100],
+        "rationale": str(generated.get("rationale") or "")[:700],
+        "days": normalised,
+        "constraints": constraints,
+        "workload_at_generation": {"status": workload["status"], "headline": workload["headline"], "acute": workload["acute"]},
+        "training_response_at_generation": training_response,
+        "created_at": now_iso(),
+    }
+    await db.coach_programmes.update_one(
+        {"device_id": x_device_id}, {"$set": {"device_id": x_device_id, **programme}}, upsert=True
+    )
+    return {"programme": programme}
+
+
 @api_router.get("/coach/messages")
 async def coach_messages(x_device_id: str = Header(...)):
     docs = await db.coach_messages.find({"device_id": x_device_id}).sort("created_at", 1).to_list(200)
@@ -531,20 +939,81 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
     if not text:
         raise HTTPException(400, "Message required")
     profile = await get_profile(x_device_id)
-    recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(3).to_list(3)
+    recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(8).to_list(8)
     context = [
         {"date": a["created_at"][:10], "score": a.get("overall_score"), "action": a.get("action_type"),
          "pace": a.get("pace_band", {}).get("label"), "risk": a.get("injury_risk", {}).get("level"),
          "faults": [f.get("title") for f in a.get("faults", [])]}
         for a in recent
     ]
+    drill_history = await db.drill_completions.find({"device_id": x_device_id}).sort("completed_at", -1).limit(30).to_list(30)
+    practice_by_step: dict[str, dict] = {}
+    for item in drill_history:
+        entry = practice_by_step.setdefault(item["step_key"], {
+            "step_key": item["step_key"], "focus": item.get("focus"),
+            "drill": item.get("drill_name"), "completed_sessions": 0,
+            "last_completed_at": item.get("completed_at"), "recent_notes": [],
+        })
+        entry["completed_sessions"] += 1
+        if item.get("notes") and len(entry["recent_notes"]) < 3:
+            entry["recent_notes"].append(item["notes"])
+    comparable_trends = _step_progress_trends([Analysis.from_mongo(item) for item in recent])
+    trend_by_step = {item["step_key"]: item for item in comparable_trends}
+    training_load = await workload_summary(x_device_id, profile)
+    saved_programme = await db.coach_programmes.find_one({"device_id": x_device_id}, {"_id": 0, "device_id": 0})
+    recent_sessions = await db.sessions.find({"device_id": x_device_id}).sort("created_at", -1).limit(5).to_list(5)
+    training_sessions = [{
+        "date": item.get("created_at", "")[:10],
+        "focus": item.get("focus"),
+        "status": item.get("status"),
+        "deliveries": len([ball for ball in item.get("balls", []) if ball.get("is_bowling", True)]),
+        "recovery_guidance": [step.get("name") for step in (item.get("plan", {}).get("recovery", {}).get("items", []))],
+        "summary": item.get("summary", ""),
+        "session_mode": (item.get("plan") or {}).get("session_mode", "bowling"),
+        "completion": item.get("completion", {}),
+    } for item in recent_sessions]
+    practice_context = []
+    for key, item in practice_by_step.items():
+        trend = trend_by_step.get(key)
+        practice_context.append({
+            **item,
+            "video_check": ({
+                "direction": trend["direction"], "previous_score": trend["previous_score"],
+                "current_score": trend["current_score"], "camera_view": trend["camera_view"],
+                "comparison_dates": [trend["previous_date"], trend["current_date"]],
+            } if trend else "No comparable timestamped video pair yet"),
+        })
     history = await db.coach_messages.find({"device_id": x_device_id}).sort("created_at", -1).limit(12).to_list(12)
     history.reverse()
     transcript = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in history)
 
     system = (
-        "You are PACED Coach, a world-class fast-bowling coach. Give concise, practical, encouraging advice "
-        "(max ~150 words, short bullet points when listing). Prioritise injury prevention for young quicks. "
+         "You are PACED Coach, a world-class fast-bowling coach. Give concise, practical, encouraging advice "
+        "(max ~150 words, short bullet points when listing). Prioritise sustainable technique, recovery and workload habits. "
+        "Never diagnose injury or infer injury probability from a single delivery or uncalibrated video. "
+        "You are the bowler's ongoing coach: use the practice log to remember prescribed drills, "
+        "ask about practice when relevant, acknowledge logged sessions, and revisit the same movement focus "
+        "in later video analyses. For each practiced focus, review its same-view video_check when available; "
+        "if there is no comparable pair, say the technique change is not yet verified. A logged drill is not "
+        "proof of technique change; judge improvement only from comparable, sufficiently clear video evidence. "
+        "You also coach the complete training process, not just bowling mechanics. Structure a fast-bowling day "
+        "around readiness and recent workload review; hydration and safe setup; a progressive warm-up (general "
+        "temperature raise, dynamic mobility, activation, progressive run-up build-ups and easy deliveries); "
+        "a small number of purposeful technique drills; a workload-appropriate bowling block with rest between "
+        "deliveries; a controlled cool-down; then rehydration, carbohydrate-plus-protein refuelling, sleep and "
+        "next-day response monitoring. Adapt or reduce intensity when workload, fatigue, soreness, heat or "
+        "recovery status warrants it. Never prescribe bowling through pain, illness or altered mechanics; "
+        "recommend qualified clinical assessment for persistent or worsening pain. Avoid aggressive stretching, "
+        "forced spinal positions, arbitrary ball-count targets, supplement claims and medical diagnosis. "
+        "Distinguish a full training session from a short technical practice and include rest days / low-load "
+        "days in longer plans. Never claim a session was logged unless the app recorded it. "
+        f"Recent prescribed-drill practice log: {json.dumps(practice_context)}. "
+        f"Recent bowling workload: {json.dumps(training_load)}. Saved weekly programme: {json.dumps(saved_programme) if saved_programme else 'No saved programme yet'}. Recent structured training sessions: {json.dumps(training_sessions)}. "
+        "Use this history when advising session intensity, recovery gaps and whether today should be a bowling, low-load or recovery day. "
+        "For gym and recovery sessions, treat completion.activities as the actual performed work, not the planned programme; "
+        "use actual sets/reps, perceived session effort and post-session feeling to adapt future suggestions. "
+        "Never assume an unchecked activity was completed or treat planned sets/reps as achieved volume. "
+        "Do not infer readiness from workload numbers alone: ask how the bowler feels today. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. "
         f"Recent analyses: {json.dumps(context)}. "
         f"Conversation so far:\n{transcript}"
@@ -664,6 +1133,7 @@ class Session(BaseDocument):
     device_id: str
     created_at: str
     focus: str
+    scheduled_session: dict = {}
     status: str = "active"
     intro: str = ""
     intro_audio: str = ""
@@ -674,6 +1144,7 @@ class Session(BaseDocument):
     plan: dict = {}
     achievements: List[dict] = []
     test_result: dict = {}
+    completion: dict = {}
 
 
 # ---------------------------------------------------------------- workload tracker
@@ -723,9 +1194,9 @@ async def workload_summary(device_id: str, profile: Profile) -> dict:
     guide = WEEKLY_GUIDE.get(profile.age_band)
     flags = []
     if acwr is not None and acwr > 1.5:
-        flags.append({"level": "high", "text": f"Acute:chronic ratio {acwr} - above the 1.5 danger zone for bone and tendon injury."})
+        flags.append({"level": "high", "text": f"Acute:chronic ratio {acwr} - logged bowling volume is substantially above the recent 4-week baseline. Review intensity and recovery before adding more."})
     elif acwr is not None and acwr > 1.3:
-        flags.append({"level": "medium", "text": f"Acute:chronic ratio {acwr} - edging above the 0.8-1.3 sweet spot."})
+        flags.append({"level": "medium", "text": f"Acute:chronic ratio {acwr} - logged bowling volume is above the recent baseline. Consider holding volume steady while monitoring recovery."})
     if prev_week and acute > prev_week * 1.3 and acute - prev_week >= 30:
         flags.append({"level": "medium" if acute < prev_week * 1.6 else "high", "text": f"Weekly spike: {acute} balls vs {prev_week} last week (+{round((acute / prev_week - 1) * 100)}%)."})
     if streak >= 4:
@@ -735,10 +1206,10 @@ async def workload_summary(device_id: str, profile: Profile) -> dict:
     if guide and acute > guide:
         flags.append({"level": "high", "text": f"{acute} balls this week exceeds the ~{guide}/week guide for the {profile.age_band} age band."})
     status = "high" if any(f["level"] == "high" for f in flags) else "medium" if flags else "low"
-    headline = flags[0]["text"] if flags else (f"{acute} balls this week, {rest_days} rest days - load is well managed." if acute else "No bowling logged in the last 7 days.")
-    advice = {"high": "Cut volume by 30-50% this week, add 2 rest days and avoid max-effort spells.",
-              "medium": "Hold volume steady, keep 2 rest days and build no more than ~10% per week.",
-              "low": "Keep building gradually (max ~10% per week) with 2+ rest days."}[status]
+    headline = flags[0]["text"] if flags else (f"{acute} balls this week, {rest_days} rest days - no major workload flags in the logged data." if acute else "No bowling logged in the last 7 days.")
+    advice = {"high": "Logged volume is well above recent baseline or a weekly guide. Consider reducing this week’s volume, prioritise recovery and seek individual advice if pain or unusual fatigue persists.",
+              "medium": "Hold volume steady, plan recovery days and avoid a large jump in high-intensity deliveries.",
+              "low": "Continue gradual progression, monitor how you feel and plan regular recovery days."}[status]
     return {"acute": acute, "previous_week": prev_week, "chronic_weekly": round(chronic, 1), "acwr": acwr, "rest_days_7": rest_days,
             "streak": streak, "weeks": weeks, "weekly_guide": guide, "flags": flags, "status": status, "headline": headline,
             "advice": advice, "today": daily.get(today.isoformat(), 0)}
@@ -786,13 +1257,70 @@ async def speak_text(body: SpeakIn):
 
 class SessionIn(BaseModel):
     focus: str = "Pace"
+    local_day: str = ""
+
+
+# PACED's session framework is fixed and evidence-informed; the model personalises
+# the technical content, but must not invent readiness, recovery or workload rules.
+SESSION_PREPARATION = [
+    {"name": "Readiness check", "minutes": 1, "cue": "Check energy, soreness, illness and any pain. Do not bowl through pain or illness; modify or stop if something feels wrong."},
+    {"name": "Review recent workload", "minutes": 1, "cue": "Check recent bowling and other high-intensity training. If unusually fatigued or workload has spiked, reduce the bowling block or switch to low-intensity skill work."},
+    {"name": "Hydrate and set up", "minutes": 1, "cue": "Arrive hydrated, have water available, and check footwear, run-up, landing area and run-off are safe and clear."},
+    {"name": "Set one session intention", "minutes": 1, "cue": "Choose one technical focus and one simple outcome. Quality and repeatability matter more than chasing maximum pace or ball count."},
+]
+SESSION_WARM_UP = [
+    {"name": "Easy aerobic raise", "minutes": 3, "cue": "Jog, brisk walk or cycle easily until warm; build gradually, not to fatigue."},
+    {"name": "Dynamic mobility", "minutes": 3, "cue": "Move through comfortable ankle, hip, thoracic and shoulder mobility. Use controlled dynamic movements, not forced end-range stretches."},
+    {"name": "Movement activation", "minutes": 3, "cue": "Use bodyweight squats, calf raises, glute bridges and controlled trunk/shoulder movements. Keep everything comfortable."},
+    {"name": "Progressive run-up build-ups", "reps": "3–4 runs", "cue": "Build from easy to moderate approach speed with full walk-back recovery; rehearse rhythm without bowling at full intensity."},
+    {"name": "Easy bowling rehearsal", "reps": "3–6 deliveries", "cue": "Start with comfortable, submaximal deliveries. Increase intensity only if movement feels coordinated and pain-free."},
+]
+SESSION_COOL_DOWN = [
+    {"name": "Easy walk", "minutes": 3, "cue": "Walk until breathing and heart rate settle gradually."},
+    {"name": "Gentle lower-body mobility", "minutes": 2, "cue": "Use comfortable hip, calf and hamstring movements; no bouncing or forcing a stretch."},
+    {"name": "Gentle upper-body mobility", "minutes": 2, "cue": "Move shoulders and upper back through a comfortable range. Avoid aggressive spinal or shoulder stretching."},
+]
+SESSION_RECOVERY = [
+    {"name": "Rehydrate", "cue": "Drink to thirst and replace fluids over the next few hours; include electrolytes when the session was hot, long or particularly sweaty."},
+    {"name": "Refuel", "cue": "Have a normal meal or snack with carbohydrate and protein within a practical post-session window. No special supplement is required."},
+    {"name": "Restore", "cue": "Prioritise a consistent night's sleep and an appropriate gap before the next high-intensity bowling exposure."},
+    {"name": "Review response", "cue": "Record balls, intensity, effort, soreness and how you feel the next day. Persistent or worsening pain needs assessment by a qualified health professional."},
+]
+
+
+def apply_structured_session_protocol(plan: dict, workload: dict) -> dict:
+    """Apply consistent preparation, warm-up, cool-down and recovery safeguards."""
+    plan = plan if isinstance(plan, dict) else {}
+    plan["pre_session"] = SESSION_PREPARATION
+    plan["warm_up"] = SESSION_WARM_UP
+    plan["cool_down"] = SESSION_COOL_DOWN
+    plan["recovery"] = {"title": "After the session", "items": SESSION_RECOVERY}
+    if not isinstance(plan.get("tips"), list):
+        plan["tips"] = []
+    bowling = plan.get("bowling") if isinstance(plan.get("bowling"), dict) else {}
+    try:
+        requested = int(bowling.get("balls", 8))
+    except (TypeError, ValueError):
+        requested = 8
+    status = workload.get("status")
+    maximum = 6 if status == "high" else 8 if status == "medium" else 12
+    bowling["balls"] = max(1, min(requested, maximum, 12))
+    bowling["rest_between_deliveries"] = "Walk back, reset your breathing and take enough recovery to keep the next delivery coordinated. Do not rush the next ball."
+    if status == "high":
+        plan.setdefault("tips", []).append("Recent workload is elevated: this session has been capped at a small bowling block. Stop if fatigue changes your action; consider replacing fast bowling with recovery.")
+    elif status == "medium":
+        plan.setdefault("tips", []).append("Recent workload is above baseline: keep the bowling volume controlled and prioritise quality over extra repetitions.")
+    plan["bowling"] = bowling
+    return plan
 
 
 BALL_PROMPT = """You are watching ONE delivery from a live fast-bowling net session. Bowler: {profile}. Session focus: {focus}.
 Current target from coach: {target}
-Return ONLY JSON: {{"is_bowling": true, "score": 7.1, "pace_kmh": 128, "hit_target": true,
-"good": "one thing done well", "fault": "the single most important fault (or empty)", "phase": "run_up|load|back_foot|front_foot|release|follow_through",
-"injury_flag": false, "observation": "1-2 sentence technical observation"}}"""
+Assess only visible technique and target execution. Do not diagnose injury or infer injury risk.
+Do not estimate bowling speed from body movement or uncalibrated video; pace_kmh must be null.
+Return ONLY JSON: {{"is_bowling": true, "score": 7.1, "pace_kmh": null, "hit_target": true,
+"good": "one thing done well", "fault": "the single most important visible technique fault (or empty)", "phase": "run_up|load|back_foot|front_foot|release|follow_through",
+"observation": "1-2 sentence technical observation"}}"""
 
 
 async def coach_say(system: str, prompt: str) -> str:
@@ -805,6 +1333,7 @@ def coach_system(profile: Profile, focus: str) -> str:
     return (
         "You are PACED, a live fast-bowling net coach speaking out loud to the bowler between deliveries. "
         "Talk like a real coach at the nets: short, punchy, specific, encouraging. Plain spoken English only, no lists, no markdown, no emojis. "
+        "Focus on visible technique and sustainable training habits; do not diagnose injuries or estimate injury probability. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. Session focus: {focus}."
     )
 
@@ -824,26 +1353,97 @@ async def start_session(body: SessionIn, x_device_id: str = Header(...)):
     recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(1).to_list(1)
     faults = [f.get("title") for f in (recent[0].get("faults", []) if recent else [])]
     wl = await workload_summary(x_device_id, profile)
+    scheduled = None
+    if body.local_day:
+        valid_days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+        if body.local_day not in valid_days:
+            raise HTTPException(422, "local_day must be a full weekday name")
+        saved = await db.coach_programmes.find_one({"device_id": x_device_id}, {"_id": 0, "device_id": 0})
+        if saved:
+            scheduled = next((d for d in saved.get("days", []) if d.get("day") == body.local_day), None)
+    if scheduled and scheduled.get("type") in {"rest", "match"}:
+        labels = {"rest": "a full rest day", "match": "a match day"}
+        raise HTTPException(409, f"Your PACED programme has today scheduled as {labels[scheduled['type']]}. A training session would add unnecessary load today. Today's plan: {scheduled.get('title', '')} — {scheduled.get('details', '')}")
+    scheduled_context = (
+        f"Today's saved PACED programme: {scheduled.get('type')} — {scheduled.get('title')}. Focus: {scheduled.get('focus')}. Details: {scheduled.get('details')}. Intensity: {scheduled.get('intensity')}."
+        if scheduled else "No saved programme session is scheduled for today; use the requested focus and recent workload."
+    )
     try:
         chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"plan-{uuid.uuid4()}",
                        system_message=coach_system(profile, body.focus) + " When asked for JSON, return ONLY valid JSON.").with_model("openai", "gpt-5.5")
-        raw = await chat.send_message(UserMessage(text=(
-            f"Design today's complete fast-bowling net session. Focus: {body.focus}. Known faults: {faults or 'none yet'}. "
-            f"Workload status: {wl['status']} ({wl['headline']}). If workload is high, keep bowling volume low and say why. "
-            "Return JSON: {\"intro\": \"spoken greeting under 50 words that previews the session and ends with 'Let's start the warm-up.'\", "
-            "\"warm_up\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (5 dynamic items: jog, mobility, activation, build-up run-throughs, 3 easy deliveries), "
-            "\"drills\": [{\"name\": \"\", \"reps\": \"3 x 8\", \"cue\": \"\"}] (3 technique drills targeting the faults/focus), "
-            "\"bowling\": {\"balls\": 6-12, \"target\": \"first-ball target\"}, "
-            "\"test\": {\"name\": \"\", \"balls\": 6, \"target\": \"what counts as a success\", \"description\": \"\"}, "
-            "\"cool_down\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (4 items incl. walk, hip flexor/hamstring/lumbar/shoulder stretches), "
-            "\"tips\": [\"\", \"\", \"\"] (recovery, injury prevention and technique)}")))
-        plan = parse_json(raw)
-        intro = str(plan.pop("intro", "")).strip() or "Welcome to your PACED session. Let's start the warm-up."
+        session_type = scheduled.get("type") if scheduled else "bowling"
+        if session_type in {"gym", "recovery"}:
+            mode_instruction = (
+                "Create a GYM session. Use 4-6 practical strength/power exercise stations appropriate for a fast bowler, "
+                "including sets/reps and simple technique cues. Use bodyweight or moderate familiar resistance only; do not prescribe 1RM, maximal loads, or training to failure. "
+                "Include a sensible balance of lower body, upper body, trunk control and unilateral stability. No bowling deliveries, sprinting or plyometric volume. "
+                if session_type == "gym" else
+                "Create a RECOVERY session. Use 3-5 gentle recovery activities such as easy walking, comfortable mobility, breathing and optional light range-of-motion work. "
+                "Keep it restorative, not a workout. No bowling, strength work, forced stretching, or aggressive tissue work."
+            )
+            request = (
+                f"{mode_instruction} {scheduled_context} Bowler profile: {profile.level}, {profile.bowling_style}. "
+                f"Recent workload: {wl['status']} ({wl['headline']}). Do not add training volume to compensate for missed sessions. "
+                "Return JSON with intro (spoken greeting under 50 words), activities (array of objects with name, reps or minutes, cue), "
+                "tips (array of short notes). Use a practical, conservative session that can be completed without specialist equipment."
+            )
+        else:
+            request = (
+                f"Design today's complete fast-bowling net session. Focus: {body.focus}. {scheduled_context} Known faults: {faults or 'none yet'}. "
+                f"Workload status: {wl['status']} ({wl['headline']}). If workload is high, keep bowling volume low and say why. "
+                "Return JSON: {\"intro\": \"spoken greeting under 50 words that previews the readiness checks and ends with 'Let's start with today's preparation.'\", "
+                "\"warm_up\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (5 dynamic items: jog, mobility, activation, build-up run-throughs, 3 easy deliveries), "
+                "\"drills\": [{\"name\": \"\", \"reps\": \"3 x 8\", \"cue\": \"\"}] (3 technique drills targeting the faults/focus), "
+                "\"bowling\": {\"balls\": 6-12, \"target\": \"first-ball target\"}, "
+                "\"test\": {\"name\": \"\", \"balls\": 6, \"target\": \"what counts as a success\", \"description\": \"\"}, "
+                "\"cool_down\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (4 items incl. walk and gentle mobility), "
+                "\"tips\": [\"\", \"\", \"\"] (recovery, workload management and technique)}"
+            )
+        raw = await chat.send_message(UserMessage(text=request))
+        parsed_plan = parse_model_json(raw)
+        if session_type in {"gym", "recovery"}:
+            plan = parsed_plan if isinstance(parsed_plan, dict) else {}
+            plan["session_mode"] = session_type
+            plan["pre_session"] = [
+                {"name": "Readiness check", "minutes": 1, "cue": "Check energy, soreness, illness and pain. Modify or stop if something feels wrong."},
+                {"name": "Set today's intention", "minutes": 1, "cue": "Keep this session aligned with your saved programme. Do not add extra bowling to make up missed work."},
+            ]
+            plan["warm_up"] = (
+                [{"name": "Easy aerobic raise", "minutes": 3, "cue": "Walk or cycle easily until comfortably warm."},
+                 {"name": "Dynamic mobility", "minutes": 3, "cue": "Move ankles, hips, upper back and shoulders through comfortable ranges."},
+                 {"name": "Movement rehearsal", "minutes": 2, "cue": "Practise the first few movements slowly before adding any resistance."}]
+                if session_type == "gym" else
+                [{"name": "Easy walk", "minutes": 3, "cue": "Walk gently and let breathing settle."},
+                 {"name": "Comfortable mobility", "minutes": 3, "cue": "Use gentle, pain-free ankle, hip, back and shoulder movements."}]
+            )
+            activities = plan.get("activities") if isinstance(plan.get("activities"), list) else []
+            plan["activities"] = [item for item in activities if isinstance(item, dict) and item.get("name")][:6]
+            if not plan["activities"]:
+                plan["activities"] = (
+                    [{"name": "Bodyweight squat", "reps": "2 x 8", "cue": "Move smoothly through a comfortable range."},
+                     {"name": "Split squat", "reps": "2 x 6 each side", "cue": "Stay balanced and use a comfortable depth."},
+                     {"name": "Push-up variation", "reps": "2 x 8", "cue": "Keep the trunk controlled; use an easier variation if needed."},
+                     {"name": "Single-leg calf raise", "reps": "2 x 10 each side", "cue": "Use support for balance and move with control."}]
+                    if session_type == "gym" else
+                    [{"name": "Gentle walk", "minutes": 8, "cue": "Keep the pace easy and conversational."},
+                     {"name": "Comfortable hip and ankle mobility", "minutes": 4, "cue": "Stay within a pain-free range."},
+                     {"name": "Slow breathing", "minutes": 2, "cue": "Breathe comfortably and allow the body to relax."}]
+                )
+            plan["cool_down"] = SESSION_COOL_DOWN
+            plan["recovery"] = {"title": "After the session", "items": SESSION_RECOVERY}
+            plan["bowling"] = {"balls": 0}
+            plan.pop("test", None)
+            if not isinstance(plan.get("tips"), list):
+                plan["tips"] = []
+        else:
+            plan = apply_structured_session_protocol(parsed_plan, wl)
+            plan["session_mode"] = "bowling"
+        intro = str(plan.pop("intro", "")).strip() or "Welcome to your PACED session. Let's complete today's preparation."
         audio = await speak(intro)
     except Exception as exc:
         logger.exception("session start failed")
         raise HTTPException(502, f"Coach unavailable: {exc}")
-    session = Session(device_id=x_device_id, created_at=now_iso(), focus=body.focus, intro=intro, intro_audio=audio, plan=plan)
+    session = Session(device_id=x_device_id, created_at=now_iso(), focus=body.focus, scheduled_session=scheduled or {}, intro=intro, intro_audio=audio, plan=plan)
     res = await db.sessions.insert_one(session.to_mongo())
     session.id = str(res.inserted_id)
     return session.public()
@@ -888,7 +1488,7 @@ async def session_ball(session_id: str, video: UploadFile = File(...), block: st
         raw = await chat.send_message(UserMessage(
             text=BALL_PROMPT.format(profile=f"{profile.bowling_arm}-arm {profile.bowling_style}", focus=session.focus, target=target),
             file_contents=[FileContentWithMimeType(file_path=path, mime_type=mime)]))
-        obs = parse_json(raw)
+        obs = parse_model_json(raw)
         history = [{"n": b["n"], "score": b["score"], "fault": b.get("fault")} for b in session.balls[-5:]]
         speech = await coach_say(coach_system(profile, session.focus),
             f"Ball {len(session.balls) + 1} just bowled. Analysis: {json.dumps(obs)}. Previous balls: {json.dumps(history)}. "
@@ -905,9 +1505,9 @@ async def session_ball(session_id: str, video: UploadFile = File(...), block: st
             os.remove(path)
     ball = {
         "n": len(session.balls) + 1, "created_at": now_iso(), "is_bowling": bool(obs.get("is_bowling", True)),
-        "score": float(obs.get("score") or 0), "pace_kmh": obs.get("pace_kmh"), "hit_target": obs.get("hit_target"),
+        "score": float(obs.get("score") or 0), "pace_kmh": None, "hit_target": obs.get("hit_target"),
         "good": obs.get("good", ""), "fault": obs.get("fault", ""), "phase": obs.get("phase", ""),
-        "injury_flag": bool(obs.get("injury_flag")), "observation": obs.get("observation", ""),
+        "observation": obs.get("observation", ""),
         "feedback": feedback, "next_target": next_target, "audio": audio, "block": block,
     }
     await db.sessions.update_one({"_id": ObjectId(session_id)}, {"$push": {"balls": ball}})
@@ -921,7 +1521,7 @@ async def session_ball(session_id: str, video: UploadFile = File(...), block: st
     return ball
 
 
-def compute_achievements(session: Session, prior_best_pace: float) -> tuple[list, dict]:
+def compute_achievements(session: Session) -> tuple[list, dict]:
     balls = [b for b in session.balls if b.get("is_bowling", True)]
     test = [b for b in balls if b.get("block") == "test"]
     out = []
@@ -938,44 +1538,76 @@ def compute_achievements(session: Session, prior_best_pace: float) -> tuple[list
         add("on_target", "On Target", f"Hit the coach's target {best} balls in a row")
     if len(balls) >= 4 and all(b["score"] >= 7 for b in balls):
         add("consistency", "Consistency", "Every ball scored 7 or higher")
-    if balls and not any(b.get("injury_flag") for b in balls):
-        add("safe_action", "Safe Action", "No injury-risk flags all session")
-    top = max([b.get("pace_kmh") or 0 for b in balls], default=0)
-    if top and top > prior_best_pace:
-        add("personal_best", "Personal Best Pace", f"New top estimate: {top} km/h")
+
     result = {}
     if test:
         hits = sum(1 for b in test if b.get("hit_target"))
+        measured_paces = [b["pace_kmh"] for b in test if isinstance(b.get("pace_kmh"), (int, float)) and b["pace_kmh"] > 0]
         result = {"name": (session.plan.get("test") or {}).get("name", "Skills Test"), "balls": len(test), "hits": hits,
-                  "avg_score": round(sum(b["score"] for b in test) / len(test), 1), "top_pace": max([b.get("pace_kmh") or 0 for b in test])}
+                  "avg_score": round(sum(b["score"] for b in test) / len(test), 1),
+                  "top_pace": max(measured_paces) if measured_paces else None}
         if hits >= max(1, round(len(test) * 0.67)):
             add("test_passed", "Test Passed", f"{hits}/{len(test)} on target in the {result['name']}")
     return out, result
 
 
 @api_router.post("/sessions/{session_id}/end")
-async def end_session(session_id: str, x_device_id: str = Header(...)):
+async def end_session(session_id: str, body: Optional[SessionCompletionIn] = None, x_device_id: str = Header(...)):
     session = await _owned_session(session_id, x_device_id)
     if session.status == "ended":
         return session.public()
+    session_mode = (session.plan or {}).get("session_mode", "bowling")
+    completion = {}
+    if session_mode in {"gym", "recovery"}:
+        planned = (session.plan or {}).get("activities", [])
+        planned_names = [str(item.get("name", "")).strip() for item in planned if isinstance(item, dict)]
+        submitted = body.activities if body else []
+        submitted_names = [item.name.strip() for item in submitted]
+        if len(submitted_names) != len(set(submitted_names)):
+            raise HTTPException(422, "Each planned activity can only be logged once")
+        if set(submitted_names) - set(planned_names):
+            raise HTTPException(422, "Completion contains an activity that was not in this session")
+        by_name = {item.name.strip(): item.model_dump() for item in submitted}
+        completion = {
+            "activities": [
+                {"name": name, **by_name.get(name, {"completed": False, "actual_sets": None, "actual_reps": None, "effort": None, "notes": ""})}
+                for name in planned_names
+            ],
+            "session_effort": body.session_effort if body else None,
+            "overall_feeling": body.overall_feeling if body else None,
+            "notes": body.notes if body else "",
+            "logged_at": now_iso(),
+        }
     profile = await get_profile(x_device_id)
     balls = [{"n": b["n"], "block": b.get("block", "bowling"), "score": b["score"], "pace": b.get("pace_kmh"), "fault": b.get("fault"), "good": b.get("good")} for b in session.balls]
-    prior = await db.sessions.find({"device_id": x_device_id, "status": "ended"}, {"balls.pace_kmh": 1}).to_list(200)
-    prior_best = max([b.get("pace_kmh") or 0 for s_ in prior for b in s_.get("balls", [])], default=0)
-    achievements, test_result = compute_achievements(session, prior_best)
+    achievements, test_result = compute_achievements(session)
     try:
-        summary = await coach_say(coach_system(profile, session.focus),
-            f"The session is over (warm-up, drills, bowling block, test, cool-down). Balls: {json.dumps(balls)}. Test result: {json.dumps(test_result)}. "
-            f"Achievements unlocked: {[a['title'] for a in achievements]}. In under 80 words, wrap up: overall verdict, the test result, "
-            "the one thing to work on before next session, one recovery tip, and a motivating sign-off." if balls else
-            "The bowler ended the session before bowling. In under 25 words, say no problem and invite them back.")
+        session_mode = (session.plan or {}).get("session_mode", "bowling")
+        if session_mode in {"gym", "recovery"}:
+            summary_prompt = (
+                f"The {session_mode} session is complete. Planned activities: {json.dumps((session.plan or {}).get('activities', []))}. "
+                f"What actually happened: {json.dumps(completion)}. "
+                f"Programme focus: {session.scheduled_session.get('focus', session.focus)}. "
+                "Only describe activities marked completed as performed. Distinguish skipped or modified work from planned work. "
+                "Acknowledge the reported effort/feeling if present. In under 65 words, give a supportive recap, reinforce controlled quality rather than extra volume, "
+                "and give one practical recovery or next-session note. Do not mention bowling balls or a bowling test."
+            )
+        else:
+            summary_prompt = (
+                f"The session is over (warm-up, drills, bowling block, test, cool-down). Balls: {json.dumps(balls)}. Test result: {json.dumps(test_result)}. "
+                f"Achievements unlocked: {[a['title'] for a in achievements]}. In under 80 words, wrap up: overall verdict, the test result, "
+                "the one thing to work on before next session, one recovery tip, and a motivating sign-off." if balls else
+                "The bowler ended the session before bowling. In under 25 words, say no problem and invite them back."
+            )
+        summary = await coach_say(coach_system(profile, session.focus), summary_prompt)
         audio = await speak(summary)
     except Exception as exc:
         logger.exception("session end failed")
         summary, audio = "Session saved. Great work today.", ""
     await db.sessions.update_one({"_id": ObjectId(session_id)}, {"$set": {
         "status": "ended", "summary": summary, "summary_audio": audio, "ended_at": now_iso(),
-        "achievements": achievements, "test_result": test_result}})
+        "achievements": achievements, "test_result": test_result,
+        **({"completion": completion} if session_mode in {"gym", "recovery"} else {})}})
     return (await _owned_session(session_id, x_device_id)).public()
 
 

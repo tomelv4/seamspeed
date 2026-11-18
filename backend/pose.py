@@ -16,6 +16,13 @@ import numpy as np
 L = {"shoulder": 5, "elbow": 7, "wrist": 9, "hip": 11, "knee": 13, "ankle": 15}
 R = {"shoulder": 6, "elbow": 8, "wrist": 10, "hip": 12, "knee": 14, "ankle": 16}
 
+
+def _normalise_bowling_arm(bowling_arm):
+    """Use a safe right-arm default for missing or unrecognised profile values."""
+    label = str(bowling_arm or "right").strip().lower()
+    return "right" if label.startswith("r") or not label.startswith("l") else "left"
+
+
 POSE_MODE = os.environ.get("POSE_MODE", "performance")  # performance | balanced | lightweight
 _lock = threading.Lock()
 _body = None
@@ -34,12 +41,70 @@ def warmup():
     _get_body()
 
 
+def _safe_fps(value, default: float = 30.0) -> float:
+    try:
+        fps = float(value)
+    except (TypeError, ValueError):
+        return default
+    return fps if math.isfinite(fps) and fps > 0 else default
+
+
+def assess_video_quality(frames, fps: float, width: int, height: int) -> dict:
+    """Screen capture quality with transparent heuristics; this is not a calibrated quality score."""
+    flags = []
+    if min(width, height) < 480:
+        flags.append("low_resolution")
+    if not math.isfinite(float(fps)) or fps < 24:
+        flags.append("low_frame_rate")
+
+    luminance, sharpness = [], []
+    for frame in frames:
+        if frame is None or not getattr(frame, "size", 0):
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
+        luminance.append(float(np.mean(gray)))
+        sharpness.append(float(cv2.Laplacian(gray, cv2.CV_64F).var()))
+
+    mean_luminance = float(np.mean(luminance)) if luminance else None
+    median_sharpness = float(np.median(sharpness)) if sharpness else None
+    if mean_luminance is not None and mean_luminance < 35:
+        flags.append("low_light")
+    elif mean_luminance is not None and mean_luminance > 220:
+        flags.append("overexposed")
+    if median_sharpness is not None and median_sharpness < 35:
+        flags.append("possible_blur_or_motion_blur")
+    if not luminance:
+        flags.append("quality_sampling_unavailable")
+
+    return {
+        "rating": "review" if flags else "good",
+        "flags": flags,
+        "samples": len(luminance),
+        "mean_luminance": round(mean_luminance, 1) if mean_luminance is not None else None,
+        "median_sharpness": round(median_sharpness, 1) if median_sharpness is not None else None,
+        "method": "screening_heuristics_not_calibrated",
+    }
+
+
 def video_meta(path: str) -> dict:
     cap = cv2.VideoCapture(path)
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    total = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+    fps = _safe_fps(cap.get(cv2.CAP_PROP_FPS))
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+    sample_frames = []
+    if total > 0:
+        for index in np.linspace(0, max(0, total - 1), min(8, total), dtype=int):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(index))
+            ok, frame = cap.read()
+            if ok:
+                sample_frames.append(frame)
     cap.release()
-    return {"fps": round(fps, 2), "duration": round(total / fps, 2) if total else 0}
+    duration = round(total / fps, 2) if total else 0
+    return {
+        "fps": round(fps, 2), "duration": duration, "width": width, "height": height,
+        "quality": assess_video_quality(sample_frames, fps, width, height),
+    }
 
 
 def _bbox(kp, sc):
@@ -57,14 +122,15 @@ def _iou(a, b):
     return inter / union if union > 0 else 0.0
 
 
-def _link(dets, diag):
-    """Greedy frame-to-frame association by IoU + centre distance. Returns tracks: {fi: det}."""
+def _link(dets, diag, times=None, max_gap_seconds: float = 0.35):
+    """Associate detections only across short real-time gaps using IoU + centre distance."""
     tracks = []  # each: {"last": fi, "box": bbox, "vel": (dx, dy), "dets": {fi: det}}
     for fi, people in enumerate(dets):
         pairs = []
         for ti, tr in enumerate(tracks):
             gap = fi - tr["last"]
-            if gap > 8:
+            elapsed = (float(times[fi]) - float(times[tr["last"]])) if times is not None else gap / 60.0
+            if gap <= 0 or elapsed <= 0 or elapsed > max_gap_seconds:
                 continue
             pred = tr["box"] + np.array([*tr["vel"], *tr["vel"]]) * gap
             pc = ((pred[0] + pred[2]) / 2, (pred[1] + pred[3]) / 2)
@@ -108,24 +174,104 @@ def _bowler_score(tr, diag):
     return len(items) * conf * (0.4 + size) * (1 + 3 * travel + 25 * limb_motion)
 
 
-def _smooth(kps, scs):
-    """Confidence-weighted 3-frame smoothing that keeps fast arm motion intact."""
+def _subject_selection_confidence(tracks, selected, diag) -> dict:
+    """Flag clips where another simultaneously visible person competes with the selected bowler track."""
+    if not selected or not selected.get("dets"):
+        return {"confidence": "low", "competing_tracks": 0}
+    selected_frames = set(selected["dets"])
+    selected_score = _bowler_score(selected, diag)
+    strongest_ratio, competitors = 0.0, 0
+
+    for track in tracks:
+        if track is selected or not track.get("dets"):
+            continue
+        frames = set(track["dets"])
+        # Compare detections on the same sampled frames, not just overlapping
+        # first/last-frame ranges; sparse fragments are not simultaneous people.
+        shared_frames = selected_frames & frames
+        overlap_ratio = len(shared_frames) / max(1, min(len(selected_frames), len(frames)))
+        if overlap_ratio < 0.4:
+            continue
+        competitors += 1
+        ratio = _bowler_score(track, diag) / max(selected_score, 1e-6)
+        strongest_ratio = max(strongest_ratio, ratio)
+
+    confidence = "low" if strongest_ratio >= 0.85 else "medium" if strongest_ratio >= 0.65 else "high"
+    return {"confidence": confidence, "competing_tracks": competitors}
+
+
+def _smooth(kps, scs, observed=None):
+    """Smooth display jitter only across three consecutive observed poses and confident joints."""
     out = kps.copy()
     n = len(kps)
+    observed = np.ones(n, dtype=bool) if observed is None else np.asarray(observed, dtype=bool)
     for i in range(1, n - 1):
+        # Never blend across missing/interpolated frames: doing so pulls visible joints
+        # toward zero-filled coordinates or invents a path through an occlusion.
+        if not (observed[i - 1] and observed[i] and observed[i + 1]):
+            continue
+        confident = (scs[i - 1] >= 0.25) & (scs[i] >= 0.25) & (scs[i + 1] >= 0.25)
+        if not np.any(confident):
+            continue
         w = np.stack([scs[i - 1], scs[i] * 2, scs[i + 1]])[..., None]
         blend = (np.stack([kps[i - 1], kps[i], kps[i + 1]]) * w).sum(0) / np.maximum(w.sum(0), 1e-6)
         jump = np.linalg.norm(kps[i + 1] - kps[i - 1], axis=1, keepdims=True)
-        # only smooth where motion is small (jitter), keep large motion (the bowling arm) raw
+        # only smooth small motion (jitter); preserve fast bowling-arm movement
         alpha = np.clip(1 - jump / 40.0, 0, 1) * 0.6
-        out[i] = kps[i] * (1 - alpha) + blend * alpha
+        alpha = alpha[:, 0] * confident
+        out[i, confident] = (kps[i, confident] * (1 - alpha[confident, None]) +
+                             blend[confident] * alpha[confident, None])
     return out
 
+COCO_JOINT_NAMES = (
+    "nose", "left_eye", "right_eye", "left_ear", "right_ear",
+    "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+    "left_wrist", "right_wrist", "left_hip", "right_hip",
+    "left_knee", "right_knee", "left_ankle", "right_ankle",
+)
 
-def extract_pose(path: str, target_fps: int = 30, max_frames: int = 420) -> dict:
+
+def _joint_visibility_summary(scores, observed, threshold: float = 0.45) -> dict:
+    """Report per-joint detector visibility using observed frames only (never interpolations)."""
+    scores = np.asarray(scores, dtype=float)
+    observed = np.asarray(observed, dtype=bool)
+    if scores.ndim != 2 or scores.shape[1] != len(COCO_JOINT_NAMES):
+        raise ValueError("scores must have shape (frames, 17)")
+    if observed.ndim != 1 or len(observed) != len(scores):
+        raise ValueError("observed must contain one flag per frame")
+
+    observed_scores = scores[observed]
+    count = int(len(observed_scores))
+    result = {}
+    for index, name in enumerate(COCO_JOINT_NAMES):
+        values = observed_scores[:, index] if count else np.array([], dtype=float)
+        finite = values[np.isfinite(values)]
+        visible = int(np.sum(finite >= threshold))
+        result[name] = {
+            "observed_frames": count,
+            "visible_frames": visible,
+            "coverage": round(visible / count, 3) if count else 0.0,
+            "mean_confidence": round(float(np.mean(finite)), 3) if len(finite) else 0.0,
+        }
+    return result
+
+
+def _serialise_pose_keypoints(raw, display, scores, width, height):
+    """Keep measurement coordinates raw; expose a separate smoothed skeleton for display."""
+    def encode(points):
+        return [
+            [round(float(x) / width, 4), round(float(y) / height, 4), round(float(score), 2)]
+            for (x, y), score in zip(points, scores)
+        ]
+
+    return {"k": encode(raw), "display_k": encode(display)}
+
+
+def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dict:
     body = _get_body()
     cap = cv2.VideoCapture(path)
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    fps = _safe_fps(cap.get(cv2.CAP_PROP_FPS))
+    target_fps = max(1, int(target_fps or 60))
     step = max(1, round(fps / target_fps))
     dets, times, width, height, sw, sh, i = [], [], 0, 0, 1, 1, 0
     while True:
@@ -152,11 +298,14 @@ def extract_pose(path: str, target_fps: int = 30, max_frames: int = 420) -> dict
     cap.release()
 
     diag = math.hypot(sw, sh)
-    tracks = _link(dets, diag)
+    tracks = _link(dets, diag, times=times)
     n = len(dets)
     frames = [{"t": t, "k": None} for t in times]
+    observed = np.zeros(n, bool)
+    selection_quality = {"confidence": "low", "competing_tracks": 0}
     if tracks:
         bowler = max(tracks, key=lambda tr: _bowler_score(tr, diag))
+        selection_quality = _subject_selection_confidence(tracks, bowler, diag)
         # stitch: re-attach fragments that continue the bowler where his track broke (occlusion)
         for tr in sorted(tracks, key=lambda tr: min(tr["dets"])):
             if tr is bowler:
@@ -182,64 +331,154 @@ def extract_pose(path: str, target_fps: int = 30, max_frames: int = 420) -> dict
         scs = np.zeros((n, 17))
         have = np.zeros(n, bool)
         for fi in idx:
-            kps[fi], scs[fi], have[fi] = bowler["dets"][fi]["kp"], bowler["dets"][fi]["sc"], True
+            kps[fi], scs[fi], have[fi], observed[fi] = bowler["dets"][fi]["kp"], bowler["dets"][fi]["sc"], True, True
         # fill short gaps (<= 4 frames) by linear interpolation between the bowler's poses
         for a, b in zip(idx, idx[1:]):
             if 1 < b - a <= 5:
                 for fi in range(a + 1, b):
                     r = (fi - a) / (b - a)
                     kps[fi] = kps[a] * (1 - r) + kps[b] * r
-                    scs[fi] = np.minimum(scs[a], scs[b]) * 0.8
+                    # Interpolated joints are useful for a continuous overlay, but are not observations.
+                    # Keep their confidence below the measurement threshold so they cannot drive biomechanics.
+                    scs[fi] = np.minimum(scs[a], scs[b]) * 0.4
                     have[fi] = True
-        kps = _smooth(kps, scs)
+        # Biomechanics and event detection use unsmoothed detector/interpolated coordinates.
+        # The smoothed copy is provided only to the video skeleton overlay.
+        raw_kps = kps.copy()
+        display_kps = _smooth(kps, scs, observed=observed)
         for fi in range(n):
             if have[fi] and scs[fi].mean() >= 0.25:
-                frames[fi]["k"] = [[round(float(x) / sw, 4), round(float(y) / sh, 4), round(float(s), 2)]
-                                   for (x, y), s in zip(kps[fi], scs[fi])]
-    return {"width": width, "height": height, "frames": frames, "detected": sum(1 for f in frames if f["k"])}
-
-
-def _angle(a, b, c, w, h) -> int:
-    ax, ay = (a[0] - b[0]) * w, (a[1] - b[1]) * h
-    cx, cy = (c[0] - b[0]) * w, (c[1] - b[1]) * h
-    na, nc = math.hypot(ax, ay), math.hypot(cx, cy)
-    if not na or not nc:
-        return 0
-    return round(math.degrees(math.acos(max(-1, min(1, (ax * cx + ay * cy) / (na * nc))))))
-
-
-def _metrics(k, w, h, bowling_arm: str) -> dict:
-    arm = R if bowling_arm.lower().startswith("r") else L
-    front = L if arm is R else R
-    sx, sy = (k[5][0] + k[6][0]) / 2, (k[5][1] + k[6][1]) / 2
-    hx, hy = (k[11][0] + k[12][0]) / 2, (k[11][1] + k[12][1]) / 2
-    dx, dy = (sx - hx) * w, (sy - hy) * h
+                frames[fi].update(_serialise_pose_keypoints(raw_kps[fi], display_kps[fi], scs[fi], sw, sh))
+    detected = int(observed.sum())
+    pose_frames = sum(1 for f in frames if f["k"])
+    interpolated_frames = max(0, pose_frames - detected)
+    critical = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    observed_scores = [frames[i]["k"][j][2] for i in range(len(frames)) if observed[i] and frames[i]["k"] for j in critical]
+    critical_slots = max(1, detected * len(critical))
+    reliable_slots = sum(1 for i in range(len(frames)) if observed[i] and frames[i]["k"]
+                         for j in critical if frames[i]["k"][j][2] >= 0.45)
+    coverage = detected / max(1, len(frames))
+    joint_coverage = reliable_slots / critical_slots
+    mean_confidence = float(np.mean(observed_scores)) if observed_scores else 0.0
+    quality = "good" if coverage >= 0.80 and joint_coverage >= 0.70 and mean_confidence >= 0.55 else (
+        "usable" if coverage >= 0.50 and joint_coverage >= 0.45 and mean_confidence >= 0.40 else "limited"
+    )
+    if selection_quality["confidence"] == "low":
+        quality = "limited"
+    elif selection_quality["confidence"] == "medium" and quality == "good":
+        quality = "usable"
     return {
-        "front_knee": _angle(k[front["hip"]], k[front["knee"]], k[front["ankle"]], w, h),
-        "back_knee": _angle(k[arm["hip"]], k[arm["knee"]], k[arm["ankle"]], w, h),
-        "bowling_elbow": _angle(k[arm["shoulder"]], k[arm["elbow"]], k[arm["wrist"]], w, h),
-        "trunk_lean": round(math.degrees(math.atan2(abs(dx), abs(dy)))) if dy else 0,
+        "width": width, "height": height, "frames": frames, "detected": detected,
+        "source_fps": round(float(fps), 2), "sampled_fps": round(float(fps / step), 2),
+        "quality": {
+            "rating": quality, "frame_count": len(frames), "detected_frames": detected,
+            "interpolated_frames": interpolated_frames, "frame_coverage": round(coverage, 3),
+            "critical_joint_coverage": round(joint_coverage, 3),
+            "mean_joint_confidence": round(mean_confidence, 3),
+            "joint_visibility": _joint_visibility_summary(scs, observed),
+            "subject_selection_confidence": selection_quality["confidence"],
+            "competing_tracks": selection_quality["competing_tracks"],
+        },
     }
 
 
+def _angle(a, b, c, w, h, min_segment_px=1e-6):
+    """Return a camera-plane joint angle, or None for degenerate geometry."""
+    ax, ay = (a[0] - b[0]) * w, (a[1] - b[1]) * h
+    cx, cy = (c[0] - b[0]) * w, (c[1] - b[1]) * h
+    na, nc = math.hypot(ax, ay), math.hypot(cy, cx)
+    if na < min_segment_px or nc < min_segment_px:
+        return None
+    return round(math.degrees(math.acos(max(-1, min(1, (ax * cx + ay * cy) / (na * nc))))))
+
+
+def _joint_confident(k, *indices, threshold: float = 0.45) -> bool:
+    """A metric is valid only when every keypoint is finite and confidently observed."""
+    try:
+        return all(
+            len(k[index]) >= 3
+            and math.isfinite(float(k[index][0]))
+            and math.isfinite(float(k[index][1]))
+            and math.isfinite(float(k[index][2]))
+            and float(k[index][2]) >= threshold
+            for index in indices
+        )
+    except (IndexError, TypeError, ValueError):
+        return False
+
+
+def _metrics(k, w, h, bowling_arm: str) -> dict:
+    arm = R if _normalise_bowling_arm(bowling_arm) == "right" else L
+    front = L if arm is R else R
+    front_joints = (front["hip"], front["knee"], front["ankle"])
+    back_joints = (arm["hip"], arm["knee"], arm["ankle"])
+    elbow_joints = (arm["shoulder"], arm["elbow"], arm["wrist"])
+    trunk_joints = (5, 6, 11, 12)
+    height_joints = (0, 5, 6, 11, 12, 13, 14, 15, 16)
+    if _joint_confident(k, *height_joints):
+        sx, sy = (k[5][0] + k[6][0]) / 2, (k[5][1] + k[6][1]) / 2
+        hx, hy = (k[11][0] + k[12][0]) / 2, (k[11][1] + k[12][1]) / 2
+        dist_px = lambda a, b: math.hypot((a[0] - b[0]) * w, (a[1] - b[1]) * h)
+        leg = (dist_px(k[11], k[13]) + dist_px(k[13], k[15]) +
+               dist_px(k[12], k[14]) + dist_px(k[14], k[16])) * 0.5
+        body_height = (dist_px(k[0], (sx, sy)) + dist_px((sx, sy), (hx, hy)) + leg) * 1.12
+    else:
+        body_height = h * 0.5
+    min_segment_px = max(2.0, body_height * 0.025)
+
+    result = {
+        "front_knee": _angle(k[front["hip"]], k[front["knee"]], k[front["ankle"]], w, h, min_segment_px)
+        if _joint_confident(k, *front_joints) else None,
+        "back_knee": _angle(k[arm["hip"]], k[arm["knee"]], k[arm["ankle"]], w, h, min_segment_px)
+        if _joint_confident(k, *back_joints) else None,
+        "bowling_elbow": _angle(k[arm["shoulder"]], k[arm["elbow"]], k[arm["wrist"]], w, h, min_segment_px)
+        if _joint_confident(k, *elbow_joints) else None,
+        "trunk_lean": None,
+    }
+    if _joint_confident(k, *trunk_joints):
+        sx = (k[5][0] + k[6][0]) / 2
+        sy = (k[5][1] + k[6][1]) / 2
+        hx = (k[11][0] + k[12][0]) / 2
+        hy = (k[11][1] + k[12][1]) / 2
+        dx, dy = (sx - hx) * w, (sy - hy) * h
+        if math.hypot(dx, dy) >= max(2.0, body_height * 0.05) and abs(dy) > 1e-6:
+            result["trunk_lean"] = round(math.degrees(math.atan2(abs(dx), abs(dy))))
+    return result
+
+
 def metrics_at(pose: dict, t, bowling_arm: str) -> dict:
-    """Joint angles at the frame nearest to t. Front leg = opposite side to the bowling arm."""
-    frames = [f for f in pose.get("frames", []) if f["k"]]
-    if not frames or t is None:
+    """Confidence-gated 2D joint angles only near the requested timestamp."""
+    if isinstance(t, bool):
         return {}
-    f = min(frames, key=lambda x: abs(x["t"] - t))
-    if abs(f["t"] - t) > 0.4:
+    try:
+        target_t = float(t)
+    except (TypeError, ValueError):
         return {}
-    return _metrics(f["k"], pose["width"] or 1, pose["height"] or 1, bowling_arm)
+    if not math.isfinite(target_t):
+        return {}
+    frames = [
+        f for f in pose.get("frames", [])
+        if f.get("k") and isinstance(f.get("t"), (int, float)) and math.isfinite(float(f["t"]))
+    ]
+    if not frames:
+        return {}
+    f = min(frames, key=lambda x: abs(float(x["t"]) - target_t))
+    times = np.array([float(frame["t"]) for frame in frames], dtype=float)
+    intervals = np.diff(times)
+    intervals = intervals[intervals > 0]
+    tolerance = min(0.2, max(0.04, 1.5 * float(np.median(intervals)))) if len(intervals) else 0.04
+    if abs(float(f["t"]) - target_t) > tolerance:
+        return {}
+    return _metrics(f["k"], pose.get("width") or 1, pose.get("height") or 1, bowling_arm)
 
 
 def timeline_text(pose: dict, bowling_arm: str, every: float = 0.08) -> str:
-    """Compact measured joint-angle timeline of the tracked bowler, fed to the AI analyst."""
-    frames = [f for f in pose.get("frames", []) if f["k"]]
+    """Confidence-gated camera-plane measurements for the AI analyst; unavailable values stay unavailable."""
+    frames = [f for f in pose.get("frames", []) if f.get("k")]
     if not frames:
-        return "No skeleton measurements available."
-    w, h = pose["width"] or 1, pose["height"] or 1
-    arm = R if bowling_arm.lower().startswith("r") else L
+        return "No reliable skeleton measurements available."
+    w, h = pose.get("width") or 1, pose.get("height") or 1
+    arm = R if _normalise_bowling_arm(bowling_arm) == "right" else L
     rows, last_t = [], -1.0
     for f in frames:
         if f["t"] - last_t < every:
@@ -247,8 +486,14 @@ def timeline_text(pose: dict, bowling_arm: str, every: float = 0.08) -> str:
         last_t = f["t"]
         k = f["k"]
         m = _metrics(k, w, h, bowling_arm)
-        wrist_y = k[arm["wrist"]][1]
-        head_y = k[0][1]
-        rows.append(f"t={f['t']:.2f} fk={m['front_knee']} bk={m['back_knee']} el={m['bowling_elbow']} "
-                    f"lean={m['trunk_lean']} wrist_above_head={'y' if wrist_y < head_y else 'n'} hip_x={(k[11][0] + k[12][0]) / 2:.2f}")
+        wrist_above_nose = "na"
+        if _joint_confident(k, arm["wrist"], 0):
+            wrist_above_nose = "y" if k[arm["wrist"]][1] < k[0][1] else "n"
+        hip_x = f"{(k[11][0] + k[12][0]) / 2:.2f}" if _joint_confident(k, 11, 12) else "na"
+        fmt = lambda value: "na" if value is None else str(value)
+        rows.append(
+            f"t={f['t']:.2f} fk={fmt(m['front_knee'])} bk={fmt(m['back_knee'])} "
+            f"el={fmt(m['bowling_elbow'])} lean={fmt(m['trunk_lean'])} "
+            f"wrist_above_nose={wrist_above_nose} hip_x={hip_x}"
+        )
     return "\n".join(rows)

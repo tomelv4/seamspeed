@@ -42,7 +42,6 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="report/[id]" />
               <Stack.Screen name="drill/[id]" />
-              <Stack.Screen name="coach" />
               <Stack.Screen name="session" />
               <Stack.Screen name="compare" />
               <Stack.Screen name="workload" />

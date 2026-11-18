@@ -68,7 +68,7 @@ export default function WorkloadScreen() {
         refreshControl={<RefreshControl tintColor={colors.accent} refreshing={wl.isRefetching} onRefresh={() => { wl.refetch(); }} />}
       >
         {!subLoading && !isSubscribed ? (
-          <ProLocked testID="workload-locked" title="Workload is Pro" body="Track balls bowled every week and get flagged before overuse turns into injury." />
+          <ProLocked testID="workload-locked" title="Workload is Pro" body="Track weekly bowling volume, recovery days and changes against your recent baseline." />
         ) : wl.isLoading ? (
           <Loading />
         ) : wl.isError || !d ? (
@@ -76,7 +76,7 @@ export default function WorkloadScreen() {
         ) : (
           <>
             <View style={[s.card, { borderColor: riskColor(d.status, colors) }]} testID="workload-status-card">
-              <Text style={s.kicker}>OVERUSE RISK</Text>
+              <Text style={s.kicker}>WORKLOAD STATUS</Text>
               <Text style={[s.status, { color: riskColor(d.status, colors) }]} testID="workload-status">{d.status === "medium" ? "CAUTION" : d.status.toUpperCase()}</Text>
               <Text style={s.body}>{d.headline}</Text>
               <Text style={s.advice}>{d.advice}</Text>
@@ -94,8 +94,9 @@ export default function WorkloadScreen() {
                 <View style={[s.zone, { left: "40%", width: "25%", backgroundColor: colors.brandTertiary }]} />
                 {d.acwr != null ? <View style={[s.needle, { left: `${acwrPct}%`, backgroundColor: riskColor(d.status, colors) }]} /> : null}
               </View>
-              <View style={s.zoneLabels}><Text style={s.tiny}>0</Text><Text style={s.tiny}>0.8–1.3 sweet spot</Text><Text style={s.tiny}>2.0</Text></View>
+              <View style={s.zoneLabels}><Text style={s.tiny}>0</Text><Text style={s.tiny}>0.8–1.3 reference range</Text><Text style={s.tiny}>2.0</Text></View>
               <Text style={s.tiny}>{d.acwr == null ? "Ratio appears after 3+ weeks of logged bowling." : `This week ${d.acute} vs ${d.chronic_weekly}/week 4-week average.`}</Text>
+              <Text style={s.tiny}>Workload flags are descriptive training-load prompts, not injury predictions. Consider intensity, recovery and individual context.</Text>
             </View>
 
             <View style={s.card} testID="workload-weekly-chart">
