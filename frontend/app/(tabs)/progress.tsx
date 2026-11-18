@@ -30,6 +30,11 @@ export default function ProgressScreen() {
   const requirePro = useRequirePro();
   const router = useRouter();
   const p = progress.data;
+  const overview = p?.development_overview;
+  const hasDevelopmentData = !!overview && (
+    overview.bowling.deliveries > 0 || overview.gym.sessions > 0 || overview.recovery.sessions > 0 ||
+    overview.practice.drill_completions > 0 || overview.video.analyses > 0
+  );
   const last = (p?.points ?? []).slice(-8);
   const scorePoints = last.filter((point) => point.score != null);
   const pacePoints = last.filter((point) => point.pace > 0);
@@ -63,10 +68,58 @@ export default function ProgressScreen() {
           <Loading testID="progress-loading" />
         ) : progress.isError ? (
           <ErrorBanner testID="progress-error" message="Could not load progress data." onRetry={() => progress.refetch()} />
-        ) : !p || p.total === 0 ? (
-          <EmptyState testID="progress-empty" icon="trending-up" title="Not enough data yet" body="Analyze a few deliveries and your scores, phases and technique trends will be charted here." />
+        ) : !p || (p.total === 0 && !hasDevelopmentData) ? (
+          <EmptyState testID="progress-empty" icon="trending-up" title="Not enough data yet" body="Log bowling workload, complete a coached session, practise a targeted drill or analyse a delivery to start building your development history." />
         ) : (
           <>
+            {overview ? (
+              <View testID="athlete-development-overview" style={{ gap: space.md }}>
+                <View style={{ gap: 4 }}>
+                  <SectionTitle title="Athlete Development" />
+                  <Text style={s.phaseLabel}>Your logged training and technique activity · last {overview.window_days} days</Text>
+                </View>
+                <View style={s.developmentGrid}>
+                  <View style={s.developmentStat}>
+                    <Text style={s.developmentValue}>{overview.bowling.deliveries.toLocaleString()}</Text>
+                    <Text style={s.statLabel}>Bowling deliveries</Text>
+                    <Text style={s.developmentHint}>{overview.bowling.logged_days} logged days</Text>
+                  </View>
+                  <View style={s.developmentStat}>
+                    <Text style={s.developmentValue}>{overview.gym.sessions}</Text>
+                    <Text style={s.statLabel}>Gym sessions</Text>
+                    <Text style={s.developmentHint}>{overview.gym.activities_completed} activities · {overview.gym.actual_sets} sets logged</Text>
+                  </View>
+                  <View style={s.developmentStat}>
+                    <Text style={s.developmentValue}>{overview.recovery.sessions}</Text>
+                    <Text style={s.statLabel}>Recovery sessions</Text>
+                    <Text style={s.developmentHint}>{overview.recovery.activities_completed} activities completed</Text>
+                  </View>
+                  <View style={s.developmentStat}>
+                    <Text style={s.developmentValue}>{overview.practice.drill_completions}</Text>
+                    <Text style={s.statLabel}>Targeted practices</Text>
+                    <Text style={s.developmentHint}>{overview.practice.recent_focuses.slice(0, 2).join(" · ") || "No focus logged yet"}</Text>
+                  </View>
+                </View>
+                <View style={s.card}>
+                  <Text style={s.cardTitle}>Development activity</Text>
+                  {overview.recent_activity.length ? overview.recent_activity.slice(0, 6).map((item, index) => (
+                    <View key={item.kind + item.date + index} style={[s.activityRow, index > 0 && s.divider]}>
+                      <View style={[s.activityDot, { backgroundColor: item.kind === "video" ? colors.info : item.kind === "practice" ? colors.accent : colors.muted }]} />
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={s.faultTitle}>{item.title}</Text>
+                        <Text style={s.phaseLabel}>{item.detail}</Text>
+                      </View>
+                      <Text style={s.activityDate}>{new Date(item.date).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</Text>
+                    </View>
+                  )) : (
+                    <Text style={s.phaseLabel}>Your completed sessions and logged activity will appear here.</Text>
+                  )}
+                </View>
+                <Text style={s.developmentDisclaimer}>Only recorded activity is counted. Planned exercises are not treated as completed, and these separate measures are not combined into a single performance score.</Text>
+              </View>
+            ) : null}
+            {p.total > 0 ? (
+            <>
             <View style={s.stats}>
               <View style={s.stat} testID="stat-sessions">
                 <Text style={s.statValue}>{p.total}</Text>
@@ -170,6 +223,13 @@ export default function ProgressScreen() {
               <SectionTitle title="Session History" />
               {(analyses.data ?? []).map((a) => <SessionRow key={a.id} item={a} />)}
             </View>
+            </>
+            ) : (
+              <View style={s.card}>
+                <Text style={s.cardTitle}>Video technique tracking</Text>
+                <Text style={s.phaseLabel}>Analyse a bowling clip to unlock phase scores, comparable movement trends and recurring technique observations.</Text>
+              </View>
+            )}
           </>
         )}
       </ScrollView>
@@ -188,6 +248,14 @@ const useStyles = makeStyles((c) => ({
   segActive: { backgroundColor: c.brandPrimary },
   segText: { fontFamily: fonts.textBold, fontSize: 13, color: c.onSurfaceTertiary },
   stats: { flexDirection: "row", gap: space.sm },
+  developmentGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  developmentStat: { width: "48%", flexGrow: 1, padding: space.md, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: 4 },
+  developmentValue: { fontFamily: fonts.display, fontSize: 28, color: c.onSurface },
+  developmentHint: { fontFamily: fonts.text, fontSize: 11, color: c.muted },
+  developmentDisclaimer: { fontFamily: fonts.text, fontSize: 11, lineHeight: 16, color: c.muted },
+  activityRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.sm },
+  activityDot: { width: 8, height: 8, borderRadius: 4 },
+  activityDate: { fontFamily: fonts.mono, fontSize: 11, color: c.muted },
   stat: { flex: 1, padding: space.md, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
   statValue: { fontFamily: fonts.display, fontSize: 32, color: c.onSurface },
   statLabel: { fontFamily: fonts.text, fontSize: 12, color: c.muted },
