@@ -401,6 +401,7 @@ def merge_events(pose_ev, ai_steps, duration):
     ev["sources"] = sources
     ev["event_methods"] = methods
     ev["joint_confidence"] = confidences
+    ev["contact_evidence"] = pose_ev.get("contact_evidence", {}) if isinstance(pose_ev.get("contact_evidence"), dict) else {}
     # A wrist-height apex is a pose-derived proxy, not a detected ball-release event.
     # Keep its provenance in event_methods, but do not count it as a measured event.
     ev["pose_detected"] = sorted(
