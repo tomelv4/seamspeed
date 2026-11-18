@@ -534,10 +534,17 @@ def _window_values(track, ids, measure, min_samples=2):
     times = [t for t, _ in values]
     if len(values) < min_samples or len(set(times)) < min_samples:
         return []
-    intervals = np.diff(track.t)
-    intervals = intervals[intervals > 0]
-    if len(intervals):
-        max_gap = max(0.06, 1.6 * float(np.median(intervals)))
+    # Use the source-frame cadence inside this measurement window. A clip-wide
+    # median can be misleading for variable-frame-rate video or clips whose
+    # analysis sampling density changes between the run-up and delivery.
+    window_times = np.asarray(track.t[ids], dtype=float)
+    local_intervals = np.diff(window_times)
+    local_intervals = local_intervals[np.isfinite(local_intervals) & (local_intervals > 0)]
+    if not len(local_intervals):
+        local_intervals = np.diff(track.t)
+        local_intervals = local_intervals[np.isfinite(local_intervals) & (local_intervals > 0)]
+    if len(local_intervals):
+        max_gap = max(0.06, 1.6 * float(np.median(local_intervals)))
         if any(gap > max_gap for gap in np.diff(times)):
             return []
     return [value for _, value in values]
