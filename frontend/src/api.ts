@@ -227,6 +227,7 @@ export type SessionActivityLog = {
 };
 export type SessionCompletion = {
   activities: SessionActivityLog[];
+  session_effort?: "easy" | "moderate" | "hard" | null;
   overall_feeling?: "fresh" | "normal" | "tired" | "rough" | null;
   notes?: string;
 };
