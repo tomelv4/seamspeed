@@ -607,3 +607,107 @@ def build_training_response_summary(sessions: list[dict], now: datetime | None =
         "adjustment": adjustment,
         "guidance": guidance,
     }
+
+
+
+def _development_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+    except (TypeError, ValueError):
+        return None
+
+
+def build_development_overview(
+    analyses: list[dict],
+    workload_entries: list[dict],
+    training_sessions: list[dict],
+    drill_completions: list[dict],
+    now: datetime | None = None,
+) -> dict:
+    """Build a 28-day athlete development snapshot from explicitly logged records only."""
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=28)
+
+    def in_window(value: Any) -> datetime | None:
+        parsed = _development_datetime(value)
+        return parsed if parsed and cutoff <= parsed <= now + timedelta(days=1) else None
+
+    bowling_logs = []
+    for entry in workload_entries:
+        observed = in_window(entry.get("date") or entry.get("created_at"))
+        balls = entry.get("balls")
+        if observed and isinstance(balls, int) and not isinstance(balls, bool):
+            bowling_logs.append((observed, max(0, balls)))
+
+    gym_records, recovery_records = [], []
+    activity = []
+    for session in training_sessions:
+        if not isinstance(session, dict) or session.get("status") != "ended":
+            continue
+        plan = session.get("plan") if isinstance(session.get("plan"), dict) else {}
+        mode = plan.get("session_mode")
+        completion = session.get("completion") if isinstance(session.get("completion"), dict) else {}
+        observed = in_window(completion.get("logged_at"))
+        if mode not in {"gym", "recovery"} or not observed:
+            continue
+        planned = [item for item in plan.get("activities", []) if isinstance(item, dict)]
+        logged = [item for item in completion.get("activities", []) if isinstance(item, dict)]
+        completed = [item for item in logged if item.get("completed") is True]
+        record = {
+            "date": observed.date().isoformat(), "mode": mode,
+            "completed_activities": len(completed), "planned_activities": len(planned),
+            "effort": completion.get("session_effort"), "feeling": completion.get("overall_feeling"),
+            "actual_sets": sum(int(item["actual_sets"]) for item in completed
+                               if isinstance(item.get("actual_sets"), int) and not isinstance(item.get("actual_sets"), bool)),
+        }
+        (gym_records if mode == "gym" else recovery_records).append(record)
+        activity.append({"date": observed.isoformat(), "kind": mode, "title": mode.title() + " session",
+                         "detail": str(len(completed)) + " of " + str(len(planned)) + " activities logged as completed"})
+
+    practice = []
+    for item in drill_completions:
+        observed = in_window(item.get("completed_at"))
+        if observed:
+            practice.append((observed, item))
+            activity.append({"date": observed.isoformat(), "kind": "practice",
+                              "title": item.get("drill_name") or "Coaching drill",
+                              "detail": item.get("focus") or "Targeted technique practice"})
+
+    video_analyses = []
+    for item in analyses:
+        if not isinstance(item, dict) or item.get("is_bowling_video") is False:
+            continue
+        observed = in_window(item.get("created_at"))
+        if observed:
+            video_analyses.append(item)
+            view = str(item.get("camera_view") or "Camera view unavailable").replace("_", " ")
+            activity.append({"date": observed.isoformat(), "kind": "video", "title": "Video analysis", "detail": view})
+
+    for observed, balls in bowling_logs:
+        activity.append({"date": observed.isoformat(), "kind": "bowling",
+                         "title": "Bowling workload logged", "detail": str(balls) + " deliveries"})
+
+    activity.sort(key=lambda item: item["date"], reverse=True)
+    bowling_days = len({observed.date().isoformat() for observed, balls in bowling_logs if balls > 0})
+    recent_practice = sorted(practice, key=lambda x: x[0], reverse=True)
+    return {
+        "window_days": 28,
+        "bowling": {"deliveries": sum(balls for _, balls in bowling_logs), "logged_days": bowling_days,
+                    "entries": len(bowling_logs)},
+        "gym": {"sessions": len(gym_records), "activities_completed": sum(item["completed_activities"] for item in gym_records),
+                "actual_sets": sum(item["actual_sets"] for item in gym_records),
+                "recent": sorted(gym_records, key=lambda x: x["date"], reverse=True)[:3]},
+        "recovery": {"sessions": len(recovery_records),
+                     "activities_completed": sum(item["completed_activities"] for item in recovery_records),
+                     "recent": sorted(recovery_records, key=lambda x: x["date"], reverse=True)[:3]},
+        "practice": {"drill_completions": len(practice),
+                     "recent_focuses": list(dict.fromkeys(
+                         (item.get("focus") or item.get("drill_name") or "Technique practice")
+                         for _, item in recent_practice
+                     ))[:4]},
+        "video": {"analyses": len(video_analyses)},
+        "recent_activity": activity[:8],
+    }
