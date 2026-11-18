@@ -9,6 +9,10 @@ export const API = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
 
 export type Phase = { key: string; name: string; score: number; feedback: string; assessable?: boolean };
 export type Fault = { title: string; phase: string; step_key?: string; severity: "low" | "medium" | "high"; description: string; fix: string };
+export type CoachingPriority = {
+  priority: number; type: "fault" | "opportunity"; step_key: string; phase: string;
+  title: string; reason: string; action: string; severity: "low" | "medium" | "high" | null;
+};
 export type AnalysisProgress = { stage?: string; percent?: number; message?: string };
 export type Analysis = {
   id: string;
