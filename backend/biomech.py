@@ -261,12 +261,21 @@ def _landing(track, ankle, a, b):
     if not len(sample_intervals):
         return None
     max_gap_s = max(0.04, 1.6 * float(np.median(sample_intervals)))
-    for pos in range(len(after) - 2):
+    for pos in range(1, len(after) - 2):
         window = after[pos:pos + 3]
+        previous = after[pos - 1]
+        # A contact plateau must be reached by a descending foot, not simply
+        # inferred from three stationary samples already near the ground.
+        if track.t[window[0]] - track.t[previous] > max_gap_s:
+            continue
         if np.any(np.diff(track.t[window]) > max_gap_s):
             continue
+        previous_y = track.xy[previous, ankle, 1]
         ys = track.xy[window, ankle, 1]
-        if np.all(ys >= ground_y - tol) and float(np.ptp(ys)) <= 0.015 * track.height_px:
+        descended_into_contact = ys[0] - previous_y >= 0.005 * track.height_px
+        stable_contact = float(np.ptp(ys)) <= 0.015 * track.height_px
+        near_ground = np.all(ys >= ground_y - tol)
+        if descended_into_contact and stable_contact and near_ground:
             return float(track.t[window[0]])
     return None
 
