@@ -262,6 +262,7 @@ function PlayerInner({ analysisId, meta, steps, pose, bowlingArm, selected, seek
         </Pressable>
       </View>
       {showPro ? <Text style={s.hint}>Dashed silver = elite reference model at {refStep ? refStep.name : "this step"}, scaled to your body.</Text> : null}
+      {pose && showSkeleton ? <Text style={s.hint}>Skeleton confidence: solid = stronger tracking · faded/dashed = lower confidence · hidden = not reliably tracked.</Text> : null}
       </>) : null}
       {!pose ? <Text style={s.hint}>Body tracking unavailable for this clip — film side-on with the full body in frame.</Text> : null}
     </View>
