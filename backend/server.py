@@ -542,7 +542,7 @@ async def _run_analysis(analysis_id, path, data_bytes, mime, suffix, notes, x_de
         else "high"
     )
     if timing_rank[event_timing["overall"]] < timing_rank[score_confidence]:
-        score_confidence = event_timing["overall"]
+        score_confidence = "low" if event_timing["overall"] in {"low", "unavailable"} else event_timing["overall"]
     data["analysis_quality"] = {
         "score_confidence": score_confidence,
         "score_method": data.get("score_method", "not_available"),
