@@ -218,7 +218,7 @@ export type PlanItem = { name: string; minutes?: number; reps?: string; cue?: st
 export type SessionPlan = {
   pre_session?: PlanItem[]; warm_up?: PlanItem[]; drills?: PlanItem[]; cool_down?: PlanItem[]; tips?: string[];
   recovery?: { title?: string; items?: PlanItem[] };
-  bowling?: { balls?: number; target?: string }; test?: { name?: string; balls?: number; target?: string; description?: string };
+  bowling?: { balls?: number; target?: string; rest_between_deliveries?: string }; test?: { name?: string; balls?: number; target?: string; description?: string };
 };
 export type InjuryArea = { key: string; level: string; score: number; drivers: string; prevention: string };
 export type Workload = {
