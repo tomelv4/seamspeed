@@ -233,7 +233,7 @@ export default function ProgressScreen() {
                           <Text style={s.faultTitle}>{trend.name}</Text>
                           <Text style={s.phaseLabel}>{trend.camera_view.replace("_", " ")} · {new Date(trend.previous_date).toLocaleDateString()} → {new Date(trend.current_date).toLocaleDateString()}</Text>
                           <Text style={s.developmentSubtext}>{(trend.practice_between_count ?? 0) > 0 ? `${trend.practice_between_count} targeted practice session${trend.practice_between_count === 1 ? "" : "s"} logged between clips` : "No matching targeted practice logged between clips"}</Text>
-                          {(trend.practice_drill_names ?? []).length > 0 ? <Text style={s.developmentHint}>{trend.practice_drill_names.join(" · ")}</Text> : null}
+                          {(trend.practice_drill_names ?? []).length > 0 ? <Text style={s.developmentHint}>{(trend.practice_drill_names ?? []).join(" · ")}</Text> : null}
                         </View>
                         <View style={{ alignItems: "flex-end", gap: 2 }}>
                           <Text style={[s.trendDelta, { color: tint }]}>{change}</Text>
