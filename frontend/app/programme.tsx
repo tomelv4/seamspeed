@@ -11,7 +11,7 @@ import { makeStyles, useTheme } from "@/src/theme";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 type TargetKey = "bowling_days" | "gym_days" | "skill_days" | "match_days";
 const TARGETS: { key: TargetKey; label: string; help: string; max: number }[] = [
-  { key: "bowling_days", label: "Bowling sessions", help: "High-intensity bowling exposures", max: 4 },
+  { key: "bowling_days", label: "Bowling sessions", help: "High-intensity bowling exposures", max: 3 },
   { key: "gym_days", label: "Strength & conditioning", help: "General gym / physical preparation", max: 4 },
   { key: "skill_days", label: "Technical skill sessions", help: "Low-intensity movement and drill work", max: 4 },
   { key: "match_days", label: "Matches", help: "Count matches as bowling exposures", max: 2 },
@@ -31,7 +31,7 @@ export default function ProgrammeScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const totalTargets = Object.values(targets).reduce((sum, value) => sum + value, 0);
-  const canGenerate = totalTargets + unavailable.length + 1 <= 7 && targets.bowling_days + targets.match_days <= 5 && !saving;
+  const canGenerate = totalTargets + unavailable.length + 1 <= 7 && targets.bowling_days + targets.match_days <= 3 && !saving;
 
   const generate = async () => {
     if (!canGenerate) return;
