@@ -149,7 +149,7 @@ export default function Coach() {
                   </View>
                   <Ionicons name="chevron-forward" size={17} color={colors.muted} />
                 </PressScale>
-                <PressScale testID="coach-build-week" style={[s.hubAction, s.hubActionPrimary]} onPress={() => send("Build me a practical weekly fast-bowling development plan. Integrate my recent bowling workload, technique priorities, strength and conditioning, skill practice, warm-ups, cool-downs, recovery and rest days. Ask me for any essential schedule constraints you do not know. Explain how the sessions fit together and how to adjust if I am fatigued or sore.")}>
+                <PressScale testID="coach-build-week" style={[s.hubAction, s.hubActionPrimary]} onPress={() => router.push("/programme")}>
                   <View style={[s.hubActionIcon, s.hubActionIconPrimary]}><Ionicons name="calendar" size={17} color={colors.onBrandPrimary} /></View>
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text style={[s.hubActionTitle, { color: colors.onBrandPrimary }]}>Plan my training week</Text>
