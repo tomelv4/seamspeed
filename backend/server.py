@@ -7,7 +7,7 @@ import re
 import tempfile
 import uuid
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, List, Literal, Optional
 
@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 import pose as pose_lib
-from analysis_contract import build_development_overview, build_recurring_fault_history, build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
+from analysis_contract import attach_practice_to_step_trends, build_development_overview, build_recurring_fault_history, build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
 from storage import APP_NAME, CACHE_DIR, cache_path, cached_file, init_storage, put_object
 from emergentintegrations.llm.openai import OpenAITextToSpeech
 from emergentintegrations.llm.chat import (
@@ -744,6 +744,7 @@ async def progress(x_device_id: str = Header(...)):
         ]
         phase_avg[key] = round(sum(scores) / len(scores), 1) if scores else None
     top_faults = build_recurring_fault_history([a.model_dump() for a in items])
+    step_trends = attach_practice_to_step_trends(_step_progress_trends(items), practice_docs)
     return {
         "points": points,
         "phase_avg": phase_avg,
@@ -751,7 +752,7 @@ async def progress(x_device_id: str = Header(...)):
         "best_score": max((p["score"] for p in points if p["score"] is not None), default=0),
         "best_pace": max(((a.pace_band or {}).get("max_kmh") or 0 for a in items), default=0),
         "total": len(points),
-        "step_trends": _step_progress_trends(items),
+        "step_trends": step_trends,
         "development_overview": development_overview,
     }
 
