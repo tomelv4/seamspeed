@@ -273,7 +273,7 @@ def build_recurring_fault_history(analyses: list[dict[str, Any]], limit: int = 6
             group_key = f"{key}:{view}"
             item = grouped.setdefault(group_key, {
                 "step_key": key,
-                "title": step.get("name") or fault.get("title") or key.replace("_", " ").title(),
+                "title": fault.get("title") or step.get("name") or key.replace("_", " ").title(),
                 "count": 0,
                 "last_seen": analysis.get("created_at"),
                 "camera_view": view,
@@ -282,6 +282,7 @@ def build_recurring_fault_history(analyses: list[dict[str, Any]], limit: int = 6
             if (analysis.get("created_at") or "") > (item.get("last_seen") or ""):
                 item["last_seen"] = analysis.get("created_at")
                 item["camera_view"] = view
+                item["title"] = fault.get("title") or step.get("name") or key.replace("_", " ").title()
     return sorted(grouped.values(), key=lambda item: (-item["count"], item["title"]))[:limit]
 
 
