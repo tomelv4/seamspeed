@@ -1083,6 +1083,7 @@ class Session(BaseDocument):
     device_id: str
     created_at: str
     focus: str
+    scheduled_session: dict = {}
     status: str = "active"
     intro: str = ""
     intro_audio: str = ""
@@ -1205,6 +1206,7 @@ async def speak_text(body: SpeakIn):
 
 class SessionIn(BaseModel):
     focus: str = "Pace"
+    local_day: str = ""
 
 
 # PACED's session framework is fixed and evidence-informed; the model personalises
@@ -1300,11 +1302,26 @@ async def start_session(body: SessionIn, x_device_id: str = Header(...)):
     recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(1).to_list(1)
     faults = [f.get("title") for f in (recent[0].get("faults", []) if recent else [])]
     wl = await workload_summary(x_device_id, profile)
+    scheduled = None
+    if body.local_day:
+        valid_days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+        if body.local_day not in valid_days:
+            raise HTTPException(422, "local_day must be a full weekday name")
+        saved = await db.coach_programmes.find_one({"device_id": x_device_id}, {"_id": 0, "device_id": 0})
+        if saved:
+            scheduled = next((d for d in saved.get("days", []) if d.get("day") == body.local_day), None)
+    if scheduled and scheduled.get("type") in {"rest", "recovery", "gym", "match"}:
+        labels = {"rest": "a full rest day", "recovery": "a recovery day", "gym": "a gym session", "match": "a match day"}
+        raise HTTPException(409, f"Your PACED programme has today scheduled as {labels[scheduled['type']]}. This live session records bowling deliveries, so it has been held back to avoid adding an unscheduled bowling load. Today's plan: {scheduled.get('title', '')} — {scheduled.get('details', '')}")
+    scheduled_context = (
+        f"Today's saved PACED programme: {scheduled.get('type')} — {scheduled.get('title')}. Focus: {scheduled.get('focus')}. Details: {scheduled.get('details')}. Intensity: {scheduled.get('intensity')}."
+        if scheduled else "No saved programme session is scheduled for today; use the requested focus and recent workload."
+    )
     try:
         chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"plan-{uuid.uuid4()}",
                        system_message=coach_system(profile, body.focus) + " When asked for JSON, return ONLY valid JSON.").with_model("openai", "gpt-5.5")
         raw = await chat.send_message(UserMessage(text=(
-            f"Design today's complete fast-bowling net session. Focus: {body.focus}. Known faults: {faults or 'none yet'}. "
+            f"Design today's complete fast-bowling net session. Focus: {body.focus}. {scheduled_context} Known faults: {faults or 'none yet'}. "
             f"Workload status: {wl['status']} ({wl['headline']}). If workload is high, keep bowling volume low and say why. "
             "Return JSON: {\"intro\": \"spoken greeting under 50 words that previews the readiness checks and ends with 'Let's start with today's preparation.'\", "
             "\"warm_up\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (5 dynamic items: jog, mobility, activation, build-up run-throughs, 3 easy deliveries), "
@@ -1319,7 +1336,7 @@ async def start_session(body: SessionIn, x_device_id: str = Header(...)):
     except Exception as exc:
         logger.exception("session start failed")
         raise HTTPException(502, f"Coach unavailable: {exc}")
-    session = Session(device_id=x_device_id, created_at=now_iso(), focus=body.focus, intro=intro, intro_audio=audio, plan=plan)
+    session = Session(device_id=x_device_id, created_at=now_iso(), focus=body.focus, scheduled_session=scheduled or {}, intro=intro, intro_audio=audio, plan=plan)
     res = await db.sessions.insert_one(session.to_mongo())
     session.id = str(res.inserted_id)
     return session.public()
