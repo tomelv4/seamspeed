@@ -279,6 +279,21 @@ def _landing(track, ankle, a, b):
             return float(track.t[window[0]])
     return None
 
+def _contact_observations(track, ankle, timestamp):
+    """Return the three observed ankle samples supporting a contact estimate."""
+    if timestamp is None or not len(track):
+        return np.array([], dtype=int)
+    start = int(np.searchsorted(track.t, timestamp - 1e-6, side="left"))
+    ids = np.arange(start, min(start + 3, len(track)))
+    if len(ids) != 3:
+        return np.array([], dtype=int)
+    valid = ((track.c[ids, ankle] >= 0.45) &
+             np.all(np.isfinite(track.xy[ids, ankle]), axis=1))
+    if not np.all(valid):
+        return np.array([], dtype=int)
+    return ids
+
+
 def detect_events(track):
     """Release, FFC, BFC and take-off times from the tracked bowler (None when not detectable)."""
     if len(track) < 8 or track.height_px <= 0:
@@ -303,15 +318,23 @@ def detect_events(track):
     ffc = _landing(track, track.front["ankle"], ev["release"] - 0.45, ev["release"] - 0.02)
     if ffc is not None:
         ev["ffc"] = ffc
-        i_ffc = track.idx(ffc)
+        ffc_ids = _contact_observations(track, track.front["ankle"], ffc)
         ev["event_methods"]["ffc"] = "ankle_ground_contact_heuristic"
-        ev["joint_confidence"]["ffc"] = round(float(track.c[i_ffc, track.front["ankle"]]), 2)
+        ev["joint_confidence"]["ffc"] = round(float(np.min(track.c[ffc_ids, track.front["ankle"]])), 2)
+        ev.setdefault("contact_evidence", {})["ffc"] = {
+            "observed_frames": int(len(ffc_ids)),
+            "plateau_duration_s": round(float(track.t[ffc_ids[-1]] - track.t[ffc_ids[0]]), 3),
+        }
         bfc = _landing(track, arm["ankle"], ffc - 0.5, ffc - 0.06)
         if bfc is not None:
             ev["bfc"] = bfc
-            i_bfc = track.idx(bfc)
+            bfc_ids = _contact_observations(track, arm["ankle"], bfc)
             ev["event_methods"]["bfc"] = "ankle_ground_contact_heuristic"
-            ev["joint_confidence"]["bfc"] = round(float(track.c[i_bfc, arm["ankle"]]), 2)
+            ev["joint_confidence"]["bfc"] = round(float(np.min(track.c[bfc_ids, arm["ankle"]])), 2)
+            ev.setdefault("contact_evidence", {})["bfc"] = {
+                "observed_frames": int(len(bfc_ids)),
+                "plateau_duration_s": round(float(track.t[bfc_ids[-1]] - track.t[bfc_ids[0]]), 3),
+            }
     return ev
 
 
