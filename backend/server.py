@@ -781,7 +781,7 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
     if not text:
         raise HTTPException(400, "Message required")
     profile = await get_profile(x_device_id)
-    recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(3).to_list(3)
+    recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(8).to_list(8)
     context = [
         {"date": a["created_at"][:10], "score": a.get("overall_score"), "action": a.get("action_type"),
          "pace": a.get("pace_band", {}).get("label"), "risk": a.get("injury_risk", {}).get("level"),
@@ -789,7 +789,29 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
         for a in recent
     ]
     drill_history = await db.drill_completions.find({"device_id": x_device_id}).sort("completed_at", -1).limit(30).to_list(30)
-    practice_context = [{"focus": item.get("focus"), "drill": item.get("drill_name"), "completed_at": item.get("completed_at"), "notes": item.get("notes", "")} for item in drill_history]
+    practice_by_step: dict[str, dict] = {}
+    for item in drill_history:
+        entry = practice_by_step.setdefault(item["step_key"], {
+            "step_key": item["step_key"], "focus": item.get("focus"),
+            "drill": item.get("drill_name"), "completed_sessions": 0,
+            "last_completed_at": item.get("completed_at"), "recent_notes": [],
+        })
+        entry["completed_sessions"] += 1
+        if item.get("notes") and len(entry["recent_notes"]) < 3:
+            entry["recent_notes"].append(item["notes"])
+    comparable_trends = _step_progress_trends([Analysis.from_mongo(item) for item in recent])
+    trend_by_step = {item["step_key"]: item for item in comparable_trends}
+    practice_context = []
+    for key, item in practice_by_step.items():
+        trend = trend_by_step.get(key)
+        practice_context.append({
+            **item,
+            "video_check": ({
+                "direction": trend["direction"], "previous_score": trend["previous_score"],
+                "current_score": trend["current_score"], "camera_view": trend["camera_view"],
+                "comparison_dates": [trend["previous_date"], trend["current_date"]],
+            } if trend else "No comparable timestamped video pair yet"),
+        })
     history = await db.coach_messages.find({"device_id": x_device_id}).sort("created_at", -1).limit(12).to_list(12)
     history.reverse()
     transcript = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in history)
@@ -800,9 +822,10 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
         "Never diagnose injury or infer injury probability from a single delivery or uncalibrated video. "
         "You are the bowler's ongoing coach: use the practice log to remember prescribed drills, "
         "ask about practice when relevant, acknowledge logged sessions, and revisit the same movement focus "
-        "in later video analyses. A logged drill is not proof of technique change; judge improvement only "
-        "from comparable, sufficiently clear video evidence and state uncertainty. Never claim a session was "
-        "logged unless the app recorded it. "
+        "in later video analyses. For each practiced focus, review its same-view video_check when available; "
+        "if there is no comparable pair, say the technique change is not yet verified. A logged drill is not "
+        "proof of technique change; judge improvement only from comparable, sufficiently clear video evidence. "
+        "Never claim a session was logged unless the app recorded it. "
         f"Recent prescribed-drill practice log: {json.dumps(practice_context)}. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. "
         f"Recent analyses: {json.dumps(context)}. "
