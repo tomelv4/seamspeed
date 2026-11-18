@@ -96,13 +96,13 @@ export default function Coach() {
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-        {practice.data?.total_completions ? (
+        {!practice.isLoading ? (
           <View style={s.practicePanel} testID="coach-practice-history">
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
               <Text style={s.practiceTitle}>YOUR PRACTICE LOG</Text>
-              <Text style={s.practiceCount}>{practice.data.total_completions} sessions logged</Text>
+              <Text style={s.practiceCount}>{practice.data?.total_completions ?? 0} sessions logged</Text>
             </View>
-            {practice.data.focuses.slice(0, 3).map((item) => (
+            {(practice.data?.focuses ?? []).slice(0, 3).map((item) => (
               <View key={item.step_key} style={s.practiceRow}>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={s.practiceFocus}>{item.focus}</Text>
@@ -111,7 +111,7 @@ export default function Coach() {
                 <Text style={s.practiceCount}>×{item.completed_count}</Text>
               </View>
             ))}
-            <Text style={s.practiceHint}>Your coach uses this history to follow up on practice and compare future video evidence.</Text>
+            <Text style={s.practiceHint}>{practice.data?.total_completions ? "Your coach uses this history to follow up on practice and compare future video evidence." : "When a report recommends a targeted drill, log each session there. Your coach will remember the work and check for changes in future comparable videos."}</Text>
           </View>
         ) : null}
         <FlatList
