@@ -789,8 +789,11 @@ async def generate_coach_programme(body: WeeklyProgrammeIn, x_device_id: str = H
         raise HTTPException(422, "Unavailable days must be full weekday names")
     if len(set(body.unavailable_days)) != len(body.unavailable_days):
         raise HTTPException(422, "Unavailable days cannot contain duplicates")
+    planned_days = body.bowling_days + body.gym_days + body.skill_days + body.match_days
     if body.bowling_days + body.match_days > 5:
         raise HTTPException(422, "Bowling and match exposures together must not exceed five days")
+    if planned_days + len(body.unavailable_days) + 1 > 7:
+        raise HTTPException(422, "Those training targets and unavailable days leave no full rest day. Reduce a target or remove an unavailable day.")
     profile = await get_profile(x_device_id)
     workload = await workload_summary(x_device_id, profile)
     recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(3).to_list(3)
@@ -851,6 +854,9 @@ async def generate_coach_programme(body: WeeklyProgrammeIn, x_device_id: str = H
         raise HTTPException(502, "Coach scheduled training on an unavailable day. Please regenerate.")
     if not any(day["type"] == "rest" for day in normalised):
         raise HTTPException(502, "Coach did not include a full rest day. Please regenerate.")
+    hard_days = [day["type"] in {"bowling", "match"} for day in normalised]
+    if any(hard_days[index] and hard_days[(index + 1) % 7] for index in range(7)):
+        raise HTTPException(502, "Coach placed hard bowling exposures on consecutive days. Please regenerate.")
     if workload["status"] == "high":
         normalised = [
             {**day, "details": (day["details"] + " Current logged workload is elevated: review readiness and reduce or replace this session if fatigue is present.").strip()}
