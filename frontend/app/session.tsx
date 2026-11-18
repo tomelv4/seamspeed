@@ -256,6 +256,9 @@ export default function LiveSession() {
                     {blockBalls.length}/{stage === "test" ? plan.test?.balls ?? 6 : plan.bowling?.balls ?? 6} balls
                     {stage === "test" && plan.test?.target ? ` · Success: ${plan.test.target}` : ""}
                   </Text>
+                  {stage === "bowling" && plan.bowling?.rest_between_deliveries ? (
+                    <Text style={s.ballBody}>{plan.bowling.rest_between_deliveries}</Text>
+                  ) : null}
                 </View>
                 <Pressable testID="session-finish-block" style={s.blockBtn} disabled={!!busy || recording} onPress={() => advance(stage === "test" ? "cool_down" : "test")}>
                   <Text style={s.blockBtnText}>{stage === "test" ? "To cool-down" : "To test"}</Text>
