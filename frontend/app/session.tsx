@@ -318,10 +318,10 @@ export default function LiveSession() {
                         <Text style={[s.coachText, { flex: 1, fontWeight: "600" }]}>{item.name}</Text>
                         {item.reps || item.minutes ? <Text style={s.ballBody}>{item.reps ?? `${item.minutes} min`}</Text> : null}
                       </Pressable>
-                      {plan.session_mode === "gym" && logged.completed ? (
+                      {plan.session_mode === "gym" ? (
                         <View style={{ flexDirection: "row", gap: 8, paddingLeft: 35 }}>
-                          <TextInput testID={`session-actual-sets-${index}`} value={logged.sets} onChangeText={(sets) => setActivityLog((prev) => ({ ...prev, [index]: { ...logged, sets } }))} placeholder="Actual sets" placeholderTextColor={colors.muted} keyboardType="number-pad" style={{ flex: 1, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 10 }} />
-                          <TextInput testID={`session-actual-reps-${index}`} value={logged.reps} onChangeText={(reps) => setActivityLog((prev) => ({ ...prev, [index]: { ...logged, reps } }))} placeholder="Actual reps" placeholderTextColor={colors.muted} style={{ flex: 1, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 10 }} />
+                          <TextInput testID={`session-actual-sets-${index}`} value={logged.sets} onChangeText={(sets) => setActivityLog((prev) => ({ ...prev, [index]: { ...logged, sets } }))} placeholder="Sets performed" placeholderTextColor={colors.muted} keyboardType="number-pad" style={{ flex: 1, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 10 }} />
+                          <TextInput testID={`session-actual-reps-${index}`} value={logged.reps} onChangeText={(reps) => setActivityLog((prev) => ({ ...prev, [index]: { ...logged, reps } }))} placeholder="Reps performed" placeholderTextColor={colors.muted} style={{ flex: 1, color: colors.onSurface, borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 10 }} />
                         </View>
                       ) : null}
                     </View>
