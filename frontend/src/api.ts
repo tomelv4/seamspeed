@@ -44,6 +44,7 @@ export type Analysis = {
     event_methods?: Record<string, string>;
     joint_confidence?: Record<string, number | null>;
     contact_evidence?: Record<string, { observed_frames?: number; plateau_duration_s?: number }>;
+    event_timing?: { overall?: "high" | "medium" | "low" | "unavailable"; events?: Record<string, "high" | "medium" | "low" | "unavailable"> };
     release_evidence?: { ball_separation_visible?: boolean; confidence?: string; notes?: string };
     limitations?: string[];
   };
@@ -177,6 +178,8 @@ export type Step = {
   status: "good" | "ok" | "fault" | "not_visible"; observation: string; cue: string;
   metrics: Record<string, number>;
   evidence_level?: "pose_estimate" | "visual_assessment" | "insufficient";
+  timing_confidence?: "high" | "medium" | "low" | "unavailable";
+  timing_method?: string;
 };
 export type PoseData = { width: number; height: number; frames: { t: number; k: number[][] | null; display_k?: number[][] | null }[] };
 export type Ball = {
