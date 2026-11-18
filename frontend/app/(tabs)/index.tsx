@@ -68,7 +68,7 @@ export default function Home() {
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
           <PressScale testID="home-coach-card" style={s.coach} onPress={() => router.push("/coach")}>
             <View style={[s.coachIcon, { backgroundColor: colors.brandPrimary }]}>
-              <Ionicons name="brain" size={22} color={colors.onBrandPrimary} />
+              <Ionicons name="chatbubbles" size={22} color={colors.onBrandPrimary} />
             </View>
             <View style={{ flex: 1, gap: 3 }}>
               <Text style={s.coachTitle}>AI Coach</Text>
