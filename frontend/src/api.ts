@@ -78,6 +78,15 @@ export type Progress = {
     current_score: number; previous_score: number; delta: number;
     direction: "improved" | "declined" | "stable";
   }[];
+  development_overview?: {
+    window_days: number;
+    bowling: { deliveries: number; logged_days: number; entries: number };
+    gym: { sessions: number; activities_completed: number; actual_sets: number; recent: { date: string; completed_activities: number; planned_activities: number; effort: string | null; feeling: string | null; actual_sets: number }[] };
+    recovery: { sessions: number; activities_completed: number; recent: { date: string; completed_activities: number; planned_activities: number; effort: string | null; feeling: string | null; actual_sets: number }[] };
+    practice: { drill_completions: number; recent_focuses: string[] };
+    video: { analyses: number };
+    recent_activity: { date: string; kind: "bowling" | "gym" | "recovery" | "practice" | "video"; title: string; detail: string }[];
+  };
 };
 export type CoachMessage = { id: string; role: "user" | "assistant"; content: string; created_at: string };
 
