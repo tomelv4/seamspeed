@@ -15,6 +15,11 @@ export type CoachingPriority = {
   why_it_matters?: string; feel_cue?: string; drill?: string; success_check?: string;
   drill_name?: string; drill_setup?: string; drill_action?: string; drill_dose?: string;
 };
+export type DrillPracticeHistory = {
+  total_completions: number;
+  focuses: { step_key: string; focus: string; drill_name: string; completed_count: number; last_completed_at: string; recent_sessions: { completed_at: string; notes: string; analysis_id: string }[] }[];
+  sessions: { id: string; analysis_id: string; step_key: string; focus: string; drill_name: string; completed_at: string; notes: string }[];
+};
 export type AnalysisProgress = { stage?: string; percent?: number; message?: string };
 export type Analysis = {
   id: string;
@@ -185,6 +190,7 @@ export const useAnalysis = (id: string) =>
   useQuery({ queryKey: ["analysis", id], queryFn: () => apiGet<Analysis>(`/analyses/${id}`), enabled: !!id });
 export const useDrills = () => useQuery({ queryKey: ["drills"], queryFn: () => apiGet<Drill[]>("/drills") });
 export const useProgress = () => useQuery({ queryKey: ["progress"], queryFn: () => apiGet<Progress>("/progress") });
+export const useDrillPracticeHistory = () => useQuery({ queryKey: ["coach-drill-history"], queryFn: () => apiGet<DrillPracticeHistory>("/coach/drills/history") });
 export const useProfile = () => useQuery({ queryKey: ["profile"], queryFn: () => apiGet<Profile>("/profile") });
 
 export type Step = {
