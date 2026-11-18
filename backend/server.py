@@ -1138,6 +1138,7 @@ def apply_structured_session_protocol(plan: dict, workload: dict) -> dict:
     status = workload.get("status")
     maximum = 6 if status == "high" else 8 if status == "medium" else 12
     bowling["balls"] = max(1, min(requested, maximum, 12))
+    bowling["rest_between_deliveries"] = "Walk back, reset your breathing and take enough recovery to keep the next delivery coordinated. Do not rush the next ball."
     if status == "high":
         plan.setdefault("tips", []).append("Recent workload is elevated: this session has been capped at a small bowling block. Stop if fatigue changes your action; consider replacing fast bowling with recovery.")
     elif status == "medium":
