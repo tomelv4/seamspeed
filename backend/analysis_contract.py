@@ -244,6 +244,46 @@ def _attach_coaching_guidance(priorities: list[dict], raw_guidance: Any) -> list
         enriched.append(item)
     return enriched
 
+def build_recurring_fault_history(analyses: list[dict[str, Any]], limit: int = 6) -> list[dict[str, Any]]:
+    """Count only faults tied to a timestamped, explicitly fault-classified step."""
+    grouped: dict[str, dict[str, Any]] = {}
+    for analysis in analyses:
+        view = analysis.get("camera_view")
+        if view not in VALID_CAMERA_VIEWS - {"unknown"}:
+            continue
+        if analysis.get("camera_view_confidence") not in {"high", "medium"}:
+            continue
+        steps = {
+            step.get("key"): step for step in analysis.get("steps", [])
+            if isinstance(step, dict) and step.get("key")
+        }
+        seen_in_analysis: set[str] = set()
+        for fault in analysis.get("faults", []):
+            if not isinstance(fault, dict):
+                continue
+            key = fault.get("step_key")
+            step = steps.get(key)
+            if (not key or key in seen_in_analysis or not step
+                    or step.get("status") != "fault"
+                    or step.get("coaching_classification") != "fault"
+                    or step.get("t") is None
+                    or step.get("evidence_level") == "insufficient"):
+                continue
+            seen_in_analysis.add(key)
+            item = grouped.setdefault(key, {
+                "step_key": key,
+                "title": step.get("name") or fault.get("title") or key.replace("_", " ").title(),
+                "count": 0,
+                "last_seen": analysis.get("created_at"),
+                "camera_view": view,
+            })
+            item["count"] += 1
+            if (analysis.get("created_at") or "") > (item.get("last_seen") or ""):
+                item["last_seen"] = analysis.get("created_at")
+                item["camera_view"] = view
+    return sorted(grouped.values(), key=lambda item: (-item["count"], item["title"]))[:limit]
+
+
 def reconcile_synced_evidence(payload: dict) -> dict:
     """Remove coaching judgements whose exact movement frame could not be anchored."""
     steps = payload.get("steps") if isinstance(payload.get("steps"), list) else []
