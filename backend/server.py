@@ -54,6 +54,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "sessions": [IndexModel([("device_id", ASCENDING), ("created_at", DESCENDING)], name="device_created")],
     "workload": [IndexModel([("device_id", ASCENDING), ("date", DESCENDING)], name="device_date")],
     "drill_completions": [IndexModel([("device_id", ASCENDING), ("completed_at", DESCENDING)], name="device_completed")],
+    "coach_programmes": [IndexModel([("device_id", ASCENDING)], name="device_id", unique=True)],
 }
 
 
@@ -158,6 +159,15 @@ class ChatIn(BaseModel):
 
 class DrillCompletionIn(BaseModel):
     notes: str = Field(default="", max_length=500)
+
+
+class WeeklyProgrammeIn(BaseModel):
+    bowling_days: int = Field(default=2, ge=1, le=4)
+    gym_days: int = Field(default=2, ge=0, le=4)
+    skill_days: int = Field(default=1, ge=0, le=4)
+    match_days: int = Field(default=0, ge=0, le=2)
+    unavailable_days: List[str] = Field(default_factory=list, max_length=7)
+    notes: str = Field(default="", max_length=600)
 
 
 # ---------------------------------------------------------------- drills library
@@ -761,6 +771,103 @@ async def coach_drill_history(x_device_id: str = Header(...), limit: int = Query
             })
     sessions = [{"id": str(item["_id"]), **{k: v for k, v in item.items() if k not in {"_id", "device_id"}}} for item in docs]
     return {"total_completions": len(docs), "focuses": list(grouped.values()), "sessions": sessions}
+
+
+@api_router.get("/coach/programme")
+async def get_coach_programme(x_device_id: str = Header(...)):
+    doc = await db.coach_programmes.find_one({"device_id": x_device_id})
+    if not doc:
+        return {"programme": None}
+    return {"programme": {k: v for k, v in doc.items() if k not in {"_id", "device_id"}}}
+
+
+@api_router.post("/coach/programme")
+async def generate_coach_programme(body: WeeklyProgrammeIn, x_device_id: str = Header(...)):
+    """Generate and persist one structured seven-day programme for this device."""
+    valid_days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+    if any(day not in valid_days for day in body.unavailable_days):
+        raise HTTPException(422, "Unavailable days must be full weekday names")
+    if len(set(body.unavailable_days)) != len(body.unavailable_days):
+        raise HTTPException(422, "Unavailable days cannot contain duplicates")
+    if body.bowling_days + body.match_days > 5:
+        raise HTTPException(422, "Bowling and match exposures together must not exceed five days")
+    profile = await get_profile(x_device_id)
+    workload = await workload_summary(x_device_id, profile)
+    recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(3).to_list(3)
+    priorities = []
+    for analysis in recent:
+        priorities.extend([item.get("title") for item in analysis.get("coaching_priorities", [])[:2] if item.get("title")])
+    constraints = body.model_dump()
+    prompt = (
+        "Create a practical, sustainable seven-day fast-bowling development programme. "
+        "Return ONLY valid JSON with keys title, rationale, days. days must contain exactly seven objects in Monday-to-Sunday order. "
+        "Each day object must have day, type, title, focus, details, and intensity. type must be one of bowling, gym, skill, match, recovery, rest. "
+        "Use the requested counts exactly for bowling, gym, skill and match days; unavailable days must be rest. "
+        "Treat match days as high-intensity bowling exposures, space bowling and match days sensibly, include at least one full rest day, "
+        "and do not schedule hard bowling on consecutive days. Do not invent the user's work or study timetable. "
+        "Gym sessions should be general strength and conditioning suggestions, not maximal lifting prescriptions. "
+        "Skill days should be low-intensity technical practice. Include warm-up, cool-down and recovery reminders in relevant details. "
+        "If workload status is high, do not prescribe extra fast bowling; recommend recovery/low intensity and explain the programme needs review before starting. "
+        "Do not diagnose injury or give injury probabilities. Keep details concise and actionable. "
+        f"Bowler profile: {profile.name}, age band {profile.age_band or 'not supplied'}, level {profile.level}, style {profile.bowling_style}. "
+        f"Requested schedule constraints: {json.dumps(constraints)}. "
+        f"Recent logged workload: {json.dumps(workload)}. "
+        f"Recent video coaching priorities: {json.dumps(priorities[:6])}. "
+    )
+    try:
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"programme-{uuid.uuid4()}",
+                       system_message="You are PACED Coach, an evidence-informed fast-bowling programme planner. Return valid JSON only.").with_model("openai", "gpt-5.5")
+        raw = await chat.send_message(UserMessage(text=prompt))
+        generated = parse_model_json(raw)
+    except Exception as exc:
+        logger.exception("weekly programme generation failed")
+        raise HTTPException(502, f"Programme generation failed: {exc}")
+    days = generated.get("days") if isinstance(generated, dict) else None
+    allowed_types = {"bowling", "gym", "skill", "match", "recovery", "rest"}
+    if not isinstance(days, list) or len(days) != 7:
+        raise HTTPException(502, "Coach returned an incomplete weekly programme. Please try again.")
+    normalised = []
+    for index, day in enumerate(days):
+        expected_day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][index]
+        if not isinstance(day, dict) or day.get("type") not in allowed_types:
+            raise HTTPException(502, "Coach returned an invalid day in the weekly programme. Please try again.")
+        normalised.append({
+            "day": expected_day,
+            "type": day["type"],
+            "title": str(day.get("title") or day["type"].title())[:80],
+            "focus": str(day.get("focus") or "")[:160],
+            "details": str(day.get("details") or "")[:700],
+            "intensity": str(day.get("intensity") or "moderate")[:24],
+        })
+    if sum(day["type"] == "bowling" for day in normalised) != body.bowling_days:
+        raise HTTPException(502, "Coach did not match the requested bowling-day count. Please regenerate.")
+    if sum(day["type"] == "gym" for day in normalised) != body.gym_days:
+        raise HTTPException(502, "Coach did not match the requested gym-day count. Please regenerate.")
+    if sum(day["type"] == "skill" for day in normalised) != body.skill_days:
+        raise HTTPException(502, "Coach did not match the requested skill-day count. Please regenerate.")
+    if sum(day["type"] == "match" for day in normalised) != body.match_days:
+        raise HTTPException(502, "Coach did not match the requested match-day count. Please regenerate.")
+    if any(day["type"] != "rest" for day in normalised if day["day"] in body.unavailable_days):
+        raise HTTPException(502, "Coach scheduled training on an unavailable day. Please regenerate.")
+    if not any(day["type"] == "rest" for day in normalised):
+        raise HTTPException(502, "Coach did not include a full rest day. Please regenerate.")
+    if workload["status"] == "high":
+        normalised = [
+            {**day, "details": (day["details"] + " Current logged workload is elevated: review readiness and reduce or replace this session if fatigue is present.").strip()}
+            if day["type"] in {"bowling", "match"} else day for day in normalised
+        ]
+    programme = {
+        "title": str(generated.get("title") or "Your weekly development plan")[:100],
+        "rationale": str(generated.get("rationale") or "")[:700],
+        "days": normalised,
+        "constraints": constraints,
+        "workload_at_generation": {"status": workload["status"], "headline": workload["headline"], "acute": workload["acute"]},
+        "created_at": now_iso(),
+    }
+    await db.coach_programmes.update_one(
+        {"device_id": x_device_id}, {"$set": {"device_id": x_device_id, **programme}}, upsert=True
+    )
+    return {"programme": programme}
 
 
 @api_router.get("/coach/messages")
