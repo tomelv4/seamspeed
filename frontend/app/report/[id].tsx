@@ -115,6 +115,15 @@ export default function Report() {
                     .map(([key, method]) => `${key.replace("_", " ")}: ${method.replaceAll("_", " ")}`).join(" · ")}
                 </Text>
               ) : null}
+              {a.analysis_quality.event_timing ? (
+                <Text style={s.note}>
+                  Event timing confidence: {(a.analysis_quality.event_timing.overall ?? "unavailable").toUpperCase()}
+                  {Object.entries(a.analysis_quality.event_timing.events ?? {}).length
+                    ? ` · ${Object.entries(a.analysis_quality.event_timing.events ?? {}).map(([key, value]) => `${key.toUpperCase()}: ${value}`).join(" · ")}`
+                    : ""}
+                  . This rates timing evidence, not the bowler's technique.
+                </Text>
+              ) : null}
               {Object.keys(a.analysis_quality.joint_confidence ?? {}).length ? (
                 <Text style={s.note}>
                   Keypoint visibility at detected events: {Object.entries(a.analysis_quality.joint_confidence ?? {})
