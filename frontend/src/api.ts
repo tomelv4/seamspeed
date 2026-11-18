@@ -221,11 +221,21 @@ export type Ball = {
   n: number; created_at: string; is_bowling: boolean; score: number; pace_kmh?: number | null; hit_target?: boolean;
   good: string; fault: string; phase: string; observation: string; feedback: string; next_target: string; audio: string; block?: "bowling" | "test";
 };
+export type SessionActivityLog = {
+  name: string; completed: boolean; actual_sets?: number | null; actual_reps?: string | null;
+  effort?: "easy" | "moderate" | "hard" | null; notes?: string;
+};
+export type SessionCompletion = {
+  activities: SessionActivityLog[];
+  overall_feeling?: "fresh" | "normal" | "tired" | "rough" | null;
+  notes?: string;
+};
 export type CoachSession = {
   id: string; created_at: string; focus: string; status: "active" | "ended"; intro: string; intro_audio: string;
   scheduled_session?: { day?: string; type?: "bowling" | "gym" | "skill" | "match" | "recovery" | "rest"; title?: string; focus?: string; details?: string; intensity?: string };
   balls: Ball[]; summary: string; summary_audio: string;
   plan?: SessionPlan;
+  completion?: SessionCompletion;
   achievements?: { key: string; title: string; description: string }[];
   test_result?: { name?: string; balls?: number; hits?: number; avg_score?: number; top_pace?: number | null };
 };
