@@ -53,6 +53,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "poses": [IndexModel([("analysis_id", ASCENDING)], name="analysis_id")],
     "sessions": [IndexModel([("device_id", ASCENDING), ("created_at", DESCENDING)], name="device_created")],
     "workload": [IndexModel([("device_id", ASCENDING), ("date", DESCENDING)], name="device_date")],
+    "drill_completions": [IndexModel([("device_id", ASCENDING), ("completed_at", DESCENDING)], name="device_completed")],
 }
 
 
@@ -152,6 +153,10 @@ class CoachMessage(BaseDocument):
 
 class ChatIn(BaseModel):
     message: str
+
+
+class DrillCompletionIn(BaseModel):
+    notes: str = Field(default="", max_length=500)
 
 
 # ---------------------------------------------------------------- drills library
@@ -617,6 +622,7 @@ async def delete_analysis(analysis_id: str, x_device_id: str = Header(...)):
     if not res.deleted_count:
         raise HTTPException(404, "Not found")
     await db.poses.delete_many({"analysis_id": analysis_id})
+    await db.drill_completions.delete_many({"analysis_id": analysis_id, "device_id": x_device_id})
     return {"ok": True}
 
 
@@ -717,6 +723,46 @@ async def progress(x_device_id: str = Header(...)):
 
 
 # ---------------------------------------------------------------- AI coach (ChatGPT)
+@api_router.post("/coach/drills/{analysis_id}/{step_key}/complete")
+async def complete_coach_drill(analysis_id: str, step_key: str, body: DrillCompletionIn, x_device_id: str = Header(...)):
+    """Record practice only for a drill PACED prescribed in this user's report."""
+    analysis = await _owned_analysis(analysis_id, x_device_id)
+    priority = next((item for item in analysis.get("coaching_priorities", [])
+                     if item.get("step_key") == step_key and item.get("drill_name")), None)
+    if not priority:
+        raise HTTPException(404, "No targeted drill is assigned to this coaching focus")
+    doc = {
+        "device_id": x_device_id, "analysis_id": analysis_id, "step_key": step_key,
+        "focus": priority.get("title", step_key.replace("_", " ").title()),
+        "drill_name": priority["drill_name"], "completed_at": now_iso(),
+        "notes": body.notes.strip(),
+    }
+    result = await db.drill_completions.insert_one(doc)
+    return {"id": str(result.inserted_id), **{k: v for k, v in doc.items() if k != "device_id"}}
+
+
+@api_router.get("/coach/drills/history")
+async def coach_drill_history(x_device_id: str = Header(...), limit: int = Query(100, ge=1, le=300)):
+    docs = await db.drill_completions.find({"device_id": x_device_id}).sort("completed_at", -1).limit(limit).to_list(limit)
+    grouped: dict[str, dict] = {}
+    for item in docs:
+        key = item["step_key"]
+        entry = grouped.setdefault(key, {
+            "step_key": key, "focus": item.get("focus", key.replace("_", " ").title()),
+            "drill_name": item.get("drill_name", ""), "completed_count": 0,
+            "last_completed_at": item["completed_at"], "recent_sessions": [],
+        })
+        entry["completed_count"] += 1
+        if len(entry["recent_sessions"]) < 5:
+            entry["recent_sessions"].append({
+                "completed_at": item["completed_at"], "notes": item.get("notes", ""),
+                "analysis_id": item["analysis_id"],
+            })
+    return {"total_completions": len(docs), "focuses": list(grouped.values()), "sessions": [
+        {k: v for k, v in item.items() if k != "device_id"} for item in docs
+    ]}
+
+
 @api_router.get("/coach/messages")
 async def coach_messages(x_device_id: str = Header(...)):
     docs = await db.coach_messages.find({"device_id": x_device_id}).sort("created_at", 1).to_list(200)
@@ -742,6 +788,8 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
          "faults": [f.get("title") for f in a.get("faults", [])]}
         for a in recent
     ]
+    drill_history = await db.drill_completions.find({"device_id": x_device_id}).sort("completed_at", -1).limit(30).to_list(30)
+    practice_context = [{"focus": item.get("focus"), "drill": item.get("drill_name"), "completed_at": item.get("completed_at"), "notes": item.get("notes", "")} for item in drill_history]
     history = await db.coach_messages.find({"device_id": x_device_id}).sort("created_at", -1).limit(12).to_list(12)
     history.reverse()
     transcript = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in history)
@@ -750,6 +798,12 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
          "You are PACED Coach, a world-class fast-bowling coach. Give concise, practical, encouraging advice "
         "(max ~150 words, short bullet points when listing). Prioritise sustainable technique, recovery and workload habits. "
         "Never diagnose injury or infer injury probability from a single delivery or uncalibrated video. "
+        "You are the bowler's ongoing coach: use the practice log to remember prescribed drills, "
+        "ask about practice when relevant, acknowledge logged sessions, and revisit the same movement focus "
+        "in later video analyses. A logged drill is not proof of technique change; judge improvement only "
+        "from comparable, sufficiently clear video evidence and state uncertainty. Never claim a session was "
+        "logged unless the app recorded it. "
+        f"Recent prescribed-drill practice log: {json.dumps(practice_context)}. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. "
         f"Recent analyses: {json.dumps(context)}. "
         f"Conversation so far:\n{transcript}"
