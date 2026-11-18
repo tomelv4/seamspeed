@@ -176,6 +176,7 @@ export const useProfile = () => useQuery({ queryKey: ["profile"], queryFn: () =>
 export type Step = {
   key: string; name: string; phase: string; description: string; ideal?: string; t: number | null; score: number;
   status: "good" | "ok" | "fault" | "not_visible"; observation: string; cue: string;
+  coaching_classification?: "fault" | "opportunity" | "effective_variation" | "none";
   metrics: Record<string, number>;
   evidence_level?: "pose_estimate" | "visual_assessment" | "insufficient";
   timing_confidence?: "high" | "medium" | "low" | "unavailable";
