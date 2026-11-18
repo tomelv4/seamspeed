@@ -327,11 +327,11 @@ class TestMergeAndSync:
 
     def test_merge_prefers_pose_contacts_but_ai_release_over_wrist_apex_proxy(self):
         ev = biomech.merge_events(
-            {"release": 1.5, "ffc": 1.367, "bfc": 1.1,
+            {"release": 1.5, "ffc": 1.45, "bfc": 1.1,
              "event_methods": {"release": "wrist_apex_proxy"}},
             ai_steps_from({"finger_roll_release": 1.9, "ffc": 1.7}), 2.5
         )
-        assert ev["release"] == 1.9 and ev["ffc"] == 1.367
+        assert ev["release"] == 1.9 and ev["ffc"] == 1.45
         assert ev["measured"] == ["bfc", "ffc"]
         assert ev["sources"]["release"] == "ai"
         assert ev["event_methods"]["release"] == "ai_visual_estimate"
