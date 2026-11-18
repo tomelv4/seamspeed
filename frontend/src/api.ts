@@ -196,6 +196,11 @@ export type WeeklyProgramme = {
   days: { day: string; type: "bowling" | "gym" | "skill" | "match" | "recovery" | "rest"; title: string; focus: string; details: string; intensity: string }[];
   constraints: { bowling_days: number; gym_days: number; skill_days: number; match_days: number; unavailable_days: string[]; notes: string };
   workload_at_generation: { status: "low" | "medium" | "high"; headline: string; acute: number };
+  training_response_at_generation?: {
+    window_days: number; logged_sessions: number; adjustment: "no_recent_response_data" | "reduce_next_gym_load" | "hold_or_reduce_volume" | "progress_only_if_ready" | "maintain_and_review";
+    guidance: string;
+    sessions: { date: string; mode: "gym" | "recovery"; completed_activities: number; logged_activities: number; planned_activities: number; completion_ratio: number | null; session_effort: "easy" | "moderate" | "hard" | null; overall_feeling: "fresh" | "normal" | "tired" | "rough" | null; actual_sets_logged: number }[];
+  };
   created_at: string;
 };
 export type WeeklyProgrammeResponse = { programme: WeeklyProgramme | null };
