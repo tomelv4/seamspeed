@@ -152,8 +152,9 @@ def test_progress_shape():
     r = requests.get(f"{BASE_URL}/api/progress", headers=HEADERS, timeout=15)
     assert r.status_code == 200
     data = r.json()
-    for k in ("points", "phase_avg", "top_faults", "best_score", "best_pace", "total"):
+    for k in ("points", "phase_avg", "top_faults", "best_score", "best_pace", "total", "step_trends"):
         assert k in data
+    assert isinstance(data["step_trends"], list)
 
 
 # ---------------------------------------------------------------- coach chat
