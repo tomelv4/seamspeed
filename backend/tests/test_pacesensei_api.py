@@ -137,6 +137,7 @@ def test_create_analysis_and_get(created_analysis_ids):
     body = r.json()
     assert body["device_id"] == DEVICE_ID
     assert "is_bowling_video" in body
+    assert "coaching_priorities" in body
     # color bars should not be classified as a bowling video
     assert body["is_bowling_video"] is False
     assert "id" in body and body["id"]
@@ -145,6 +146,10 @@ def test_create_analysis_and_get(created_analysis_ids):
     g = requests.get(f"{BASE_URL}/api/analyses/{body['id']}", headers=HEADERS, timeout=15)
     assert g.status_code == 200
     assert g.json()["id"] == body["id"]
+    assert g.json()["coaching_priorities"] == []
+    # A completion cannot be logged unless this report prescribed a targeted drill.
+    completion = requests.post(f"{BASE_URL}/api/coach/drills/{body['id']}/front_knee_bracing/complete", headers=HEADERS, json={}, timeout=15)
+    assert completion.status_code == 404
 
 
 # ---------------------------------------------------------------- progress
