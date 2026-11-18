@@ -130,6 +130,7 @@ class TestSession:
         assert {item["name"] for item in plan["recovery"]["items"]} >= {"Rehydrate", "Refuel", "Restore", "Review response"}
         assert len(plan["cool_down"]) == 3
         assert 1 <= plan["bowling"]["balls"] <= 12
+        assert plan["bowling"]["rest_between_deliveries"]
         assert isinstance(plan["drills"], list) and len(plan["drills"]) >= 2
         assert "balls" in plan["bowling"] and "target" in plan["bowling"]
         for k in ("name", "balls", "target"):
