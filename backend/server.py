@@ -1509,11 +1509,23 @@ async def end_session(session_id: str, x_device_id: str = Header(...)):
     balls = [{"n": b["n"], "block": b.get("block", "bowling"), "score": b["score"], "pace": b.get("pace_kmh"), "fault": b.get("fault"), "good": b.get("good")} for b in session.balls]
     achievements, test_result = compute_achievements(session)
     try:
-        summary = await coach_say(coach_system(profile, session.focus),
-            f"The session is over (warm-up, drills, bowling block, test, cool-down). Balls: {json.dumps(balls)}. Test result: {json.dumps(test_result)}. "
-            f"Achievements unlocked: {[a['title'] for a in achievements]}. In under 80 words, wrap up: overall verdict, the test result, "
-            "the one thing to work on before next session, one recovery tip, and a motivating sign-off." if balls else
-            "The bowler ended the session before bowling. In under 25 words, say no problem and invite them back.")
+        session_mode = (session.plan or {}).get("session_mode", "bowling")
+        if session_mode in {"gym", "recovery"}:
+            activities = (session.plan or {}).get("activities", [])
+            summary_prompt = (
+                f"The {session_mode} session is complete. Planned activities: {json.dumps(activities)}. "
+                f"Programme focus: {session.scheduled_session.get('focus', session.focus)}. "
+                "In under 65 words, give a supportive recap of the completed session, reinforce controlled quality rather than extra volume, "
+                "and give one practical recovery or next-session note. Do not mention bowling balls or a bowling test."
+            )
+        else:
+            summary_prompt = (
+                f"The session is over (warm-up, drills, bowling block, test, cool-down). Balls: {json.dumps(balls)}. Test result: {json.dumps(test_result)}. "
+                f"Achievements unlocked: {[a['title'] for a in achievements]}. In under 80 words, wrap up: overall verdict, the test result, "
+                "the one thing to work on before next session, one recovery tip, and a motivating sign-off." if balls else
+                "The bowler ended the session before bowling. In under 25 words, say no problem and invite them back."
+            )
+        summary = await coach_say(coach_system(profile, session.focus), summary_prompt)
         audio = await speak(summary)
     except Exception as exc:
         logger.exception("session end failed")
