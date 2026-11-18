@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import biomech
-from analysis_contract import build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
+from analysis_contract import build_development_overview, build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
 
 
 def test_recurring_fault_history_requires_exact_timestamped_fault_step():
@@ -526,3 +526,85 @@ def test_training_response_ignores_unlogged_active_and_stale_sessions():
 
     assert summary["logged_sessions"] == 0
     assert summary["adjustment"] == "no_recent_response_data"
+
+
+
+def test_development_overview_counts_only_logged_activity_in_the_last_28_days():
+    now = datetime(2026, 11, 19, 0, 0, tzinfo=timezone.utc)
+    sessions = [
+        {
+            "status": "ended", "created_at": "2026-11-17T10:00:00Z",
+            "plan": {"session_mode": "gym", "activities": [{"name": "Squat"}, {"name": "Row"}, {"name": "Press"}]},
+            "completion": {"logged_at": "2026-11-17T11:00:00Z", "activities": [
+                {"name": "Squat", "completed": True, "actual_sets": 3},
+                {"name": "Row", "completed": False, "actual_sets": 0},
+                {"name": "Press", "completed": True, "actual_sets": 2},
+            ], "session_effort": "moderate", "overall_feeling": "normal"},
+        },
+        {
+            "status": "ended", "created_at": "2026-11-16T10:00:00Z",
+            "plan": {"session_mode": "recovery", "activities": [{"name": "Walk"}]},
+            "completion": {"logged_at": "2026-11-16T11:00:00Z", "activities": [{"name": "Walk", "completed": True}]},
+        },
+        {
+            "status": "ended", "created_at": "2026-11-15T10:00:00Z",
+            "plan": {"session_mode": "gym", "activities": [{"name": "Unlogged"}]},
+        },
+        {
+            "status": "active", "created_at": "2026-11-18T10:00:00Z",
+            "plan": {"session_mode": "gym", "activities": [{"name": "Still active"}]},
+            "completion": {"logged_at": "2026-11-18T11:00:00Z", "activities": [{"name": "Still active", "completed": True}]},
+        },
+    ]
+    overview = build_development_overview(
+        analyses=[{"created_at": "2026-11-18T09:00:00Z", "is_bowling_video": True, "camera_view": "side_on"}],
+        workload_entries=[
+            {"date": "2026-11-18", "balls": 24},
+            {"date": "2026-11-10", "balls": 18},
+            {"date": "2026-10-01", "balls": 90},
+        ],
+        training_sessions=sessions,
+        drill_completions=[
+            {"completed_at": "2026-11-18T12:00:00Z", "drill_name": "Brace drill", "focus": "Front-leg bracing"},
+            {"completed_at": "2026-10-01T12:00:00Z", "drill_name": "Old drill"},
+        ],
+        now=now,
+    )
+
+    assert overview["bowling"] == {"deliveries": 42, "logged_days": 2, "entries": 2}
+    assert overview["gym"]["sessions"] == 1
+    assert overview["gym"]["activities_completed"] == 2
+    assert overview["gym"]["actual_sets"] == 5
+    assert overview["recovery"]["sessions"] == 1
+    assert overview["practice"]["drill_completions"] == 1
+    assert overview["video"]["analyses"] == 1
+    assert len(overview["recent_activity"]) == 6
+
+
+def test_development_overview_does_not_count_planned_exercises_as_completed():
+    now = datetime(2026, 11, 19, 0, 0, tzinfo=timezone.utc)
+    overview = build_development_overview(
+        analyses=[], workload_entries=[],
+        training_sessions=[{
+            "status": "ended", "created_at": "2026-11-18T10:00:00Z",
+            "plan": {"session_mode": "gym", "activities": [{"name": "A"}, {"name": "B"}]},
+            "completion": {"logged_at": "2026-11-18T11:00:00Z", "activities": [
+                {"name": "A", "completed": False}, {"name": "B", "completed": False},
+            ]},
+        }],
+        drill_completions=[], now=now,
+    )
+    assert overview["gym"]["sessions"] == 1
+    assert overview["gym"]["activities_completed"] == 0
+    assert overview["gym"]["actual_sets"] == 0
+
+
+def test_development_overview_returns_empty_zeroed_snapshot_without_history():
+    overview = build_development_overview([], [], [], [], now=datetime(2026, 11, 19, tzinfo=timezone.utc))
+    assert overview["window_days"] == 28
+    assert overview["bowling"]["deliveries"] == 0
+    assert overview["gym"]["sessions"] == 0
+    assert overview["recovery"]["sessions"] == 0
+    assert overview["practice"]["drill_completions"] == 0
+    assert overview["video"]["analyses"] == 0
+    assert overview["recent_activity"] == []
