@@ -318,12 +318,22 @@ class TestMergeAndSync:
 
     def test_event_timing_quality_requires_ball_separation_for_high_release_confidence(self):
         ev = biomech.merge_events(
-            {"release": 1.5, "event_methods": {"release": "wrist_apex_proxy"}}, [], 2.5
+            {}, ai_steps_from({"finger_roll_release": 1.5}), 2.5
         )
         quality = biomech.event_timing_quality(
             ev, {"ball_separation_visible": True, "confidence": "high"}
         )
         assert quality["events"]["release"] == "high"
+
+    def test_ball_separation_does_not_upgrade_wrist_apex_proxy_timing(self):
+        ev = biomech.merge_events(
+            {"release": 1.5, "event_methods": {"release": "wrist_apex_proxy"}}, [], 2.5
+        )
+        quality = biomech.event_timing_quality(
+            ev, {"ball_separation_visible": True, "confidence": "high"}
+        )
+        assert ev["event_methods"]["release"] == "wrist_apex_proxy"
+        assert quality["events"]["release"] == "low"
 
     def test_merge_prefers_pose_contacts_but_ai_release_over_wrist_apex_proxy(self):
         ev = biomech.merge_events(
