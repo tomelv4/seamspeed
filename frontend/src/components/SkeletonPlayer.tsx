@@ -159,13 +159,54 @@ function PlayerInner({ analysisId, meta, steps, pose, bowlingArm, selected, seek
                 </>
               ) : null}
               {EDGES.map(([a, b]) => {
-                if (kp[a][2] < 0.3 || kp[b][2] < 0.3) return null;
+                const confidence = Math.min(kp[a][2], kp[b][2]);
+                if (confidence < 0.3) return null;
                 const id = `${a}-${b}`;
                 const stroke = armEdges.includes(id) ? colors.accent : frontLegEdges.includes(id) ? colors.info : colors.onSurface;
-                return <Line key={id} x1={kp[a][0] * boxW} y1={kp[a][1] * boxH} x2={kp[b][0] * boxW} y2={kp[b][1] * boxH} stroke={stroke} strokeWidth={compact ? 2.5 : 4} strokeLinecap="round" />;
+                const uncertain = confidence < 0.6;
+                return (
+                  <Line
+                    key={id}
+                    x1={kp[a][0] * boxW}
+                    y1={kp[a][1] * boxH}
+                    x2={kp[b][0] * boxW}
+                    y2={kp[b][1] * boxH}
+                    stroke={stroke}
+                    strokeWidth={compact ? 2.5 : 4}
+                    strokeLinecap="round"
+                    strokeDasharray={uncertain ? "4 3" : undefined}
+                    opacity={uncertain ? 0.4 + confidence * 0.5 : 1}
+                  />
+                );
               })}
-              {kp.slice(5).map((p, i) => (p[2] < 0.3 ? null : <Circle key={i} cx={p[0] * boxW} cy={p[1] * boxH} r={compact ? 2 : 4} fill={colors.surface} stroke={colors.onSurface} strokeWidth={compact ? 1 : 2} />))}
-              {kp[0][2] > 0.3 ? <Circle cx={kp[0][0] * boxW} cy={kp[0][1] * boxH} r={compact ? 6 : 10} fill="none" stroke={colors.onSurface} strokeWidth={compact ? 2 : 3} /> : null}
+              {kp.slice(5).map((p, i) => {
+                if (p[2] < 0.3) return null;
+                const uncertain = p[2] < 0.6;
+                return (
+                  <Circle
+                    key={i}
+                    cx={p[0] * boxW}
+                    cy={p[1] * boxH}
+                    r={compact ? 2 : 4}
+                    fill={colors.surface}
+                    stroke={colors.onSurface}
+                    strokeWidth={compact ? 1 : 2}
+                    opacity={uncertain ? 0.4 + p[2] * 0.5 : 1}
+                  />
+                );
+              })}
+              {kp[0][2] > 0.3 ? (
+                <Circle
+                  cx={kp[0][0] * boxW}
+                  cy={kp[0][1] * boxH}
+                  r={compact ? 6 : 10}
+                  fill="none"
+                  stroke={colors.onSurface}
+                  strokeWidth={compact ? 2 : 3}
+                  strokeDasharray={kp[0][2] < 0.6 ? "4 3" : undefined}
+                  opacity={kp[0][2] < 0.6 ? 0.4 + kp[0][2] * 0.5 : 1}
+                />
+              ) : null}
               {atStep && step && !compact ? (
                 <>
                   {label(right ? 13 : 14, step.metrics.front_knee)}
