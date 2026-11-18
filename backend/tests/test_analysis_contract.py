@@ -385,3 +385,26 @@ def test_coaching_guidance_is_removed_when_its_priority_loses_timestamped_eviden
     result = reconcile_synced_evidence(result)
 
     assert result["coaching_priorities"] == []
+
+
+def test_model_drill_is_not_used_for_steps_without_a_vetted_specific_drill():
+    payload = valid_payload()
+    target = next(step for step in payload["steps"] if step["key"] == "counter_rotation")
+    target.update({"status": "fault", "coaching_classification": "fault"})
+    payload["faults"] = [{
+        "title": "Rotation concern", "phase": "back_foot", "step_key": "counter_rotation",
+        "severity": "medium", "description": "Visible pattern needs expert review.", "fix": "Do not force a change.",
+    }]
+    payload["coaching_guidance"] = [{
+        "step_key": "counter_rotation", "drill": "Generic forced rotation drill",
+        "why_it_matters": "A visible pattern may warrant review from a rear view.",
+    }]
+
+    result = normalise_model_payload(payload, duration=4.0)
+
+    priority = result["coaching_priorities"][0]
+    assert priority["step_key"] == "counter_rotation"
+    assert priority["why_it_matters"].startswith("A visible pattern")
+    assert "drill" not in priority
+    assert "drill_name" not in priority
+    assert "success_check" not in priority
