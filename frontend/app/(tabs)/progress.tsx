@@ -76,7 +76,7 @@ export default function ProgressScreen() {
               <View testID="athlete-development-overview" style={{ gap: space.md }}>
                 <View style={{ gap: 4 }}>
                   <SectionTitle title="Athlete Development" />
-                  <Text style={s.phaseLabel}>Your logged training and technique activity · last {overview.window_days} days</Text>
+                  <Text style={s.developmentSubtext}>Your logged training and technique activity · last {overview.window_days} days</Text>
                 </View>
                 <View style={s.developmentGrid}>
                   <View style={s.developmentStat}>
@@ -99,6 +99,11 @@ export default function ProgressScreen() {
                     <Text style={s.statLabel}>Targeted practices</Text>
                     <Text style={s.developmentHint}>{overview.practice.recent_focuses.slice(0, 2).join(" · ") || "No focus logged yet"}</Text>
                   </View>
+                  <View style={s.developmentStat}>
+                    <Text style={s.developmentValue}>{overview.video.analyses}</Text>
+                    <Text style={s.statLabel}>Video analyses</Text>
+                    <Text style={s.developmentHint}>{p?.step_trends?.length ?? 0} comparable movement trends</Text>
+                  </View>
                 </View>
                 <View style={s.card}>
                   <Text style={s.cardTitle}>Development activity</Text>
@@ -107,12 +112,12 @@ export default function ProgressScreen() {
                       <View style={[s.activityDot, { backgroundColor: item.kind === "video" ? colors.info : item.kind === "practice" ? colors.accent : colors.muted }]} />
                       <View style={{ flex: 1, gap: 2 }}>
                         <Text style={s.faultTitle}>{item.title}</Text>
-                        <Text style={s.phaseLabel}>{item.detail}</Text>
+                        <Text style={s.activityDetail}>{item.detail}</Text>
                       </View>
                       <Text style={s.activityDate}>{new Date(item.date).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</Text>
                     </View>
                   )) : (
-                    <Text style={s.phaseLabel}>Your completed sessions and logged activity will appear here.</Text>
+                    <Text style={s.developmentSubtext}>Your completed sessions and logged activity will appear here.</Text>
                   )}
                 </View>
                 <Text style={s.developmentDisclaimer}>Only recorded activity is counted. Planned exercises are not treated as completed, and these separate measures are not combined into a single performance score.</Text>
@@ -123,7 +128,7 @@ export default function ProgressScreen() {
             <View style={s.stats}>
               <View style={s.stat} testID="stat-sessions">
                 <Text style={s.statValue}>{p.total}</Text>
-                <Text style={s.statLabel}>Deliveries</Text>
+                <Text style={s.statLabel}>Video analyses</Text>
               </View>
               <View style={s.stat} testID="stat-best-score">
                 <Text style={[s.statValue, { color: colors.accent }]}>{p.best_score > 0 ? p.best_score.toFixed(1) : "—"}</Text>
@@ -252,6 +257,8 @@ const useStyles = makeStyles((c) => ({
   developmentStat: { width: "48%", flexGrow: 1, padding: space.md, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: 4 },
   developmentValue: { fontFamily: fonts.display, fontSize: 28, color: c.onSurface },
   developmentHint: { fontFamily: fonts.text, fontSize: 11, color: c.muted },
+  developmentSubtext: { fontFamily: fonts.text, fontSize: 12, lineHeight: 17, color: c.onSurfaceSecondary },
+  activityDetail: { fontFamily: fonts.text, fontSize: 12, lineHeight: 16, color: c.onSurfaceSecondary, flex: 1 },
   developmentDisclaimer: { fontFamily: fonts.text, fontSize: 11, lineHeight: 16, color: c.muted },
   activityRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.sm },
   activityDot: { width: 8, height: 8, borderRadius: 4 },
