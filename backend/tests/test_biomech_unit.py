@@ -88,6 +88,17 @@ class TestDetectEvents:
         track.t[40:] += np.arange(len(track.t) - 40) * 0.2
         assert biomech._landing(track, track.front["ankle"], 0.8, 3.0) is None
 
+    def test_landing_requires_downward_entry_into_contact_plateau(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        ankle = track.front["ankle"]
+        contact = biomech._landing(track, ankle, 0.8, 3.0)
+        assert contact is not None
+        index = track.idx(contact)
+        # A stationary ankle already at the apparent ground height is not
+        # enough evidence to establish when the foot actually made contact.
+        track.xy[index - 1, ankle, 1] = track.xy[index, ankle, 1]
+        assert biomech._landing(track, ankle, 0.8, 3.0) is None
+
     def test_wrong_arm_profile_does_not_crash(self):
         ev = biomech.detect_events(biomech.Track(synth_pose("right"), "left"))
         assert isinstance(ev, dict)
