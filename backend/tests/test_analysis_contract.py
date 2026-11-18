@@ -160,6 +160,21 @@ def test_synced_evidence_gate_removes_unanchored_step_and_recalculates_scores():
     assert run_up["score"] == 7.0
 
 
+def test_synced_evidence_gate_withholds_overall_coaching_when_coverage_is_too_low():
+    result = normalise_model_payload(valid_payload(), duration=4.0)
+    for step in result["steps"]:
+        step["t"] = None
+
+    result = reconcile_synced_evidence(result)
+
+    assert result["overall_score_assessable"] is False
+    assert result["overall_score"] == 0
+    assert "not enough synchronized visual evidence" in result["summary"].lower()
+    assert result["strengths"] == []
+    assert result["tips"] == []
+    assert result["faults"] == []
+
+
 def test_normalise_drops_faults_without_exact_step_key():
     payload = valid_payload()
     payload["faults"].append({
