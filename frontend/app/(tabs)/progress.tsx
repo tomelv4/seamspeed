@@ -139,7 +139,7 @@ export default function ProgressScreen() {
                     const tint = trend.direction === "improved" ? colors.accent : trend.direction === "declined" ? colors.warning : colors.muted;
                     const change = trend.delta > 0 ? `+${trend.delta.toFixed(1)}` : trend.delta.toFixed(1);
                     return (
-                      <View key={trend.step_key} style={[s.trendRow, i > 0 && s.divider]} testID={`technique-trend-${trend.step_key}`}>
+                      <Pressable key={trend.step_key} onPress={() => router.push(`/report/${trend.current_analysis_id}`)} style={[s.trendRow, i > 0 && s.divider]} testID={`technique-trend-${trend.step_key}`}>
                         <View style={{ flex: 1, gap: 3 }}>
                           <Text style={s.faultTitle}>{trend.name}</Text>
                           <Text style={s.phaseLabel}>{trend.camera_view.replace("_", " ")} · {new Date(trend.current_date).toLocaleDateString()}</Text>
@@ -148,7 +148,8 @@ export default function ProgressScreen() {
                           <Text style={[s.trendDelta, { color: tint }]}>{change}</Text>
                           <Text style={s.phaseLabel}>{trend.previous_score.toFixed(1)} → {trend.current_score.toFixed(1)}</Text>
                         </View>
-                      </View>
+                        <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+                      </Pressable>
                     );
                   })}
                 </View>
