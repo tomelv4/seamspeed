@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, TextInput, Vi
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { apiGet, apiSend, CoachMessage, streamCoach, useDrillPracticeHistory } from "@/src/api";
+import { apiGet, apiSend, CoachMessage, streamCoach, useDrillPracticeHistory, useWorkload } from "@/src/api";
 import { fonts, radius, space } from "@/src/constants";
 import { ErrorBanner, Ionicons, PressScale, PrimaryButton } from "@/src/components/ui";
 import { ProLocked } from "@/src/components/ProLocked";
@@ -29,6 +29,7 @@ export default function Coach() {
   const qc = useQueryClient();
   const history = useQuery({ queryKey: ["coach"], queryFn: () => apiGet<CoachMessage[]>("/coach/messages") });
   const practice = useDrillPracticeHistory();
+  const workload = useWorkload();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -83,9 +84,9 @@ export default function Coach() {
   return (
     <View style={s.screen}>
       <View style={[s.header, { paddingTop: insets.top + space.sm }]}>
-        <PressScale testID="coach-back-button" style={s.iconBtn} onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}>
-          <Ionicons name="chevron-back" size={22} color={colors.onSurface} />
-        </PressScale>
+        <View style={s.iconBtn}>
+          <Ionicons name="fitness" size={21} color={colors.accent} />
+        </View>
         <View style={{ flex: 1, alignItems: "center" }}>
           <Text style={s.headerTitle}>AI Coach</Text>
           <Text style={s.headerSub}>Powered by ChatGPT</Text>
@@ -96,24 +97,6 @@ export default function Coach() {
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-        {!practice.isLoading ? (
-          <View style={s.practicePanel} testID="coach-practice-history">
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <Text style={s.practiceTitle}>YOUR PRACTICE LOG</Text>
-              <Text style={s.practiceCount}>{practice.data?.total_completions ?? 0} sessions logged</Text>
-            </View>
-            {(practice.data?.focuses ?? []).slice(0, 3).map((item) => (
-              <View key={item.step_key} style={s.practiceRow}>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={s.practiceFocus}>{item.focus}</Text>
-                  <Text style={s.practiceDrill}>{item.drill_name} · last {new Date(item.last_completed_at).toLocaleDateString()}</Text>
-                </View>
-                <Text style={s.practiceCount}>×{item.completed_count}</Text>
-              </View>
-            ))}
-            <Text style={s.practiceHint}>{practice.data?.total_completions ? "Your coach uses this history to follow up on practice and compare future video evidence." : "When a report recommends a targeted drill, log each session there. Your coach will remember the work and check for changes in future comparable videos."}</Text>
-          </View>
-        ) : null}
         <FlatList
           ref={listRef}
           data={msgs}
@@ -123,6 +106,78 @@ export default function Coach() {
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           onLayout={() => listRef.current?.scrollToEnd({ animated: false })}
           keyboardShouldPersistTaps="handled"
+          ListHeaderComponent={
+            <View style={{ gap: space.md, paddingBottom: space.md }}>
+              <View style={s.hubPanel} testID="coach-training-hub">
+                <View style={{ gap: 3 }}>
+                  <Text style={s.hubEyebrow}>YOUR DEVELOPMENT CENTRE</Text>
+                  <Text style={s.hubTitle}>Train with a plan.</Text>
+                  <Text style={s.hubBody}>Your coach connects technique, training, workload and recovery in one place.</Text>
+                </View>
+                <View style={s.hubWorkload}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={s.practiceTitle}>CURRENT WORKLOAD</Text>
+                    <Text style={s.hubWorkloadValue}>{workload.data ? workload.data.status.toUpperCase() : workload.isLoading ? "LOADING" : "NOT AVAILABLE"}</Text>
+                    <Text style={s.practiceHint} numberOfLines={2}>{workload.data?.headline ?? "Log your bowling to help your coach plan appropriate training and recovery."}</Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end", gap: 2 }}>
+                    <Text style={s.hubBalls}>{workload.data?.acute ?? "—"}</Text>
+                    <Text style={s.practiceHint}>balls · 7 days</Text>
+                  </View>
+                </View>
+                <PressScale testID="coach-start-session" style={s.hubAction} onPress={() => router.push("/session")}>
+                  <View style={s.hubActionIcon}><Ionicons name="play" size={17} color={colors.accent} /></View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={s.hubActionTitle}>Start a guided session</Text>
+                    <Text style={s.hubActionBody}>Readiness, warm-up, drills, bowling and recovery</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+                </PressScale>
+                <PressScale testID="coach-open-workload" style={s.hubAction} onPress={() => router.push("/workload")}>
+                  <View style={s.hubActionIcon}><Ionicons name="pulse" size={17} color={colors.accent} /></View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={s.hubActionTitle}>Workload and recovery</Text>
+                    <Text style={s.hubActionBody}>Bowling volume, intensity and rest days</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+                </PressScale>
+                <PressScale testID="coach-open-drills" style={s.hubAction} onPress={() => router.push("/drills")}>
+                  <View style={s.hubActionIcon}><Ionicons name="barbell" size={17} color={colors.accent} /></View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={s.hubActionTitle}>Technique drill library</Text>
+                    <Text style={s.hubActionBody}>Build practice around your video-analysis priorities</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+                </PressScale>
+                <PressScale testID="coach-build-week" style={[s.hubAction, s.hubActionPrimary]} onPress={() => send("Build me a practical weekly fast-bowling development plan. Integrate my recent bowling workload, technique priorities, strength and conditioning, skill practice, warm-ups, cool-downs, recovery and rest days. Ask me for any essential schedule constraints you do not know. Explain how the sessions fit together and how to adjust if I am fatigued or sore.")}>
+                  <View style={[s.hubActionIcon, s.hubActionIconPrimary]}><Ionicons name="calendar" size={17} color={colors.onBrandPrimary} /></View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={[s.hubActionTitle, { color: colors.onBrandPrimary }]}>Plan my training week</Text>
+                    <Text style={[s.hubActionBody, { color: colors.onBrandPrimary, opacity: 0.78 }]}>Personalised bowling, gym, skill and recovery schedule</Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={17} color={colors.onBrandPrimary} />
+                </PressScale>
+              </View>
+              {!practice.isLoading ? (
+                <View style={s.practicePanel} testID="coach-practice-history">
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <Text style={s.practiceTitle}>YOUR PRACTICE LOG</Text>
+                    <Text style={s.practiceCount}>{practice.data?.total_completions ?? 0} sessions logged</Text>
+                  </View>
+                  {(practice.data?.focuses ?? []).slice(0, 3).map((item) => (
+                    <View key={item.step_key} style={s.practiceRow}>
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={s.practiceFocus}>{item.focus}</Text>
+                        <Text style={s.practiceDrill}>{item.drill_name} · last {new Date(item.last_completed_at).toLocaleDateString()}</Text>
+                      </View>
+                      <Text style={s.practiceCount}>×{item.completed_count}</Text>
+                    </View>
+                  ))}
+                  <Text style={s.practiceHint}>{practice.data?.total_completions ? "Your coach uses this history to follow up on practice and compare future video evidence." : "When a report recommends a targeted drill, log each session there. Your coach will remember the work and check for changes in future comparable videos."}</Text>
+                </View>
+              ) : null}
+            </View>
+          }
           ListEmptyComponent={
             history.isLoading ? (
               <ActivityIndicator color={colors.accent} />
@@ -186,7 +241,20 @@ const useStyles = makeStyles((c) => ({
   emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
   emptyTitle: { fontFamily: fonts.display, fontSize: 18, color: c.onSurface, letterSpacing: 0.5 },
   emptyBody: { fontFamily: fonts.text, fontSize: 14, color: c.muted, textAlign: "center", lineHeight: 20 },
-  practicePanel: { marginHorizontal: space.lg, marginTop: space.md, padding: space.md, borderRadius: radius.md, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.sm },
+  hubPanel: { padding: space.md, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.sm },
+  hubEyebrow: { fontFamily: fonts.textXBold, fontSize: 10, color: c.accent, letterSpacing: 1.5 },
+  hubTitle: { fontFamily: fonts.display, fontSize: 21, color: c.onSurface, letterSpacing: 0.3 },
+  hubBody: { fontFamily: fonts.text, fontSize: 12, color: c.muted, lineHeight: 17 },
+  hubWorkload: { flexDirection: "row", alignItems: "center", padding: space.sm, borderRadius: radius.md, backgroundColor: c.surfaceTertiary, gap: space.sm },
+  hubWorkloadValue: { fontFamily: fonts.display, fontSize: 18, color: c.onSurface },
+  hubBalls: { fontFamily: fonts.display, fontSize: 24, color: c.accent },
+  hubAction: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.sm, borderRadius: radius.md, backgroundColor: c.surfaceTertiary },
+  hubActionPrimary: { backgroundColor: c.brandPrimary, marginTop: space.xs },
+  hubActionIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: c.brandTertiary },
+  hubActionIconPrimary: { backgroundColor: "rgba(255,255,255,0.14)" },
+  hubActionTitle: { fontFamily: fonts.textBold, fontSize: 13, color: c.onSurface },
+  hubActionBody: { fontFamily: fonts.text, fontSize: 11, color: c.muted, lineHeight: 15 },
+  practicePanel: { padding: space.md, borderRadius: radius.md, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.sm },
   practiceTitle: { fontFamily: fonts.textXBold, fontSize: 10, color: c.muted, letterSpacing: 1.4 },
   practiceCount: { fontFamily: fonts.textBold, fontSize: 11, color: c.accent },
   practiceRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.xs, borderTopWidth: 1, borderTopColor: c.divider },
