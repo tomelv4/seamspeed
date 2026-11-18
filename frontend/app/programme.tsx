@@ -79,6 +79,17 @@ export default function ProgrammeScreen() {
               <Text style={s.eyebrow}>WORKLOAD WHEN CREATED · {programme.workload_at_generation.status.toUpperCase()}</Text>
               <Text style={s.muted}>{programme.workload_at_generation.headline}</Text>
             </View>
+            {programme.training_response_at_generation ? (
+              <View style={s.workloadNote} testID="programme-training-response">
+                <Text style={s.eyebrow}>RECENT TRAINING RESPONSE · {programme.training_response_at_generation.logged_sessions} LOGGED SESSIONS</Text>
+                <Text style={s.body}>{programme.training_response_at_generation.guidance}</Text>
+                {programme.training_response_at_generation.sessions.slice(0, 3).map((item, index) => (
+                  <Text key={item.date + item.mode + index} style={s.muted}>
+                    {item.date} · {item.mode.toUpperCase()} · {item.completed_activities}/{item.planned_activities} activities · {item.session_effort ?? "effort not logged"} · {item.overall_feeling ?? "feeling not logged"}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
             {programme.days.map((day) => (
               <View key={day.day} style={s.dayCard} testID={"programme-day-" + day.day.toLowerCase()}>
                 <View style={s.dayTop}>
