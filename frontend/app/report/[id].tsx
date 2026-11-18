@@ -5,7 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { apiSend, useAnalysis, usePose, useProfile, type CoachingPriority } from "@/src/api";
+import { apiSend, useAnalysis, usePose, useProfile, useDrillPracticeHistory, type CoachingPriority } from "@/src/api";
 import { SkeletonPlayer } from "@/src/components/SkeletonPlayer";
 import { StepCard, StepList } from "@/src/components/StepBreakdown";
 import { InjuryScanner } from "@/src/components/InjuryScanner";
@@ -28,6 +28,8 @@ export default function Report() {
   const scrollRef = useRef<any>(null);
   const pose = usePose(id, !!a?.has_pose);
   const profile = useProfile();
+  const drillHistory = useDrillPracticeHistory();
+  const [loggingDrill, setLoggingDrill] = useState<string | null>(null);
   const steps = a?.steps ?? [];
   const coachingPriorities: CoachingPriority[] = a?.coaching_priorities?.length
     ? a.coaching_priorities
@@ -40,6 +42,17 @@ export default function Report() {
     setSelected(i);
     setSeekNonce((n) => n + 1);
     if (scrollTop) scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  const completeDrill = async (stepKey: string) => {
+    if (!id || loggingDrill) return;
+    setLoggingDrill(stepKey);
+    try {
+      await apiSend(`/coach/drills/${id}/${encodeURIComponent(stepKey)}/complete`, "POST", {});
+      await Promise.all([drillHistory.refetch(), qc.invalidateQueries({ queryKey: ["progress"] })]);
+    } finally {
+      setLoggingDrill(null);
+    }
   };
 
   const remove = async () => {
@@ -289,6 +302,18 @@ export default function Report() {
                             {item.drill_setup ? <Text style={s.body}>Setup: {item.drill_setup}</Text> : null}
                             {item.drill_action ? <Text style={s.body}>Do: {item.drill_action}</Text> : null}
                             {item.drill_dose ? <Text style={s.body}>Dose: {item.drill_dose}</Text> : null}
+                            {(() => {
+                              const history = drillHistory.data?.focuses.find((entry) => entry.step_key === item.step_key);
+                              const isLogging = loggingDrill === item.step_key;
+                              return (
+                                <View style={{ gap: 6, paddingTop: 6 }}>
+                                  <PressScale testID={`complete-drill-${item.step_key}`} style={[s.smallBtn, { alignSelf: "flex-start", backgroundColor: colors.accent, opacity: isLogging ? 0.6 : 1 }]} onPress={() => completeDrill(item.step_key)}>
+                                    <Text style={[s.smallBtnText, { color: colors.onBrandPrimary }]}>{isLogging ? "Saving…" : "Log practice completed"}</Text>
+                                  </PressScale>
+                                  {history ? <Text style={s.note}>Logged {history.completed_count} time{history.completed_count === 1 ? "" : "s"} · last {new Date(history.last_completed_at).toLocaleDateString()}</Text> : null}
+                                </View>
+                              );
+                            })()}
                           </View>
                         ) : null}
                         {item.success_check ? (
