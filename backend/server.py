@@ -222,7 +222,7 @@ TECHNIQUE & LOAD OBSERVATIONS (not injury prediction):
   or predict injury probability from a single video.
 - Do not infer spinal loading, side-strain risk, tendon loading, shoulder pathology or hamstring injury likelihood from 2D joint positions.
 - If an area cannot be assessed from this camera angle, say so. Workload can only be assessed from the separately logged workload history.
-For each step return {{"key","t","score" (0-10),"status" ("good"|"ok"|"fault"|"not_visible"),"observation" (what you see, 1-2 sentences),"cue" (one short coaching cue)}}.
+For each step return {{"key","t","score" (0-10),"status" ("good"|"ok"|"fault"|"not_visible"),"coaching_classification" ("fault"|"opportunity"|"effective_variation"|"none"),"observation" (what you see, 1-2 sentences),"cue" (one short coaching cue)}}.
 Timestamps must be increasing and each must be the exact moment described in WHEN (scrub frame by frame around
 back-foot contact, front-foot contact and release). Use "not_visible" with t null if the step is out of frame.
 
@@ -246,6 +246,9 @@ EVIDENCE AND SCORING RULES:
   use "not_visible" unless the supplied footage and measurements genuinely support that assessment.
 - The coaching reference text is qualitative guidance, not a set of universal numeric thresholds.
 - "good", "ok" and "fault" require visible evidence; uncertainty is not a fault.
+- Classify coaching significance separately from the status: "fault" = a clearly visible, materially important technical problem with a plausible downside; "opportunity" = an optional refinement that may help but is not proof the current movement is wrong; "effective_variation" = a non-textbook movement pattern that appears controlled or functional and has no clear visible downside; "none" = no specific coaching intervention justified.
+- A non-standard action is not automatically a fault. Do not prescribe textbook positions as universal requirements. Only use "effective_variation" when the footage supports that it is controlled/effective; otherwise use "none" or "not_visible".
+- Status "fault" is permitted only with coaching_classification "fault". Status "ok" may carry "opportunity" or "effective_variation". Do not manufacture opportunities just to fill the report.
 - Scores should reflect only assessable technique. If several important steps are not assessable, lower confidence in
   the overall assessment and say so in the summary rather than filling gaps with assumptions.
 - Use consistent step-score anchors: 0-2 = clear major breakdown; 3-4 = clear technical problem; 5-6 = mixed or
@@ -273,7 +276,7 @@ Return ONLY valid JSON, no markdown, matching exactly:
  "camera_view_confidence": "high|medium|low",
  "release_evidence": {"ball_separation_visible": false, "confidence": "low", "notes": "Ball separation not clearly visible"},
  "phases": [{{"key":"run_up","name":"Run-up","score":7.5,"feedback":"..."}}, ... all 6 in order],
- "steps": [{{"key":"run_up_acceleration","t":0.4,"score":7,"status":"good","observation":"...","cue":"..."}}, ... all 27 in order],
+ "steps": [{{"key":"run_up_acceleration","t":0.4,"score":7,"status":"good","coaching_classification":"none","observation":"...","cue":"..."}}, ... all 27 in order],
  "faults": [{{"title":"Collapsing front knee","phase":"front_foot","step_key":"front_knee_bracing","severity":"medium","description":"...","fix":"..."}}],
  "strengths": ["..."],
  "tips": ["...", "...", "..."],
