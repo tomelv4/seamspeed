@@ -444,7 +444,11 @@ def event_timing_quality(ev, release_evidence=None):
         method = methods.get(key)
         grade = "unavailable"
         if key == "release":
-            if release_evidence.get("ball_separation_visible") is True:
+            # Ball-separation evidence can grade a release timestamp only when
+            # that timestamp actually came from the visual release estimate.
+            # It must not upgrade a retained wrist-apex proxy to a confirmed event.
+            if (source == "ai" and method == "ai_visual_estimate"
+                    and release_evidence.get("ball_separation_visible") is True):
                 grade = "high" if release_evidence.get("confidence") == "high" else "medium"
             elif source == "ai" and method == "ai_visual_estimate":
                 grade = "low"
