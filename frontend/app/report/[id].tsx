@@ -244,7 +244,7 @@ export default function Report() {
               {coachingPriorities.length ? (
                 <View>
                   <SectionTitle title="Priority Coaching Focus" />
-                  <Text style={s.body}>Start with these changes in order. PACED limits this list to the most actionable findings.</Text>
+                  <Text style={s.body}>Start with these changes in order. PACED keeps the focus on the two most actionable findings.</Text>
                   <View style={{ gap: space.sm }}>
                     {coachingPriorities.map((item) => (
                       <PressScale
