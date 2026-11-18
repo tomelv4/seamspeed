@@ -215,11 +215,11 @@ def test_coaching_classification_separates_fault_opportunity_and_effective_varia
         "status": "fault", "coaching_classification": "fault",
         "observation": "Visible loss of rhythm through the final strides.",
     })
-    by_key["run_up_posture"].update({
+    by_key["peak_approach_velocity"].update({
         "status": "ok", "coaching_classification": "opportunity",
         "observation": "A small posture adjustment may improve consistency.",
     })
-    by_key["run_up_stride_pattern"].update({
+    by_key["pre_delivery_stride"].update({
         "status": "ok", "coaching_classification": "effective_variation",
         "observation": "A compact stride pattern remains controlled and repeatable.",
     })
@@ -229,8 +229,8 @@ def test_coaching_classification_separates_fault_opportunity_and_effective_varia
 
     assert steps["run_up_acceleration"]["status"] == "fault"
     assert steps["run_up_acceleration"]["coaching_classification"] == "fault"
-    assert steps["run_up_posture"]["coaching_classification"] == "opportunity"
-    assert steps["run_up_stride_pattern"]["coaching_classification"] == "effective_variation"
+    assert steps["peak_approach_velocity"]["coaching_classification"] == "opportunity"
+    assert steps["pre_delivery_stride"]["coaching_classification"] == "effective_variation"
 
 
 def test_fault_status_cannot_conflict_with_opportunity_or_effective_variation():
