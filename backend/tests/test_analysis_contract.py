@@ -31,9 +31,9 @@ def valid_payload():
             for i, (key, *_rest) in enumerate(biomech.STEPS)
         ],
         "faults": [
-            {"title": "Example fault", "phase": "front_foot", "severity": "medium",
+            {"title": "Example fault", "phase": "front_foot", "step_key": "front_knee_bracing", "severity": "medium",
              "description": "A visible pattern.", "fix": "Use a simple cue."},
-            {"title": "High priority", "phase": "back_foot", "severity": "high",
+            {"title": "High priority", "phase": "back_foot", "step_key": "back_foot_contact", "severity": "high",
              "description": "A higher-priority visible pattern.", "fix": "Address this first."},
             {"title": "Invalid fault", "phase": "unknown", "severity": "high",
              "description": "Should be dropped.", "fix": ""},
