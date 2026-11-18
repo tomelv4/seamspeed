@@ -114,6 +114,24 @@ def _build_coaching_priorities(steps: list[dict], faults: list[dict], limit: int
     return [{"priority": index + 1, **item} for index, item in enumerate(ranked)]
 
 
+
+def _attach_coaching_guidance(priorities: list[dict], raw_guidance: Any) -> list[dict]:
+    """Attach concise coaching detail only to the exact timestamped priority step."""
+    guidance_by_key = {}
+    if isinstance(raw_guidance, list):
+        for item in raw_guidance:
+            if not isinstance(item, dict) or not isinstance(item.get("step_key"), str):
+                continue
+            key = item["step_key"]
+            if key in guidance_by_key:
+                continue
+            guidance_by_key[key] = {
+                field: value.strip()[:500]
+                for field in ("why_it_matters", "feel_cue", "drill", "success_check")
+                if isinstance((value := item.get(field)), str) and value.strip()
+            }
+    return [{**priority, **guidance_by_key.get(priority["step_key"], {})} for priority in priorities]
+
 def reconcile_synced_evidence(payload: dict) -> dict:
     """Remove coaching judgements whose exact movement frame could not be anchored."""
     steps = payload.get("steps") if isinstance(payload.get("steps"), list) else []
@@ -175,7 +193,7 @@ def reconcile_synced_evidence(payload: dict) -> dict:
         and fault.get("step_key") in assessable_fault_steps
         and assessable_fault_steps[fault["step_key"]].get("phase") == fault.get("phase")
     ]
-    payload["coaching_priorities"] = _build_coaching_priorities(steps, payload["faults"])
+    payload["coaching_priorities"] = _attach_coaching_guidance(_build_coaching_priorities(steps, payload["faults"]), payload.get("coaching_guidance"))
     payload["score_method"] = "equal_weight_mean_of_timestamped_assessable_phase_step_scores"
     return payload
 
@@ -348,7 +366,7 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         "phases": phases,
         "steps": steps,
         "faults": faults,
-        "coaching_priorities": _build_coaching_priorities(steps, faults),
+        "coaching_priorities": _attach_coaching_guidance(_build_coaching_priorities(steps, faults), payload.get("coaching_guidance")),
         "strengths": text_list(payload.get("strengths")),
         "tips": text_list(payload.get("tips")),
     }
