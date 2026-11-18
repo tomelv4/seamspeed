@@ -80,7 +80,7 @@ export default function Home() {
 
         {latest && latest.faults.length > 0 ? (
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-            <SectionTitle title="Focus Areas" action="Drills" onAction={() => router.push("/drills")} testID="focus-see-drills" />
+            <SectionTitle title="Focus Areas" action="Coach" onAction={() => router.push("/coach")} testID="focus-see-drills" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md }}>
               {latest.faults.map((f, i) => (
                 <PressScale key={i} testID={`focus-fault-${i}`} style={s.fault} onPress={() => router.push(`/report/${latest.id}`)}>
