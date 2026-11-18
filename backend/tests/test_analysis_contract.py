@@ -260,3 +260,75 @@ def test_unassessable_step_cannot_keep_a_coaching_classification():
 
     assert step["status"] == "not_visible"
     assert step["coaching_classification"] == "none"
+
+
+def test_coaching_priorities_rank_faults_before_optional_opportunities_and_cap_at_three():
+    payload = valid_payload()
+    by_key = {step["key"]: step for step in payload["steps"]}
+    for key, score in (("run_up_acceleration", 4), ("peak_approach_velocity", 5),
+                       ("pre_delivery_stride", 6), ("take_off", 3)):
+        by_key[key].update({"status": "fault", "coaching_classification": "fault",
+                            "score": score, "observation": "A clearly visible technical issue."})
+    by_key["gather"].update({"status": "ok", "coaching_classification": "opportunity",
+                             "score": 2, "cue": "Refine the hand position.", "observation": "A possible refinement."})
+    payload["faults"] = [
+        {"title": "Lower priority fault", "phase": "run_up", "step_key": "run_up_acceleration",
+         "severity": "low", "description": "Low-severity issue.", "fix": "Build rhythm."},
+        {"title": "High priority fault", "phase": "load", "step_key": "take_off",
+         "severity": "high", "description": "Higher-severity issue.", "fix": "Control the bound."},
+        {"title": "Medium priority fault", "phase": "run_up", "step_key": "peak_approach_velocity",
+         "severity": "medium", "description": "Medium-severity issue.", "fix": "Maintain approach speed."},
+        {"title": "Another medium fault", "phase": "run_up", "step_key": "pre_delivery_stride",
+         "severity": "medium", "description": "Another medium issue.", "fix": "Keep transition smooth."},
+    ]
+
+    result = normalise_model_payload(payload, duration=4.0)
+    priorities = result["coaching_priorities"]
+
+    assert len(priorities) == 3
+    assert [item["title"] for item in priorities] == [
+        "High priority fault", "Medium priority fault", "Another medium fault",
+    ]
+    assert [item["priority"] for item in priorities] == [1, 2, 3]
+    assert all(item["type"] == "fault" for item in priorities)
+
+
+def test_coaching_priorities_exclude_effective_variations_and_unanchored_findings():
+    payload = valid_payload()
+    by_key = {step["key"]: step for step in payload["steps"]}
+    by_key["run_up_acceleration"].update({
+        "status": "ok", "coaching_classification": "effective_variation",
+        "cue": "Do not change an effective movement pattern.",
+    })
+    by_key["peak_approach_velocity"].update({
+        "status": "ok", "coaching_classification": "opportunity",
+        "cue": "Try a smoother speed build.", "observation": "Optional refinement.",
+    })
+    by_key["pre_delivery_stride"].update({
+        "status": "ok", "coaching_classification": "opportunity",
+        "t": None, "cue": "This must not be prioritised.",
+    })
+
+    result = normalise_model_payload(payload, duration=4.0)
+    priorities = result["coaching_priorities"]
+
+    assert len(priorities) == 1
+    assert priorities[0]["type"] == "opportunity"
+    assert priorities[0]["step_key"] == "peak_approach_velocity"
+
+
+def test_synced_evidence_rebuilds_priorities_after_dropping_unanchored_fault():
+    payload = valid_payload()
+    target = next(step for step in payload["steps"] if step["key"] == "front_knee_bracing")
+    target.update({"status": "fault", "coaching_classification": "fault"})
+    payload["faults"] = [{
+        "title": "Front knee fault", "phase": "front_foot", "step_key": "front_knee_bracing",
+        "severity": "high", "description": "Visible knee collapse.", "fix": "Build front-leg strength.",
+    }]
+    result = normalise_model_payload(payload, duration=4.0)
+    next(step for step in result["steps"] if step["key"] == "front_knee_bracing")["t"] = None
+
+    result = reconcile_synced_evidence(result)
+
+    assert result["faults"] == []
+    assert result["coaching_priorities"] == []
