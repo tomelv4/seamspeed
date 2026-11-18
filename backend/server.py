@@ -172,6 +172,7 @@ class SessionActivityCompletionIn(BaseModel):
 
 class SessionCompletionIn(BaseModel):
     activities: List[SessionActivityCompletionIn] = Field(default_factory=list, max_length=10)
+    session_effort: Optional[Literal["easy", "moderate", "hard"]] = None
     overall_feeling: Optional[Literal["fresh", "normal", "tired", "rough"]] = None
     notes: str = Field(default="", max_length=500)
 
@@ -1540,6 +1541,7 @@ async def end_session(session_id: str, body: Optional[SessionCompletionIn] = Non
                 {"name": name, **by_name.get(name, {"completed": False, "actual_sets": None, "actual_reps": None, "effort": None, "notes": ""})}
                 for name in planned_names
             ],
+            "session_effort": body.session_effort if body else None,
             "overall_feeling": body.overall_feeling if body else None,
             "notes": body.notes if body else "",
             "logged_at": now_iso(),
