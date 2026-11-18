@@ -276,6 +276,15 @@ def _landing(track, ankle, a, b):
         stable_contact = float(np.ptp(ys)) <= 0.015 * track.height_px
         near_ground = np.all(ys >= ground_y - tol)
         if descended_into_contact and stable_contact and near_ground:
+            # The first stable near-ground frame is not necessarily the instant
+            # of contact. Interpolate the descending ankle trajectory to the
+            # near-ground boundary between the preceding observation and the
+            # first plateau frame, rather than assigning the later frame time.
+            threshold_y = ground_y - tol
+            if previous_y < threshold_y <= ys[0] and ys[0] > previous_y:
+                fraction = (threshold_y - previous_y) / (ys[0] - previous_y)
+                fraction = float(np.clip(fraction, 0.0, 1.0))
+                return float(track.t[previous] + fraction * (track.t[window[0]] - track.t[previous]))
             return float(track.t[window[0]])
     return None
 
