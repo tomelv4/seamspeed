@@ -5,6 +5,7 @@ into the stable shape consumed by the API and marks unsupported steps as not ass
 """
 import json
 import math
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from biomech import STEPS
@@ -523,4 +524,86 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         "coaching_priorities": _attach_coaching_guidance(_build_coaching_priorities(steps, faults), payload.get("coaching_guidance")),
         "strengths": text_list(payload.get("strengths")),
         "tips": text_list(payload.get("tips")),
+    }
+
+
+
+def build_training_response_summary(sessions: list[dict], now: datetime | None = None) -> dict:
+    """Summarise recent *logged* gym/recovery responses without treating plans as completed work."""
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=14)
+    recent = []
+    for session in sessions:
+        if not isinstance(session, dict) or session.get("status") != "ended":
+            continue
+        plan = session.get("plan") if isinstance(session.get("plan"), dict) else {}
+        mode = plan.get("session_mode")
+        completion = session.get("completion") if isinstance(session.get("completion"), dict) else {}
+        if mode not in {"gym", "recovery"} or not completion.get("logged_at"):
+            continue
+        raw_date = session.get("ended_at") or completion.get("logged_at") or session.get("created_at")
+        try:
+            observed_at = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+            if observed_at.tzinfo is None:
+                observed_at = observed_at.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            continue
+        if observed_at < cutoff or observed_at > now + timedelta(days=1):
+            continue
+        planned = [item for item in plan.get("activities", []) if isinstance(item, dict)]
+        logged = [item for item in completion.get("activities", []) if isinstance(item, dict)]
+        completed = [item for item in logged if item.get("completed") is True]
+        recent.append({
+            "date": observed_at.date().isoformat(),
+            "mode": mode,
+            "completed_activities": len(completed),
+            "logged_activities": len(logged),
+            "planned_activities": len(planned),
+            "completion_ratio": round(len(completed) / len(planned), 2) if planned else None,
+            "session_effort": completion.get("session_effort"),
+            "overall_feeling": completion.get("overall_feeling"),
+            "actual_sets_logged": sum(
+                int(item["actual_sets"]) for item in completed
+                if isinstance(item.get("actual_sets"), int) and not isinstance(item.get("actual_sets"), bool)
+            ),
+        })
+    recent.sort(key=lambda item: item["date"], reverse=True)
+    recent = recent[:5]
+    if not recent:
+        return {
+            "window_days": 14, "logged_sessions": 0, "sessions": [],
+            "adjustment": "no_recent_response_data",
+            "guidance": "No completed gym or recovery response has been logged in the last 14 days. Do not assume readiness or progress; keep the requested plan conservative and ask the bowler how they feel.",
+        }
+
+    latest = recent[0]
+    high_response = [
+        item for item in recent[:3]
+        if item["overall_feeling"] == "rough"
+        or item["overall_feeling"] == "tired" and item["session_effort"] == "hard"
+        or item["session_effort"] == "hard" and item["overall_feeling"] in {"tired", "rough"}
+    ]
+    low_completion = [item for item in recent[:3] if item["completion_ratio"] is not None and item["completion_ratio"] <= 0.5]
+    if latest["overall_feeling"] == "rough" or len(high_response) >= 2:
+        adjustment = "reduce_next_gym_load"
+        guidance = "Recent logged sessions show a rough post-session response or repeated hard sessions with fatigue. Keep the next gym session low intensity, reduce optional sets, avoid progression, and prioritise recovery. Ask about current readiness before hard bowling."
+    elif len(low_completion) >= 2:
+        adjustment = "hold_or_reduce_volume"
+        guidance = "Recent logs show that half or fewer of planned activities were completed in at least two sessions. Do not increase training volume; repeat a shorter achievable session or reduce optional work and check whether the plan fits the bowler's schedule."
+    elif len(recent) >= 2 and all(
+        item["overall_feeling"] == "fresh" and item["session_effort"] in {"easy", "moderate"}
+        and item["completion_ratio"] is not None and item["completion_ratio"] >= 0.8
+        for item in recent[:2]
+    ):
+        adjustment = "progress_only_if_ready"
+        guidance = "The latest two logged sessions were mostly completed with easy/moderate effort and a fresh response. A small progression may be considered only if current readiness and movement quality remain good; do not automatically add sets or bowling volume."
+    else:
+        adjustment = "maintain_and_review"
+        guidance = "Recent responses are mixed or incomplete. Maintain the requested training volume, avoid automatic progression, and ask the bowler about current readiness before hard sessions."
+    return {
+        "window_days": 14,
+        "logged_sessions": len(recent),
+        "sessions": recent,
+        "adjustment": adjustment,
+        "guidance": guidance,
     }
