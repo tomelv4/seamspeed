@@ -65,7 +65,7 @@ def parse_model_json(raw: str) -> dict:
 
 
 
-def _build_coaching_priorities(steps: list[dict], faults: list[dict], limit: int = 3) -> list[dict]:
+def _build_coaching_priorities(steps: list[dict], faults: list[dict], limit: int = 2) -> list[dict]:
     """Rank a small set of actionable, timestamped coaching focuses."""
     by_key = {step.get("key"): step for step in steps if isinstance(step, dict)}
     ranked = []
