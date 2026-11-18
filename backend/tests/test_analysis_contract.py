@@ -1,12 +1,13 @@
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import biomech
-from analysis_contract import normalise_model_payload, parse_model_json, reconcile_synced_evidence
+from analysis_contract import build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
 
 
 def test_recurring_fault_history_requires_exact_timestamped_fault_step():
@@ -463,3 +464,65 @@ def test_model_drill_is_not_used_for_steps_without_a_vetted_specific_drill():
     assert "drill" not in priority
     assert "drill_name" not in priority
     assert "success_check" not in priority
+
+
+
+def _logged_training_session(day, *, mode="gym", effort="moderate", feeling="normal", completed=3, planned=3):
+    return {
+        "status": "ended",
+        "created_at": f"{day}T10:00:00+00:00",
+        "ended_at": f"{day}T11:00:00+00:00",
+        "plan": {"session_mode": mode, "activities": [{"name": f"Activity {i}"} for i in range(planned)]},
+        "completion": {
+            "logged_at": f"{day}T11:00:00+00:00",
+            "activities": [{"name": f"Activity {i}", "completed": i < completed,
+                            "actual_sets": 3 if i < completed else None} for i in range(planned)],
+            "session_effort": effort, "overall_feeling": feeling,
+        },
+    }
+
+
+def test_training_response_reduces_next_gym_load_after_rough_session():
+    now = datetime(2026, 11, 18, 12, tzinfo=timezone.utc)
+    summary = build_training_response_summary([
+        _logged_training_session("2026-11-17", effort="hard", feeling="rough"),
+        _logged_training_session("2026-11-14", effort="moderate", feeling="normal"),
+    ], now=now)
+
+    assert summary["adjustment"] == "reduce_next_gym_load"
+    assert summary["logged_sessions"] == 2
+    assert "low intensity" in summary["guidance"]
+
+
+def test_training_response_holds_volume_when_recent_completion_is_low():
+    now = datetime(2026, 11, 18, 12, tzinfo=timezone.utc)
+    summary = build_training_response_summary([
+        _logged_training_session("2026-11-17", completed=1, planned=4),
+        _logged_training_session("2026-11-15", completed=2, planned=4),
+    ], now=now)
+
+    assert summary["adjustment"] == "hold_or_reduce_volume"
+
+
+def test_training_response_only_suggests_progression_after_repeated_fresh_sessions():
+    now = datetime(2026, 11, 18, 12, tzinfo=timezone.utc)
+    summary = build_training_response_summary([
+        _logged_training_session("2026-11-17", effort="easy", feeling="fresh"),
+        _logged_training_session("2026-11-15", effort="moderate", feeling="fresh", mode="recovery"),
+    ], now=now)
+
+    assert summary["adjustment"] == "progress_only_if_ready"
+    assert "do not automatically add" in summary["guidance"]
+
+
+def test_training_response_ignores_unlogged_active_and_stale_sessions():
+    now = datetime(2026, 11, 18, 12, tzinfo=timezone.utc)
+    stale = _logged_training_session("2026-10-01")
+    unlogged = _logged_training_session("2026-11-17")
+    unlogged.pop("completion")
+    active = _logged_training_session("2026-11-17")
+    active["status"] = "active"
+    summary = build_training_response_summary([stale, unlogged, active], now=now)
+
+    assert summary["logged_sessions"] == 0
+    assert summary["adjustment"] == "no_recent_response_data"
