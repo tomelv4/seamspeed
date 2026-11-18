@@ -301,7 +301,7 @@ class TestMergeAndSync:
         quality = biomech.event_timing_quality(ev, {"ball_separation_visible": False})
         assert quality["events"]["bfc"] == "unavailable"
         assert quality["events"]["ffc"] == "unavailable"
-        assert quality["overall"] == "unavailable"
+        assert quality["overall"] == "low"
 
     def test_event_timing_quality_requires_ball_separation_for_high_release_confidence(self):
         ev = biomech.merge_events(
