@@ -64,7 +64,7 @@ export type Profile = { name: string; bowling_arm: string; bowling_style: string
 export type Progress = {
   points: { id: string; date: string; score: number | null; pace: number; risk: string; faults: number }[];
   phase_avg: Record<string, number | null>;
-  top_faults: { title: string; count: number }[];
+  top_faults: { step_key: string; title: string; count: number; last_seen?: string; camera_view?: string }[];
   best_score: number; best_pace: number; total: number;
   step_trends?: {
     step_key: string; name: string; camera_view: string;
