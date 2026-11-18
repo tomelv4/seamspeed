@@ -64,6 +64,56 @@ def parse_model_json(raw: str) -> dict:
 
 
 
+
+def _build_coaching_priorities(steps: list[dict], faults: list[dict], limit: int = 3) -> list[dict]:
+    """Rank a small set of actionable, timestamped coaching focuses."""
+    by_key = {step.get("key"): step for step in steps if isinstance(step, dict)}
+    ranked = []
+    severity_rank = {"high": 0, "medium": 1, "low": 2}
+    ordered_faults = sorted(
+        faults,
+        key=lambda fault: (
+            severity_rank.get(fault.get("severity"), 3),
+            by_key.get(fault.get("step_key"), {}).get("score", 10),
+        ),
+    )
+    seen = set()
+    for fault in ordered_faults:
+        step = by_key.get(fault.get("step_key"))
+        if (not step or step.get("status") != "fault" or step.get("t") is None
+                or step.get("coaching_classification") != "fault" or step["key"] in seen):
+            continue
+        seen.add(step["key"])
+        ranked.append({
+            "type": "fault", "step_key": step["key"], "phase": step["phase"],
+            "title": fault["title"], "reason": fault["description"],
+            "action": fault.get("fix") or step.get("cue", ""),
+            "severity": fault["severity"],
+        })
+        if len(ranked) >= limit:
+            break
+
+    if len(ranked) < limit:
+        opportunities = sorted(
+            (step for step in steps if isinstance(step, dict)
+             and step.get("coaching_classification") == "opportunity"
+             and step.get("status") != "not_visible" and step.get("t") is not None
+             and step.get("key") not in seen and step.get("cue")),
+            key=lambda step: (step.get("score", 10), step.get("t", 0)),
+        )
+        for step in opportunities:
+            seen.add(step["key"])
+            ranked.append({
+                "type": "opportunity", "step_key": step["key"], "phase": step["phase"],
+                "title": step["name"], "reason": step.get("observation", ""),
+                "action": step.get("cue", ""), "severity": None,
+            })
+            if len(ranked) >= limit:
+                break
+
+    return [{"priority": index + 1, **item} for index, item in enumerate(ranked)]
+
+
 def reconcile_synced_evidence(payload: dict) -> dict:
     """Remove coaching judgements whose exact movement frame could not be anchored."""
     steps = payload.get("steps") if isinstance(payload.get("steps"), list) else []
@@ -125,6 +175,7 @@ def reconcile_synced_evidence(payload: dict) -> dict:
         and fault.get("step_key") in assessable_fault_steps
         and assessable_fault_steps[fault["step_key"]].get("phase") == fault.get("phase")
     ]
+    payload["coaching_priorities"] = _build_coaching_priorities(steps, payload["faults"])
     payload["score_method"] = "equal_weight_mean_of_timestamped_assessable_phase_step_scores"
     return payload
 
@@ -297,6 +348,7 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         "phases": phases,
         "steps": steps,
         "faults": faults,
+        "coaching_priorities": _build_coaching_priorities(steps, faults),
         "strengths": text_list(payload.get("strengths")),
         "tips": text_list(payload.get("tips")),
     }
