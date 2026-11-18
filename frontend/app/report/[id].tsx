@@ -30,6 +30,7 @@ export default function Report() {
   const profile = useProfile();
   const drillHistory = useDrillPracticeHistory();
   const [loggingDrill, setLoggingDrill] = useState<string | null>(null);
+  const [drillLogError, setDrillLogError] = useState<string | null>(null);
   const steps = a?.steps ?? [];
   const coachingPriorities: CoachingPriority[] = a?.coaching_priorities?.length
     ? a.coaching_priorities
@@ -47,9 +48,12 @@ export default function Report() {
   const completeDrill = async (stepKey: string) => {
     if (!id || loggingDrill) return;
     setLoggingDrill(stepKey);
+    setDrillLogError(null);
     try {
       await apiSend(`/coach/drills/${id}/${encodeURIComponent(stepKey)}/complete`, "POST", {});
       await Promise.all([drillHistory.refetch(), qc.invalidateQueries({ queryKey: ["progress"] })]);
+    } catch (error: any) {
+      setDrillLogError(error?.message ?? "Could not log this practice session.");
     } finally {
       setLoggingDrill(null);
     }
@@ -307,9 +311,10 @@ export default function Report() {
                               const isLogging = loggingDrill === item.step_key;
                               return (
                                 <View style={{ gap: 6, paddingTop: 6 }}>
-                                  <PressScale testID={`complete-drill-${item.step_key}`} style={[s.smallBtn, { alignSelf: "flex-start", backgroundColor: colors.accent, opacity: isLogging ? 0.6 : 1 }]} onPress={() => completeDrill(item.step_key)}>
+                                  <PressScale testID={`complete-drill-${item.step_key}`} style={[s.smallBtn, { alignSelf: "flex-start", backgroundColor: colors.accent, opacity: isLogging ? 0.6 : 1 }]} disabled={isLogging} onPress={() => completeDrill(item.step_key)}>
                                     <Text style={[s.smallBtnText, { color: colors.onBrandPrimary }]}>{isLogging ? "Saving…" : "Log practice completed"}</Text>
                                   </PressScale>
+                                  {drillLogError ? <Text style={[s.note, { color: colors.error }]}>{drillLogError}</Text> : null}
                                   {history ? <Text style={s.note}>Logged {history.completed_count} time{history.completed_count === 1 ? "" : "s"} · last {new Date(history.last_completed_at).toLocaleDateString()}</Text> : null}
                                 </View>
                               );
