@@ -89,7 +89,7 @@ export default function Coach() {
         </View>
         <View style={{ flex: 1, alignItems: "center" }}>
           <Text style={s.headerTitle}>AI Coach</Text>
-          <Text style={s.headerSub}>Powered by ChatGPT</Text>
+          <Text style={s.headerSub}>Your fast-bowling development hub</Text>
         </View>
         <PressScale testID="coach-clear-button" style={s.iconBtn} onPress={clear}>
           <Ionicons name="refresh" size={20} color={colors.onSurface} />
