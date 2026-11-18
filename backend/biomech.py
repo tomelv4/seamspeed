@@ -398,7 +398,7 @@ def merge_events(pose_ev, ai_steps, duration):
 
     if ev["release"] is None and ai.get("wrist_snap") is not None:
         ev["release"], sources["release"] = ai["wrist_snap"], "ai"
-        methods["release"], confidences["release"] = "ai_visual_estimate", None
+        methods["release"], confidences["release"] = "wrist_snap_proxy", None
     if ev["release"] is None:
         return None
 
@@ -450,7 +450,7 @@ def event_timing_quality(ev, release_evidence=None):
             if (source == "ai" and method == "ai_visual_estimate"
                     and release_evidence.get("ball_separation_visible") is True):
                 grade = "high" if release_evidence.get("confidence") == "high" else "medium"
-            elif source == "ai" and method == "ai_visual_estimate":
+            elif source == "ai" and method in {"ai_visual_estimate", "wrist_snap_proxy"}:
                 grade = "low"
             elif source == "skeleton" and method == "wrist_apex_proxy":
                 grade = "low"
@@ -502,7 +502,7 @@ def sync_times(ai_steps, ev):
     def anchor_is_usable(anchor):
         source = sources.get(anchor)
         method = methods.get(anchor)
-        return source in ("skeleton", "ai") and method not in (None, "wrist_apex_proxy", "typical_gap_estimate", "unavailable")
+        return source in ("skeleton", "ai") and method not in (None, "wrist_apex_proxy", "wrist_snap_proxy", "typical_gap_estimate", "unavailable")
 
     for key, *_ in STEPS:
         anchor, _, _ = WINDOWS[key]
@@ -519,11 +519,13 @@ def sync_times(ai_steps, ev):
                 t = ev[key]
             elif t is not None and a <= t <= b:
                 pass
-            elif key == "finger_roll_release" and sources.get("release") == "ai":
+            elif (key == "finger_roll_release" and sources.get("release") == "ai"
+                  and methods.get("release") == "ai_visual_estimate"):
                 t = ev["release"]
             else:
                 t = None
-        elif key == "finger_roll_release" and sources.get("release") == "ai":
+        elif (key == "finger_roll_release" and sources.get("release") == "ai"
+              and methods.get("release") == "ai_visual_estimate"):
             t = ev["release"]
         if t is not None:
             t = float(t)
@@ -590,7 +592,7 @@ def measured(track, ev):
             None, "wrist_apex_proxy", "typical_gap_estimate", "unavailable"
         ):
             usable.add(key)
-    if methods.get("release") == "wrist_apex_proxy":
+    if methods.get("release") in {"wrist_apex_proxy", "wrist_snap_proxy"}:
         usable.discard("release")
     i_bfc, i_ffc, i_rel = [at(ev.get(k)) if k in usable else None for k in ("bfc", "ffc", "release")]
     if i_bfc is not None:
@@ -665,6 +667,7 @@ def measured_text(ev, meas):
     confidence = ev.get("joint_confidence", {})
     method_labels = {
         "wrist_apex_proxy": "wrist-apex proxy (not confirmed ball release)",
+        "wrist_snap_proxy": "wrist-snap proxy (not confirmed ball release)",
         "ankle_ground_contact_heuristic": "ankle-ground contact heuristic",
         "ankle_ground_departure_heuristic": "ankle-ground departure heuristic",
         "ai_visual_estimate": "AI visual estimate",
