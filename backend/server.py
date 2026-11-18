@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 import pose as pose_lib
-from analysis_contract import build_recurring_fault_history, build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
+from analysis_contract import build_development_overview, build_recurring_fault_history, build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
 from storage import APP_NAME, CACHE_DIR, cache_path, cached_file, init_storage, put_object
 from emergentintegrations.llm.openai import OpenAITextToSpeech
 from emergentintegrations.llm.chat import (
@@ -721,6 +721,12 @@ def _step_progress_trends(items: list[Analysis]) -> list[dict]:
 async def progress(x_device_id: str = Header(...)):
     docs = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", 1).to_list(200)
     items = [Analysis.from_mongo(d) for d in docs]
+    now = datetime.now(timezone.utc)
+    development_cutoff = (now - timedelta(days=28)).isoformat()
+    workload_docs = await db.workload.find({"device_id": x_device_id, "date": {"$gte": (now.date() - timedelta(days=28)).isoformat()}}).to_list(500)
+    training_docs = await db.sessions.find({"device_id": x_device_id, "status": "ended", "created_at": {"$gte": development_cutoff}, "plan.session_mode": {"$in": ["gym", "recovery"]}}).to_list(100)
+    practice_docs = await db.drill_completions.find({"device_id": x_device_id, "completed_at": {"$gte": development_cutoff}}).sort("completed_at", -1).limit(100).to_list(100)
+    development_overview = build_development_overview([a.model_dump() for a in items], workload_docs, training_docs, practice_docs, now=now)
     points = [{
         "id": a.id,
         "date": a.created_at,
@@ -746,6 +752,7 @@ async def progress(x_device_id: str = Header(...)):
         "best_pace": max(((a.pace_band or {}).get("max_kmh") or 0 for a in items), default=0),
         "total": len(points),
         "step_trends": _step_progress_trends(items),
+        "development_overview": development_overview,
     }
 
 
