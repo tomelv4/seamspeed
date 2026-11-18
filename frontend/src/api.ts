@@ -77,6 +77,9 @@ export type Progress = {
     current_date: string; previous_date: string;
     current_score: number; previous_score: number; delta: number;
     direction: "improved" | "declined" | "stable";
+    practice_between_count?: number;
+    practice_drill_names?: string[];
+    practice_last_date?: string | null;
   }[];
   development_overview?: {
     window_days: number;
