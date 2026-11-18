@@ -110,7 +110,8 @@ class TestDetectEvents:
         index = track.idx(contact)
         # A stationary ankle already at the apparent ground height is not
         # enough evidence to establish when the foot actually made contact.
-        track.xy[index - 1, ankle, 1] = track.xy[index, ankle, 1]
+        stationary_y = track.xy[index, ankle, 1]
+        track.xy[:, ankle, 1] = stationary_y
         assert biomech._landing(track, ankle, 0.8, 3.0) is None
 
     def test_wrong_arm_profile_does_not_crash(self):
