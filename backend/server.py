@@ -801,6 +801,16 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
             entry["recent_notes"].append(item["notes"])
     comparable_trends = _step_progress_trends([Analysis.from_mongo(item) for item in recent])
     trend_by_step = {item["step_key"]: item for item in comparable_trends}
+    training_load = await workload_summary(x_device_id, profile)
+    recent_sessions = await db.sessions.find({"device_id": x_device_id}).sort("created_at", -1).limit(5).to_list(5)
+    training_sessions = [{
+        "date": item.get("created_at", "")[:10],
+        "focus": item.get("focus"),
+        "status": item.get("status"),
+        "deliveries": len([ball for ball in item.get("balls", []) if ball.get("is_bowling", True)]),
+        "recovery_guidance": [step.get("name") for step in (item.get("plan", {}).get("recovery", {}).get("items", []))],
+        "summary": item.get("summary", ""),
+    } for item in recent_sessions]
     practice_context = []
     for key, item in practice_by_step.items():
         trend = trend_by_step.get(key)
@@ -837,6 +847,9 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
         "Distinguish a full training session from a short technical practice and include rest days / low-load "
         "days in longer plans. Never claim a session was logged unless the app recorded it. "
         f"Recent prescribed-drill practice log: {json.dumps(practice_context)}. "
+        f"Recent bowling workload: {json.dumps(training_load)}. Recent structured training sessions: {json.dumps(training_sessions)}. "
+        "Use this history when advising session intensity, recovery gaps and whether today should be a bowling, low-load or recovery day. "
+        "Do not infer readiness from workload numbers alone: ask how the bowler feels today. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. "
         f"Recent analyses: {json.dumps(context)}. "
         f"Conversation so far:\n{transcript}"
@@ -1115,6 +1128,8 @@ def apply_structured_session_protocol(plan: dict, workload: dict) -> dict:
     plan["warm_up"] = SESSION_WARM_UP
     plan["cool_down"] = SESSION_COOL_DOWN
     plan["recovery"] = {"title": "After the session", "items": SESSION_RECOVERY}
+    if not isinstance(plan.get("tips"), list):
+        plan["tips"] = []
     bowling = plan.get("bowling") if isinstance(plan.get("bowling"), dict) else {}
     try:
         requested = int(bowling.get("balls", 8))
@@ -1176,7 +1191,7 @@ async def start_session(body: SessionIn, x_device_id: str = Header(...)):
         raw = await chat.send_message(UserMessage(text=(
             f"Design today's complete fast-bowling net session. Focus: {body.focus}. Known faults: {faults or 'none yet'}. "
             f"Workload status: {wl['status']} ({wl['headline']}). If workload is high, keep bowling volume low and say why. "
-            "Return JSON: {\"intro\": \"spoken greeting under 50 words that previews the session and ends with 'Let's start the warm-up.'\", "
+            "Return JSON: {\"intro\": \"spoken greeting under 50 words that previews the readiness checks and ends with 'Let's start with today's preparation.'\", "
             "\"warm_up\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (5 dynamic items: jog, mobility, activation, build-up run-throughs, 3 easy deliveries), "
             "\"drills\": [{\"name\": \"\", \"reps\": \"3 x 8\", \"cue\": \"\"}] (3 technique drills targeting the faults/focus), "
             "\"bowling\": {\"balls\": 6-12, \"target\": \"first-ball target\"}, "
