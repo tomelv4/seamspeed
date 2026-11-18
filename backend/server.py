@@ -638,6 +638,50 @@ async def get_drill(drill_id: str):
     raise HTTPException(404, "Not found")
 
 
+def _step_progress_trends(items: list[Analysis]) -> list[dict]:
+    """Compare the latest two assessable observations per step from a matching camera view."""
+    observations: dict[str, list[dict]] = {}
+    supported_views = {"side_on", "rear", "front_on", "oblique"}
+    for analysis in items:
+        if analysis.camera_view not in supported_views or analysis.camera_view_confidence not in {"high", "medium"}:
+            continue
+        for step in analysis.steps:
+            if not isinstance(step, dict):
+                continue
+            key = step.get("key")
+            score = step.get("score")
+            timestamp = step.get("t")
+            if (not key or timestamp is None or step.get("status") == "not_visible"
+                    or step.get("evidence_level") == "insufficient"
+                    or not isinstance(score, (int, float)) or not math.isfinite(float(score))):
+                continue
+            observations.setdefault(key, []).append({
+                "analysis_id": analysis.id, "date": analysis.created_at,
+                "camera_view": analysis.camera_view,
+                "name": step.get("name") or key.replace("_", " ").title(),
+                "score": float(score), "status": step.get("status", "unknown"),
+            })
+
+    trends = []
+    for key, values in observations.items():
+        values.sort(key=lambda item: item["date"], reverse=True)
+        latest = values[0]
+        previous = next((item for item in values[1:] if item["camera_view"] == latest["camera_view"]), None)
+        if previous is None:
+            continue
+        delta = round(latest["score"] - previous["score"], 1)
+        direction = "improved" if delta >= 0.5 else "declined" if delta <= -0.5 else "stable"
+        trends.append({
+            "step_key": key, "name": latest["name"], "camera_view": latest["camera_view"],
+            "current_analysis_id": latest["analysis_id"], "previous_analysis_id": previous["analysis_id"],
+            "current_date": latest["date"], "previous_date": previous["date"],
+            "current_score": round(latest["score"], 1), "previous_score": round(previous["score"], 1),
+            "delta": delta, "direction": direction,
+        })
+    trends.sort(key=lambda item: item["current_date"], reverse=True)
+    return trends
+
+
 @api_router.get("/progress")
 async def progress(x_device_id: str = Header(...)):
     docs = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", 1).to_list(200)
@@ -670,6 +714,7 @@ async def progress(x_device_id: str = Header(...)):
         "best_score": max((p["score"] for p in points if p["score"] is not None), default=0),
         "best_pace": max(((a.pace_band or {}).get("max_kmh") or 0 for a in items), default=0),
         "total": len(points),
+        "step_trends": _step_progress_trends(items),
     }
 
 
