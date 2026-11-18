@@ -157,6 +157,24 @@ def test_progress_shape():
     assert isinstance(data["step_trends"], list)
 
 
+# ---------------------------------------------------------------- AI Coach practice tracking
+def test_coach_drill_history_starts_empty():
+    r = requests.get(f"{BASE_URL}/api/coach/drills/history", headers=HEADERS, timeout=15)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["total_completions"] == 0
+    assert data["focuses"] == []
+    assert data["sessions"] == []
+
+
+def test_coach_drill_completion_requires_owned_prescribed_drill():
+    r = requests.post(
+        f"{BASE_URL}/api/coach/drills/not-an-objectid/front_knee_bracing/complete",
+        headers=HEADERS, json={}, timeout=15,
+    )
+    assert r.status_code == 404
+
+
 # ---------------------------------------------------------------- coach chat
 def test_coach_chat_sse_streaming():
     r = requests.post(f"{BASE_URL}/api/coach/chat", headers=HEADERS,
