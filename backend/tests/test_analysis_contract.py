@@ -1,3 +1,55 @@
+def test_recurring_fault_history_requires_exact_timestamped_fault_step():
+    from analysis_contract import build_recurring_fault_history
+
+    analyses = [
+        {
+            "created_at": "2026-11-01T10:00:00Z",
+            "camera_view": "side_on", "camera_view_confidence": "high",
+            "steps": [
+                {"key": "front_knee_bracing", "name": "Front-leg bracing", "t": 2.1,
+                 "status": "fault", "coaching_classification": "fault"},
+                {"key": "front_arm_elevation", "name": "Front-arm position", "t": 1.8,
+                 "status": "ok", "coaching_classification": "opportunity"},
+                {"key": "back_leg_swing", "name": "Back-leg swing", "t": None,
+                 "status": "fault", "coaching_classification": "fault"},
+            ],
+            "faults": [
+                {"step_key": "front_knee_bracing", "title": "Front knee collapses"},
+                {"step_key": "front_arm_elevation", "title": "Arm could be higher"},
+                {"step_key": "back_leg_swing", "title": "Unanchored fault"},
+                {"step_key": "missing_step", "title": "Unlinked fault"},
+            ],
+        },
+        {
+            "created_at": "2026-11-02T10:00:00Z",
+            "camera_view": "side_on", "camera_view_confidence": "medium",
+            "steps": [{"key": "front_knee_bracing", "name": "Front-leg bracing", "t": 2.2,
+                       "status": "fault", "coaching_classification": "fault"}],
+            "faults": [{"step_key": "front_knee_bracing", "title": "Front knee collapses"}],
+        },
+        {
+            "created_at": "2026-11-03T10:00:00Z",
+            "camera_view": "rear", "camera_view_confidence": "high",
+            "steps": [{"key": "front_knee_bracing", "name": "Front-leg bracing", "t": 2.2,
+                       "status": "fault", "coaching_classification": "fault"}],
+            "faults": [{"step_key": "front_knee_bracing", "title": "Front knee collapses"}],
+        },
+        {
+            "created_at": "2026-11-04T10:00:00Z",
+            "camera_view": "side_on", "camera_view_confidence": "low",
+            "steps": [{"key": "front_knee_bracing", "name": "Front-leg bracing", "t": 2.2,
+                       "status": "fault", "coaching_classification": "fault"}],
+            "faults": [{"step_key": "front_knee_bracing", "title": "Front knee collapses"}],
+        },
+    ]
+
+    result = build_recurring_fault_history(analyses)
+    assert len(result) == 1
+    assert result[0]["step_key"] == "front_knee_bracing"
+    assert result[0]["count"] == 2
+    assert result[0]["last_seen"] == "2026-11-02T10:00:00Z"
+
+
 import json
 import sys
 from pathlib import Path
