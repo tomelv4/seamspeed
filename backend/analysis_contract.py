@@ -711,3 +711,30 @@ def build_development_overview(
         "video": {"analyses": len(video_analyses)},
         "recent_activity": activity[:8],
     }
+
+
+def attach_practice_to_step_trends(trends: list[dict], drill_completions: list[dict]) -> list[dict]:
+    """Attach exact-step practice logged between comparable observations; not a causal claim."""
+    parsed = []
+    for completion in drill_completions:
+        if not isinstance(completion, dict) or not completion.get("step_key"):
+            continue
+        completed_at = _development_datetime(completion.get("completed_at"))
+        if completed_at:
+            parsed.append((completed_at, completion))
+    output = []
+    for trend in trends:
+        previous_at = _development_datetime(trend.get("previous_date"))
+        current_at = _development_datetime(trend.get("current_date"))
+        if not previous_at or not current_at or current_at <= previous_at:
+            output.append({**trend, "practice_between_count": 0, "practice_drill_names": [], "practice_last_date": None})
+            continue
+        matching = [(when, item) for when, item in parsed
+                    if item.get("step_key") == trend.get("step_key") and previous_at < when <= current_at]
+        matching.sort(key=lambda pair: pair[0])
+        names = list(dict.fromkeys(str(item.get("drill_name")).strip() for _, item in matching
+                                   if item.get("drill_name") and str(item.get("drill_name")).strip()))
+        output.append({**trend, "practice_between_count": len(matching),
+                       "practice_drill_names": names[:3],
+                       "practice_last_date": matching[-1][0].isoformat() if matching else None})
+    return output
