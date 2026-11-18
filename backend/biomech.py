@@ -412,6 +412,43 @@ def merge_events(pose_ev, ai_steps, duration):
     return ev
 
 
+def event_timing_quality(ev, release_evidence=None):
+    """Grade event timing provenance separately from keypoint visibility confidence."""
+    if not isinstance(ev, dict):
+        return {"overall": "low", "events": {}}
+    release_evidence = release_evidence if isinstance(release_evidence, dict) else {}
+    sources = ev.get("sources", {})
+    methods = ev.get("event_methods", {})
+    joint_confidence = ev.get("joint_confidence", {})
+    contacts = ev.get("contact_evidence", {})
+    grades = {}
+    for key in ("take_off", "bfc", "ffc", "release"):
+        source = sources.get(key)
+        method = methods.get(key)
+        grade = "unavailable"
+        if key == "release":
+            if release_evidence.get("ball_separation_visible") is True:
+                grade = "high" if release_evidence.get("confidence") == "high" else "medium"
+            elif source == "ai" and method == "ai_visual_estimate":
+                grade = "low"
+            elif source == "skeleton" and method == "wrist_apex_proxy":
+                grade = "low"
+        elif source == "skeleton" and method == "ankle_ground_contact_heuristic":
+            evidence = contacts.get(key, {})
+            confidence = joint_confidence.get(key)
+            if (isinstance(evidence, dict) and evidence.get("observed_frames", 0) >= 3
+                    and isinstance(confidence, (int, float)) and confidence >= 0.45):
+                grade = "medium"
+            else:
+                grade = "low"
+        elif source == "ai" and method == "ai_visual_estimate":
+            grade = "low"
+        grades[key] = grade
+    rank = {"unavailable": 0, "low": 1, "medium": 2, "high": 3}
+    overall = min(grades.values(), key=lambda value: rank[value]) if grades else "low"
+    return {"overall": overall, "events": grades}
+
+
 def step_window(key, ev):
     anchor, a, b = WINDOWS[key]
     start = ev[anchor] + a
