@@ -18,6 +18,7 @@ PHASES = (
     ("follow_through", "Follow-Through"),
 )
 VALID_STATUSES = {"good", "ok", "fault", "not_visible"}
+VALID_COACHING_CLASSIFICATIONS = {"fault", "opportunity", "effective_variation", "none"}
 VALID_CAMERA_VIEWS = {"side_on", "rear", "front_on", "oblique", "unknown"}
 VALID_CONFIDENCE = {"high", "medium", "low"}
 
@@ -191,6 +192,13 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
         cue = source.get("cue") if isinstance(source.get("cue"), str) else ""
         if key == "finger_roll_release" and not ball_separation_visible:
             status = "not_visible"
+        classification = source.get("coaching_classification")
+        if classification not in VALID_COACHING_CLASSIFICATIONS:
+            classification = "fault" if status == "fault" else "none"
+        if status == "fault" and classification != "fault":
+            status = "ok"
+        if status != "fault" and classification == "fault":
+            classification = "none"
         if (not is_bowling or status not in VALID_STATUSES or score is None
                 or (status != "not_visible" and not observation.strip())):
             status = "not_visible"
@@ -201,6 +209,7 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
             score = 0.0
             observation = observation.strip() or "Not enough clear visual evidence to assess this movement."
             cue = ""
+            classification = "none"
         elif timestamp is not None:
             last_time = timestamp
         if status != "not_visible":
@@ -210,6 +219,7 @@ def normalise_model_payload(payload: dict, duration: float | None = None) -> dic
             "t": round(timestamp, 3) if timestamp is not None else None,
             "score": score if score is not None else 0.0, "status": status,
             "observation": observation.strip(), "cue": cue.strip(),
+            "coaching_classification": classification if status != "not_visible" else "none",
         })
 
     for phase in phases:
