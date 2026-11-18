@@ -223,6 +223,7 @@ export type Ball = {
 };
 export type CoachSession = {
   id: string; created_at: string; focus: string; status: "active" | "ended"; intro: string; intro_audio: string;
+  scheduled_session?: { day?: string; type?: "bowling" | "gym" | "skill" | "match" | "recovery" | "rest"; title?: string; focus?: string; details?: string; intensity?: string };
   balls: Ball[]; summary: string; summary_audio: string;
   plan?: SessionPlan;
   achievements?: { key: string; title: string; description: string }[];
