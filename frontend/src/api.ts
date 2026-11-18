@@ -25,6 +25,7 @@ export type Analysis = {
   camera_view_confidence?: "high" | "medium" | "low";
   phases: Phase[];
   faults: Fault[];
+  coaching_priorities?: CoachingPriority[];
   strengths: string[];
   tips: string[];
   pace_band: { label?: string; min_kmh?: number | null; max_kmh?: number | null; confidence?: string };
