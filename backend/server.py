@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 import pose as pose_lib
-from analysis_contract import build_recurring_fault_history, normalise_model_payload, parse_model_json, reconcile_synced_evidence
+from analysis_contract import build_recurring_fault_history, build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
 from storage import APP_NAME, CACHE_DIR, cache_path, cached_file, init_storage, put_object
 from emergentintegrations.llm.openai import OpenAITextToSpeech
 from emergentintegrations.llm.chat import (
@@ -812,6 +812,12 @@ async def generate_coach_programme(body: WeeklyProgrammeIn, x_device_id: str = H
         raise HTTPException(422, "Those training targets and unavailable days leave no full rest day. Reduce a target or remove an unavailable day.")
     profile = await get_profile(x_device_id)
     workload = await workload_summary(x_device_id, profile)
+    training_cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    recent_training = await db.sessions.find({
+        "device_id": x_device_id, "status": "ended", "created_at": {"$gte": training_cutoff},
+        "plan.session_mode": {"$in": ["gym", "recovery"]},
+    }).sort("created_at", -1).limit(10).to_list(10)
+    training_response = build_training_response_summary(recent_training)
     recent = await db.analyses.find({"device_id": x_device_id, "is_bowling_video": True}).sort("created_at", -1).limit(3).to_list(3)
     priorities = []
     for analysis in recent:
@@ -827,10 +833,13 @@ async def generate_coach_programme(body: WeeklyProgrammeIn, x_device_id: str = H
         "Gym sessions should be general strength and conditioning suggestions, not maximal lifting prescriptions. "
         "Skill days should be low-intensity technical practice. Include warm-up, cool-down and recovery reminders in relevant details. "
         "If workload status is high, do not prescribe extra fast bowling; recommend recovery/low intensity and explain the programme needs review before starting. "
+        "Adapt gym intensity and optional volume to the logged training-response summary below. A rough response or repeated hard/fatigued sessions means lower gym intensity and no progression; repeated low completion means make the next plan more achievable, not more demanding. "
+        "Fresh responses across at least two logged sessions may support only a small progression if the bowler also reports good current readiness. Never infer readiness from history alone, never automatically add sets or bowling volume, and do not mistake missing logs for missed sessions. "
         "Do not diagnose injury or give injury probabilities. Keep details concise and actionable. "
         f"Bowler profile: {profile.name}, age band {profile.age_band or 'not supplied'}, level {profile.level}, style {profile.bowling_style}. "
         f"Requested schedule constraints: {json.dumps(constraints)}. "
         f"Recent logged workload: {json.dumps(workload)}. "
+        f"Recent completed gym/recovery response (last 14 days): {json.dumps(training_response)}. "
         f"Recent video coaching priorities: {json.dumps(priorities[:6])}. "
     )
     try:
@@ -878,12 +887,24 @@ async def generate_coach_programme(body: WeeklyProgrammeIn, x_device_id: str = H
             {**day, "details": (day["details"] + " Current logged workload is elevated: review readiness and reduce or replace this session if fatigue is present.").strip()}
             if day["type"] in {"bowling", "match"} else day for day in normalised
         ]
+    if training_response["adjustment"] == "reduce_next_gym_load":
+        normalised = [
+            {**day, "intensity": "low", "details": (day["details"] + " PACED has lowered this gym session because recent logged training responses include fatigue; use fewer optional sets and do not progress load. Check current readiness before starting.").strip()}
+            if day["type"] == "gym" else day for day in normalised
+        ]
+    elif training_response["adjustment"] == "hold_or_reduce_volume":
+        normalised = [
+            {**day, "intensity": "low" if day["intensity"].lower() == "high" else "moderate",
+             "details": (day["details"] + " Keep this session achievable: do not add volume, and reduce optional work if time or recovery is limited.").strip()}
+            if day["type"] == "gym" else day for day in normalised
+        ]
     programme = {
         "title": str(generated.get("title") or "Your weekly development plan")[:100],
         "rationale": str(generated.get("rationale") or "")[:700],
         "days": normalised,
         "constraints": constraints,
         "workload_at_generation": {"status": workload["status"], "headline": workload["headline"], "acute": workload["acute"]},
+        "training_response_at_generation": training_response,
         "created_at": now_iso(),
     }
     await db.coach_programmes.update_one(
