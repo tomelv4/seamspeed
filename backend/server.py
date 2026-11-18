@@ -1310,9 +1310,9 @@ async def start_session(body: SessionIn, x_device_id: str = Header(...)):
         saved = await db.coach_programmes.find_one({"device_id": x_device_id}, {"_id": 0, "device_id": 0})
         if saved:
             scheduled = next((d for d in saved.get("days", []) if d.get("day") == body.local_day), None)
-    if scheduled and scheduled.get("type") in {"rest", "recovery", "gym", "match"}:
-        labels = {"rest": "a full rest day", "recovery": "a recovery day", "gym": "a gym session", "match": "a match day"}
-        raise HTTPException(409, f"Your PACED programme has today scheduled as {labels[scheduled['type']]}. This live session records bowling deliveries, so it has been held back to avoid adding an unscheduled bowling load. Today's plan: {scheduled.get('title', '')} — {scheduled.get('details', '')}")
+    if scheduled and scheduled.get("type") in {"rest", "match"}:
+        labels = {"rest": "a full rest day", "match": "a match day"}
+        raise HTTPException(409, f"Your PACED programme has today scheduled as {labels[scheduled['type']]}. A training session would add unnecessary load today. Today's plan: {scheduled.get('title', '')} — {scheduled.get('details', '')}")
     scheduled_context = (
         f"Today's saved PACED programme: {scheduled.get('type')} — {scheduled.get('title')}. Focus: {scheduled.get('focus')}. Details: {scheduled.get('details')}. Intensity: {scheduled.get('intensity')}."
         if scheduled else "No saved programme session is scheduled for today; use the requested focus and recent workload."
@@ -1320,18 +1320,74 @@ async def start_session(body: SessionIn, x_device_id: str = Header(...)):
     try:
         chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"plan-{uuid.uuid4()}",
                        system_message=coach_system(profile, body.focus) + " When asked for JSON, return ONLY valid JSON.").with_model("openai", "gpt-5.5")
-        raw = await chat.send_message(UserMessage(text=(
-            f"Design today's complete fast-bowling net session. Focus: {body.focus}. {scheduled_context} Known faults: {faults or 'none yet'}. "
-            f"Workload status: {wl['status']} ({wl['headline']}). If workload is high, keep bowling volume low and say why. "
-            "Return JSON: {\"intro\": \"spoken greeting under 50 words that previews the readiness checks and ends with 'Let's start with today's preparation.'\", "
-            "\"warm_up\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (5 dynamic items: jog, mobility, activation, build-up run-throughs, 3 easy deliveries), "
-            "\"drills\": [{\"name\": \"\", \"reps\": \"3 x 8\", \"cue\": \"\"}] (3 technique drills targeting the faults/focus), "
-            "\"bowling\": {\"balls\": 6-12, \"target\": \"first-ball target\"}, "
-            "\"test\": {\"name\": \"\", \"balls\": 6, \"target\": \"what counts as a success\", \"description\": \"\"}, "
-            "\"cool_down\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (4 items incl. walk, hip flexor/hamstring/lumbar/shoulder stretches), "
-            "\"tips\": [\"\", \"\", \"\"] (recovery, workload management and technique)}")))
-        plan = apply_structured_session_protocol(parse_model_json(raw), wl)
-        intro = str(plan.pop("intro", "")).strip() or "Welcome to your PACED session. Let's complete the readiness checks, then start the warm-up."
+        session_type = scheduled.get("type") if scheduled else "bowling"
+        if session_type in {"gym", "recovery"}:
+            mode_instruction = (
+                "Create a GYM session. Use 4-6 practical strength/power exercise stations appropriate for a fast bowler, "
+                "including sets/reps and simple technique cues. Use bodyweight or moderate familiar resistance only; do not prescribe 1RM, maximal loads, or training to failure. "
+                "Include a sensible balance of lower body, upper body, trunk control and unilateral stability. No bowling deliveries, sprinting or plyometric volume. "
+                if session_type == "gym" else
+                "Create a RECOVERY session. Use 3-5 gentle recovery activities such as easy walking, comfortable mobility, breathing and optional light range-of-motion work. "
+                "Keep it restorative, not a workout. No bowling, strength work, forced stretching, or aggressive tissue work."
+            )
+            request = (
+                f"{mode_instruction} {scheduled_context} Bowler profile: {profile.level}, {profile.bowling_style}. "
+                f"Recent workload: {wl['status']} ({wl['headline']}). Do not add training volume to compensate for missed sessions. "
+                "Return JSON with intro (spoken greeting under 50 words), activities (array of objects with name, reps or minutes, cue), "
+                "tips (array of short notes). Use a practical, conservative session that can be completed without specialist equipment."
+            )
+        else:
+            request = (
+                f"Design today's complete fast-bowling net session. Focus: {body.focus}. {scheduled_context} Known faults: {faults or 'none yet'}. "
+                f"Workload status: {wl['status']} ({wl['headline']}). If workload is high, keep bowling volume low and say why. "
+                "Return JSON: {\"intro\": \"spoken greeting under 50 words that previews the readiness checks and ends with 'Let's start with today's preparation.'\", "
+                "\"warm_up\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (5 dynamic items: jog, mobility, activation, build-up run-throughs, 3 easy deliveries), "
+                "\"drills\": [{\"name\": \"\", \"reps\": \"3 x 8\", \"cue\": \"\"}] (3 technique drills targeting the faults/focus), "
+                "\"bowling\": {\"balls\": 6-12, \"target\": \"first-ball target\"}, "
+                "\"test\": {\"name\": \"\", \"balls\": 6, \"target\": \"what counts as a success\", \"description\": \"\"}, "
+                "\"cool_down\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (4 items incl. walk and gentle mobility), "
+                "\"tips\": [\"\", \"\", \"\"] (recovery, workload management and technique)}"
+            )
+        raw = await chat.send_message(UserMessage(text=request))
+        parsed_plan = parse_model_json(raw)
+        if session_type in {"gym", "recovery"}:
+            plan = parsed_plan if isinstance(parsed_plan, dict) else {}
+            plan["session_mode"] = session_type
+            plan["pre_session"] = [
+                {"name": "Readiness check", "minutes": 1, "cue": "Check energy, soreness, illness and pain. Modify or stop if something feels wrong."},
+                {"name": "Set today's intention", "minutes": 1, "cue": "Keep this session aligned with your saved programme. Do not add extra bowling to make up missed work."},
+            ]
+            plan["warm_up"] = (
+                [{"name": "Easy aerobic raise", "minutes": 3, "cue": "Walk or cycle easily until comfortably warm."},
+                 {"name": "Dynamic mobility", "minutes": 3, "cue": "Move ankles, hips, upper back and shoulders through comfortable ranges."},
+                 {"name": "Movement rehearsal", "minutes": 2, "cue": "Practise the first few movements slowly before adding any resistance."}]
+                if session_type == "gym" else
+                [{"name": "Easy walk", "minutes": 3, "cue": "Walk gently and let breathing settle."},
+                 {"name": "Comfortable mobility", "minutes": 3, "cue": "Use gentle, pain-free ankle, hip, back and shoulder movements."}]
+            )
+            activities = plan.get("activities") if isinstance(plan.get("activities"), list) else []
+            plan["activities"] = [item for item in activities if isinstance(item, dict) and item.get("name")][:6]
+            if not plan["activities"]:
+                plan["activities"] = (
+                    [{"name": "Bodyweight squat", "reps": "2 x 8", "cue": "Move smoothly through a comfortable range."},
+                     {"name": "Split squat", "reps": "2 x 6 each side", "cue": "Stay balanced and use a comfortable depth."},
+                     {"name": "Push-up variation", "reps": "2 x 8", "cue": "Keep the trunk controlled; use an easier variation if needed."},
+                     {"name": "Single-leg calf raise", "reps": "2 x 10 each side", "cue": "Use support for balance and move with control."}]
+                    if session_type == "gym" else
+                    [{"name": "Gentle walk", "minutes": 8, "cue": "Keep the pace easy and conversational."},
+                     {"name": "Comfortable hip and ankle mobility", "minutes": 4, "cue": "Stay within a pain-free range."},
+                     {"name": "Slow breathing", "minutes": 2, "cue": "Breathe comfortably and allow the body to relax."}]
+                )
+            plan["cool_down"] = SESSION_COOL_DOWN
+            plan["recovery"] = {"title": "After the session", "items": SESSION_RECOVERY}
+            plan["bowling"] = {"balls": 0}
+            plan.pop("test", None)
+            if not isinstance(plan.get("tips"), list):
+                plan["tips"] = []
+        else:
+            plan = apply_structured_session_protocol(parsed_plan, wl)
+            plan["session_mode"] = "bowling"
+        intro = str(plan.pop("intro", "")).strip() or "Welcome to your PACED session. Let's complete today's preparation."
         audio = await speak(intro)
     except Exception as exc:
         logger.exception("session start failed")
