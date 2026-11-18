@@ -5,7 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { apiSend, useAnalysis, usePose, useProfile } from "@/src/api";
+import { apiSend, useAnalysis, usePose, useProfile, type CoachingPriority } from "@/src/api";
 import { SkeletonPlayer } from "@/src/components/SkeletonPlayer";
 import { StepCard, StepList } from "@/src/components/StepBreakdown";
 import { InjuryScanner } from "@/src/components/InjuryScanner";
@@ -29,9 +29,9 @@ export default function Report() {
   const pose = usePose(id, !!a?.has_pose);
   const profile = useProfile();
   const steps = a?.steps ?? [];
-  const coachingPriorities = a?.coaching_priorities?.length
+  const coachingPriorities: CoachingPriority[] = a?.coaching_priorities?.length
     ? a.coaching_priorities
-    : (a?.faults ?? []).slice(0, 3).map((fault, index) => ({
+    : (a?.faults ?? []).slice(0, 2).map((fault, index) => ({
         priority: index + 1, type: "fault" as const, step_key: fault.step_key ?? "",
         phase: fault.phase, title: fault.title, reason: fault.description,
         action: fault.fix, severity: fault.severity,
