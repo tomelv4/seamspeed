@@ -213,6 +213,16 @@ def _smooth(kps, scs):
         out[i] = kps[i] * (1 - alpha) + blend * alpha
     return out
 
+def _serialise_pose_keypoints(raw, display, scores, width, height):
+    """Keep measurement coordinates raw; expose a separate smoothed skeleton for display."""
+    def encode(points):
+        return [
+            [round(float(x) / width, 4), round(float(y) / height, 4), round(float(score), 2)]
+            for (x, y), score in zip(points, scores)
+        ]
+
+    return {"k": encode(raw), "display_k": encode(display)}
+
 
 def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dict:
     body = _get_body()
@@ -289,11 +299,13 @@ def extract_pose(path: str, target_fps: int = 60, max_frames: int = 1200) -> dic
                     # Keep their confidence below the measurement threshold so they cannot drive biomechanics.
                     scs[fi] = np.minimum(scs[a], scs[b]) * 0.4
                     have[fi] = True
-        kps = _smooth(kps, scs)
+        # Biomechanics and event detection use unsmoothed detector/interpolated coordinates.
+        # The smoothed copy is provided only to the video skeleton overlay.
+        raw_kps = kps.copy()
+        display_kps = _smooth(kps, scs)
         for fi in range(n):
             if have[fi] and scs[fi].mean() >= 0.25:
-                frames[fi]["k"] = [[round(float(x) / sw, 4), round(float(y) / sh, 4), round(float(s), 2)]
-                                   for (x, y), s in zip(kps[fi], scs[fi])]
+                frames[fi].update(_serialise_pose_keypoints(raw_kps[fi], display_kps[fi], scs[fi], sw, sh))
     detected = int(observed.sum())
     pose_frames = sum(1 for f in frames if f["k"])
     interpolated_frames = max(0, pose_frames - detected)
