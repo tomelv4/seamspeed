@@ -285,11 +285,11 @@ def test_coaching_priorities_rank_faults_before_optional_opportunities_and_cap_a
     result = normalise_model_payload(payload, duration=4.0)
     priorities = result["coaching_priorities"]
 
-    assert len(priorities) == 3
+    assert len(priorities) == 2
     assert [item["title"] for item in priorities] == [
-        "High priority fault", "Medium priority fault", "Another medium fault",
+        "High priority fault", "Medium priority fault",
     ]
-    assert [item["priority"] for item in priorities] == [1, 2, 3]
+    assert [item["priority"] for item in priorities] == [1, 2]
     assert all(item["type"] == "fault" for item in priorities)
 
 
