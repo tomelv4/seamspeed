@@ -236,6 +236,12 @@ EVIDENCE AND SCORING RULES:
   Return release_evidence.ball_separation_visible=true only when the ball leaving the hand is clearly visible;
   also return confidence (high|medium|low) and a short note. If uncertain, return false and low confidence.
 - Mark a step "not_visible" when the relevant body part or event cannot be judged reliably. Do not force a score.
+- A scored step must have a timestamp that lands on the exact visible movement being judged. If you cannot identify that frame,
+  return status "not_visible", t null, score 0 and do not write a technique judgement for that step.
+- A fault must identify an exact step_key whose own status is "fault". Never attach a fault to a neighbouring or generic phase step.
+  If no single step clearly supports the fault, omit it. Keep the description specific to what is visible at that moment.
+- Phase feedback and the summary must be supported by assessable step observations. Do not introduce new faults or technique
+  claims in the summary that are absent from the step evidence. Phase scores are calculated by the backend from assessable steps.
 - For 3D rotation, ground-reaction force, angular velocity, ball spin, elbow legality or close-up finger/wrist mechanics,
   use "not_visible" unless the supplied footage and measurements genuinely support that assessment.
 - The coaching reference text is qualitative guidance, not a set of universal numeric thresholds.
