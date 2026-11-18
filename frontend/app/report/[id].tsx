@@ -29,6 +29,13 @@ export default function Report() {
   const pose = usePose(id, !!a?.has_pose);
   const profile = useProfile();
   const steps = a?.steps ?? [];
+  const coachingPriorities = a?.coaching_priorities?.length
+    ? a.coaching_priorities
+    : (a?.faults ?? []).slice(0, 3).map((fault, index) => ({
+        priority: index + 1, type: "fault" as const, step_key: fault.step_key ?? "",
+        phase: fault.phase, title: fault.title, reason: fault.description,
+        action: fault.fix, severity: fault.severity,
+      }));
   const selectStep = (i: number, scrollTop = false) => {
     setSelected(i);
     setSeekNonce((n) => n + 1);
@@ -234,32 +241,34 @@ export default function Report() {
 
               {steps.length ? <StepList steps={steps} selected={selected} onSelect={(i) => selectStep(i, true)} /> : null}
 
-              {a.faults.length ? (
+              {coachingPriorities.length ? (
                 <View>
-                  <SectionTitle title="Faults to Fix" action="See drills" onAction={() => router.push("/drills")} testID="report-see-drills" />
+                  <SectionTitle title="Priority Coaching Focus" />
+                  <Text style={s.body}>Start with these changes in order. PACED limits this list to the most actionable findings.</Text>
                   <View style={{ gap: space.sm }}>
-                    {a.faults.map((f, i) => (
+                    {coachingPriorities.map((item) => (
                       <PressScale
-                        key={i}
-                        style={[s.fault, { borderLeftColor: riskColor(f.severity, colors) }]}
-                        testID={`fault-card-${i}`}
+                        key={item.step_key || item.priority}
+                        style={[s.fault, { borderLeftColor: item.type === "fault" && item.severity ? riskColor(item.severity, colors) : colors.accent }]}
+                        testID={`coaching-priority-${item.priority}`}
                         onPress={() => {
-                          const exactIndex = steps.findIndex((step) => step.key === f.step_key && step.status !== "not_visible");
-                          const phaseIndex = steps.findIndex((step) => step.phase === f.phase && step.status !== "not_visible");
-                          const targetIndex = exactIndex >= 0 ? exactIndex : phaseIndex;
+                          const targetIndex = steps.findIndex((step) => step.key === item.step_key && step.status !== "not_visible" && step.t != null);
                           if (targetIndex >= 0) selectStep(targetIndex, true);
                         }}
                       >
                         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm }}>
-                          <Text style={s.faultTitle}>{f.title}</Text>
-                          <Pill label={f.severity} color={riskColor(f.severity, colors)} />
+                          <Text style={s.faultTitle}>{item.priority}. {item.title}</Text>
+                          <Pill
+                            label={item.type === "fault" ? `${item.severity ?? "technical"} fault` : "Optional improvement"}
+                            color={item.type === "fault" && item.severity ? riskColor(item.severity, colors) : colors.accent}
+                          />
                         </View>
-                        <Text style={s.faultPhase}>{phaseLabel(f.phase)}</Text>
-                        <Text style={s.body}>{f.description}</Text>
-                        {f.fix ? (
+                        <Text style={s.faultPhase}>{phaseLabel(item.phase)}</Text>
+                        <Text style={s.body}>{item.reason}</Text>
+                        {item.action ? (
                           <View style={s.fixRow}>
                             <Ionicons name="construct" size={14} color={colors.accent} />
-                            <Text style={[s.body, { flex: 1, color: colors.onSurface }]}>{f.fix}</Text>
+                            <Text style={[s.body, { flex: 1, color: colors.onSurface }]}>{item.action}</Text>
                           </View>
                         ) : null}
                       </PressScale>
