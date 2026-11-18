@@ -361,6 +361,22 @@ class TestMergeAndSync:
         assert ev["end"] == pytest.approx(3.5)
         assert ev["sources"] == {"release": "ai", "ffc": "template", "bfc": "template", "take_off": "template"}
         assert ev["measured"] == []
+        assert ev["event_methods"]["release"] == "wrist_snap_proxy"
+
+    def test_wrist_snap_proxy_cannot_become_confirmed_release_evidence(self):
+        ev = biomech.merge_events({}, ai_steps_from({"wrist_snap": 1.5}), 2.5)
+
+        quality = biomech.event_timing_quality(
+            ev, {"ball_separation_visible": True, "confidence": "high"}
+        )
+        times = biomech.sync_times([], ev)
+        track = biomech.Track(synth_pose("right"), "right")
+        metrics = biomech.measured(track, ev)
+
+        assert quality["events"]["release"] == "low"
+        assert times["finger_roll_release"] is None
+        assert "finger_roll_release" not in metrics
+        assert "forward_trunk_flexion" not in metrics
 
     def test_merge_rejects_out_of_clip_release(self):
         assert biomech.merge_events({}, ai_steps_from({"finger_roll_release": 4.0}), 2.5) is None
