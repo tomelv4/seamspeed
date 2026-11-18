@@ -21,9 +21,9 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon sf="video.fill" />
           <NativeTabs.Trigger.Label>Analyze</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="drills">
-          <NativeTabs.Trigger.Icon sf="figure.run" />
-          <NativeTabs.Trigger.Label>Drills</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger name="coach">
+          <NativeTabs.Trigger.Icon sf="brain.head.profile" />
+          <NativeTabs.Trigger.Label>Coach</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="progress">
           <NativeTabs.Trigger.Icon sf="chart.line.uptrend.xyaxis" />
@@ -52,7 +52,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: icon("home"), tabBarButtonTestID: "tab-home" }} />
       <Tabs.Screen name="analyze" options={{ title: "Analyze", tabBarIcon: icon("videocam"), tabBarButtonTestID: "tab-analyze" }} />
-      <Tabs.Screen name="drills" options={{ title: "Drills", tabBarIcon: icon("barbell"), tabBarButtonTestID: "tab-drills" }} />
+      <Tabs.Screen name="coach" options={{ title: "Coach", tabBarIcon: icon("chatbubbles"), tabBarButtonTestID: "tab-coach" }} />
       <Tabs.Screen name="progress" options={{ title: "Progress", tabBarIcon: icon("stats-chart"), tabBarButtonTestID: "tab-progress" }} />
     </Tabs>
   );
