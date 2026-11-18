@@ -790,8 +790,8 @@ async def generate_coach_programme(body: WeeklyProgrammeIn, x_device_id: str = H
     if len(set(body.unavailable_days)) != len(body.unavailable_days):
         raise HTTPException(422, "Unavailable days cannot contain duplicates")
     planned_days = body.bowling_days + body.gym_days + body.skill_days + body.match_days
-    if body.bowling_days + body.match_days > 5:
-        raise HTTPException(422, "Bowling and match exposures together must not exceed five days")
+    if body.bowling_days + body.match_days > 3:
+        raise HTTPException(422, "Bowling and match exposures together must not exceed three days so hard sessions can be spaced")
     if planned_days + len(body.unavailable_days) + 1 > 7:
         raise HTTPException(422, "Those training targets and unavailable days leave no full rest day. Reduce a target or remove an unavailable day.")
     profile = await get_profile(x_device_id)
