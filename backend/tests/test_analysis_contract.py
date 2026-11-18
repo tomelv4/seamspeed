@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import biomech
-from analysis_contract import build_development_overview, build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
+from analysis_contract import attach_practice_to_step_trends, build_development_overview, build_training_response_summary, normalise_model_payload, parse_model_json, reconcile_synced_evidence
 
 
 def test_recurring_fault_history_requires_exact_timestamped_fault_step():
@@ -608,3 +608,29 @@ def test_development_overview_returns_empty_zeroed_snapshot_without_history():
     assert overview["practice"]["drill_completions"] == 0
     assert overview["video"]["analyses"] == 0
     assert overview["recent_activity"] == []
+
+
+def test_practice_is_linked_only_to_exact_step_between_comparable_video_observations():
+    trends = [{"step_key": "front_knee_bracing", "previous_date": "2026-11-01T10:00:00Z",
+               "current_date": "2026-11-18T10:00:00Z", "delta": 1.0, "direction": "improved"}]
+    completions = [
+        {"step_key": "front_knee_bracing", "completed_at": "2026-11-05T10:00:00Z", "drill_name": "Brace drill"},
+        {"step_key": "front_knee_bracing", "completed_at": "2026-11-12T10:00:00Z", "drill_name": "Brace drill"},
+        {"step_key": "run_up_acceleration", "completed_at": "2026-11-10T10:00:00Z", "drill_name": "Run-up drill"},
+        {"step_key": "front_knee_bracing", "completed_at": "2026-10-31T10:00:00Z", "drill_name": "Before comparison"},
+        {"step_key": "front_knee_bracing", "completed_at": "2026-11-19T10:00:00Z", "drill_name": "After comparison"},
+    ]
+    result = attach_practice_to_step_trends(trends, completions)[0]
+    assert result["practice_between_count"] == 2
+    assert result["practice_drill_names"] == ["Brace drill"]
+    assert result["practice_last_date"] == "2026-11-12T10:00:00+00:00"
+
+
+def test_practice_context_does_not_infer_improvement_or_count_missing_timestamps():
+    trends = [{"step_key": "front_knee_bracing", "previous_date": "2026-11-01T10:00:00Z",
+               "current_date": "2026-11-18T10:00:00Z", "delta": -0.5, "direction": "declined"}]
+    result = attach_practice_to_step_trends(trends, [{"step_key": "front_knee_bracing", "drill_name": "Brace drill"}])[0]
+    assert result["practice_between_count"] == 0
+    assert result["practice_drill_names"] == []
+    assert result["direction"] == "declined"
+    assert result["delta"] == -0.5
