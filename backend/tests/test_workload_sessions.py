@@ -103,6 +103,26 @@ class TestWorkload:
         cleanup(d)
 
 
+# --- Persistent weekly programme
+class TestWeeklyProgramme:
+    def test_empty_programme_is_device_scoped(self):
+        d = dev()
+        r = requests.get(f"{BASE_URL}/api/coach/programme", headers=h(d), timeout=30)
+        assert r.status_code == 200 and r.json() == {"programme": None}
+        assert requests.get(f"{BASE_URL}/api/coach/programme", timeout=30).status_code == 422
+
+    def test_programme_rejects_invalid_schedule_constraints_before_generation(self):
+        d = dev()
+        base = {"bowling_days": 2, "gym_days": 2, "skill_days": 1, "match_days": 0,
+                "unavailable_days": [], "notes": ""}
+        invalid_day = {**base, "unavailable_days": ["Someday"]}
+        assert requests.post(f"{BASE_URL}/api/coach/programme", json=invalid_day, headers=h(d), timeout=30).status_code == 422
+        excessive_bowling = {**base, "bowling_days": 4, "match_days": 2}
+        assert requests.post(f"{BASE_URL}/api/coach/programme", json=excessive_bowling, headers=h(d), timeout=30).status_code == 422
+        no_rest_possible = {**base, "gym_days": 3, "unavailable_days": ["Monday", "Tuesday"]}
+        assert requests.post(f"{BASE_URL}/api/coach/programme", json=no_rest_possible, headers=h(d), timeout=30).status_code == 422
+
+
 # --- Speak / TTS
 def test_speak_and_tts():
     r = requests.post(f"{BASE_URL}/api/speak", json={"text": "Good ball, keep your head still."}, timeout=90)
