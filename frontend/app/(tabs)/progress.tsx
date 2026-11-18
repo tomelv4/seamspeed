@@ -130,6 +130,31 @@ export default function ProgressScreen() {
               </View>
             ) : null}
 
+            {p.step_trends?.length ? (
+              <View testID="technique-trends">
+                <SectionTitle title="Technique Trends" />
+                <Text style={s.phaseLabel}>Latest comparable observations · same camera view · timestamped evidence</Text>
+                <View style={s.card}>
+                  {p.step_trends.slice(0, 8).map((trend, i) => {
+                    const tint = trend.direction === "improved" ? colors.accent : trend.direction === "declined" ? colors.warning : colors.muted;
+                    const change = trend.delta > 0 ? `+${trend.delta.toFixed(1)}` : trend.delta.toFixed(1);
+                    return (
+                      <View key={trend.step_key} style={[s.trendRow, i > 0 && s.divider]} testID={`technique-trend-${trend.step_key}`}>
+                        <View style={{ flex: 1, gap: 3 }}>
+                          <Text style={s.faultTitle}>{trend.name}</Text>
+                          <Text style={s.phaseLabel}>{trend.camera_view.replace("_", " ")} · {new Date(trend.current_date).toLocaleDateString()}</Text>
+                        </View>
+                        <View style={{ alignItems: "flex-end", gap: 2 }}>
+                          <Text style={[s.trendDelta, { color: tint }]}>{change}</Text>
+                          <Text style={s.phaseLabel}>{trend.previous_score.toFixed(1)} → {trend.current_score.toFixed(1)}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
             <View>
               <SectionTitle title="Session History" />
               {(analyses.data ?? []).map((a) => <SessionRow key={a.id} item={a} />)}
@@ -166,4 +191,6 @@ const useStyles = makeStyles((c) => ({
   divider: { borderTopWidth: 1, borderTopColor: c.divider },
   faultTitle: { flex: 1, fontFamily: fonts.textBold, fontSize: 14, color: c.onSurface },
   faultCount: { fontFamily: fonts.mono, fontSize: 18, color: c.warning },
+  trendRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingTop: space.sm },
+  trendDelta: { fontFamily: fonts.display, fontSize: 22 },
 }));
