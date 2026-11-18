@@ -277,6 +277,41 @@ class TestDetectEvents:
 
 
 class TestMergeAndSync:
+    def test_event_timing_quality_downgrades_wrist_apex_proxy(self):
+        ev = biomech.merge_events(
+            {"release": 1.5, "ffc": 1.367, "bfc": 1.1,
+             "event_methods": {"release": "wrist_apex_proxy",
+                               "ffc": "ankle_ground_contact_heuristic",
+                               "bfc": "ankle_ground_contact_heuristic"},
+             "joint_confidence": {"release": 0.9, "ffc": 0.8, "bfc": 0.7},
+             "contact_evidence": {
+                 "ffc": {"observed_frames": 3, "plateau_duration_s": 0.067},
+                 "bfc": {"observed_frames": 3, "plateau_duration_s": 0.067},
+             }},
+            [], 2.5,
+        )
+        quality = biomech.event_timing_quality(ev, {"ball_separation_visible": False})
+        assert quality["events"]["release"] == "low"
+        assert quality["events"]["ffc"] == "medium"
+        assert quality["events"]["bfc"] == "medium"
+        assert quality["overall"] == "low"
+
+    def test_event_timing_quality_marks_template_contacts_unavailable(self):
+        ev = biomech.merge_events({}, ai_steps_from({"finger_roll_release": 1.5}), 2.5)
+        quality = biomech.event_timing_quality(ev, {"ball_separation_visible": False})
+        assert quality["events"]["bfc"] == "unavailable"
+        assert quality["events"]["ffc"] == "unavailable"
+        assert quality["overall"] == "unavailable"
+
+    def test_event_timing_quality_requires_ball_separation_for_high_release_confidence(self):
+        ev = biomech.merge_events(
+            {"release": 1.5, "event_methods": {"release": "wrist_apex_proxy"}}, [], 2.5
+        )
+        quality = biomech.event_timing_quality(
+            ev, {"ball_separation_visible": True, "confidence": "high"}
+        )
+        assert quality["events"]["release"] == "high"
+
     def test_merge_prefers_pose(self):
         ev = biomech.merge_events(
             {"release": 1.5, "ffc": 1.367, "bfc": 1.1,
