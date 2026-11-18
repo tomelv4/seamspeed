@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, TextInput, Vi
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { apiGet, apiSend, CoachMessage, streamCoach } from "@/src/api";
+import { apiGet, apiSend, CoachMessage, streamCoach, useDrillPracticeHistory } from "@/src/api";
 import { fonts, radius, space } from "@/src/constants";
 import { ErrorBanner, Ionicons, PressScale, PrimaryButton } from "@/src/components/ui";
 import { ProLocked } from "@/src/components/ProLocked";
@@ -28,6 +28,7 @@ export default function Coach() {
   const router = useRouter();
   const qc = useQueryClient();
   const history = useQuery({ queryKey: ["coach"], queryFn: () => apiGet<CoachMessage[]>("/coach/messages") });
+  const practice = useDrillPracticeHistory();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -95,6 +96,24 @@ export default function Coach() {
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        {practice.data?.total_completions ? (
+          <View style={s.practicePanel} testID="coach-practice-history">
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={s.practiceTitle}>YOUR PRACTICE LOG</Text>
+              <Text style={s.practiceCount}>{practice.data.total_completions} sessions logged</Text>
+            </View>
+            {practice.data.focuses.slice(0, 3).map((item) => (
+              <View key={item.step_key} style={s.practiceRow}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={s.practiceFocus}>{item.focus}</Text>
+                  <Text style={s.practiceDrill}>{item.drill_name} · last {new Date(item.last_completed_at).toLocaleDateString()}</Text>
+                </View>
+                <Text style={s.practiceCount}>×{item.completed_count}</Text>
+              </View>
+            ))}
+            <Text style={s.practiceHint}>Your coach uses this history to follow up on practice and compare future video evidence.</Text>
+          </View>
+        ) : null}
         <FlatList
           ref={listRef}
           data={msgs}
@@ -167,6 +186,13 @@ const useStyles = makeStyles((c) => ({
   emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
   emptyTitle: { fontFamily: fonts.display, fontSize: 18, color: c.onSurface, letterSpacing: 0.5 },
   emptyBody: { fontFamily: fonts.text, fontSize: 14, color: c.muted, textAlign: "center", lineHeight: 20 },
+  practicePanel: { marginHorizontal: space.lg, marginTop: space.md, padding: space.md, borderRadius: radius.md, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.sm },
+  practiceTitle: { fontFamily: fonts.textXBold, fontSize: 10, color: c.muted, letterSpacing: 1.4 },
+  practiceCount: { fontFamily: fonts.textBold, fontSize: 11, color: c.accent },
+  practiceRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.xs, borderTopWidth: 1, borderTopColor: c.divider },
+  practiceFocus: { fontFamily: fonts.textBold, fontSize: 12, color: c.onSurface },
+  practiceDrill: { fontFamily: fonts.text, fontSize: 11, color: c.muted },
+  practiceHint: { fontFamily: fonts.text, fontSize: 11, color: c.onSurfaceTertiary, lineHeight: 15 },
   bubble: { maxWidth: "85%", padding: space.md, borderRadius: radius.lg },
   user: { alignSelf: "flex-end", backgroundColor: c.brandPrimary, borderBottomRightRadius: radius.sm },
   bot: { alignSelf: "flex-start", backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, borderBottomLeftRadius: radius.sm },
