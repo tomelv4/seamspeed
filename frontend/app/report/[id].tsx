@@ -122,6 +122,13 @@ export default function Report() {
                   . This is pose-joint visibility confidence, not confidence that the event timing itself is correct.
                 </Text>
               ) : null}
+              {Object.keys(a.analysis_quality.contact_evidence ?? {}).length ? (
+                <Text style={s.note}>
+                  Foot-contact support: {Object.entries(a.analysis_quality.contact_evidence ?? {})
+                    .map(([key, value]) => `${key.toUpperCase()}: ${value.observed_frames ?? 0} observed frames across ${value.plateau_duration_s ?? 0}s`).join(" · ")}
+                  . Contact timing is a pose-based heuristic, not direct impact detection.
+                </Text>
+              ) : null}
               {a.video_meta?.quality ? (
                 <>
                   <Text style={s.note}>
