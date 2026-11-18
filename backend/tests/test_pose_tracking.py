@@ -72,3 +72,48 @@ def test_pose_serialisation_does_not_mutate_raw_coordinates():
     pose._serialise_pose_keypoints(raw, display, np.array([0.9]), 100, 100)
 
     np.testing.assert_array_equal(raw, original)
+
+
+
+def test_display_smoothing_does_not_pull_observed_pose_toward_missing_frame():
+    kps = np.array([
+        [[10.0, 10.0]],
+        [[12.0, 10.0]],
+        [[0.0, 0.0]],
+        [[16.0, 10.0]],
+    ])
+    scores = np.ones((4, 1), dtype=float)
+    observed = np.array([True, True, False, True])
+
+    smoothed = pose._smooth(kps, scores, observed=observed)
+
+    np.testing.assert_array_equal(smoothed[1], kps[1])
+    np.testing.assert_array_equal(smoothed[2], kps[2])
+
+
+def test_display_smoothing_does_not_change_low_confidence_joint():
+    kps = np.array([
+        [[10.0, 10.0], [10.0, 20.0]],
+        [[11.0, 10.0], [11.0, 20.0]],
+        [[12.0, 10.0], [12.0, 20.0]],
+    ])
+    scores = np.array([[0.9, 0.1], [0.9, 0.1], [0.9, 0.1]])
+    observed = np.array([True, True, True])
+
+    smoothed = pose._smooth(kps, scores, observed=observed)
+
+    np.testing.assert_array_equal(smoothed[1, 1], kps[1, 1])
+    assert not np.shares_memory(smoothed, kps)
+
+
+def test_display_smoothing_preserves_fast_joint_motion():
+    kps = np.array([
+        [[10.0, 10.0]],
+        [[20.0, 10.0]],
+        [[80.0, 10.0]],
+    ])
+    scores = np.ones((3, 1), dtype=float)
+
+    smoothed = pose._smooth(kps, scores)
+
+    np.testing.assert_array_equal(smoothed[1], kps[1])
