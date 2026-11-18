@@ -33,7 +33,8 @@ export default function LiveSession() {
   const { data: programmeData } = useWeeklyProgramme();
   const todayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date().getDay()];
   const todayProgramme = programmeData?.programme?.days?.find((d) => d.day === todayName);
-  const nonBowlingProgrammeDay = !!todayProgramme && ["rest", "recovery", "gym", "match"].includes(todayProgramme.type);
+  const programmeBlocksTraining = !!todayProgramme && ["rest", "match"].includes(todayProgramme.type);
+  const programmeMode = todayProgramme?.type === "gym" || todayProgramme?.type === "recovery" ? todayProgramme.type : "bowling";
   const { isSubscribed, isLoading: subLoading } = useSubscription();
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
@@ -152,8 +153,13 @@ export default function LiveSession() {
   const targetHits = balls.filter((b) => b.hit_target).length;
   const ended = session?.status === "ended";
   const plan = session?.plan ?? {};
-  const stageIdx = STAGES.findIndex((x) => x.key === stage);
-  const isBowl = stage === "bowling" || stage === "test";
+  const nonBowlingMode = plan.session_mode === "gym" || plan.session_mode === "recovery";
+  const activeStages = nonBowlingMode
+    ? STAGES.filter((x) => x.key !== "bowling" && x.key !== "test").map((x) =>
+        x.key === "drills" ? { ...x, label: plan.session_mode === "gym" ? "Gym" : "Recovery" } : x)
+    : STAGES;
+  const stageIdx = activeStages.findIndex((x) => x.key === stage);
+  const isBowl = !nonBowlingMode && (stage === "bowling" || stage === "test");
   const blockBalls = balls.filter((b) => (b.block ?? "bowling") === (stage === "test" ? "test" : "bowling"));
 
   const advance = async (next: Stage) => {
@@ -161,9 +167,12 @@ export default function LiveSession() {
     setStage(next);
     const text =
       next === "warm_up" ? "Readiness checks complete. Let's raise your temperature and prepare to bowl."
-      : next === "drills" ? `Warm-up done. Now technique drills: ${(plan.drills ?? []).map((d) => d.name).join(", ")}.`
+      : next === "drills" ? nonBowlingMode
+        ? `Warm-up complete. Now today's ${plan.session_mode} activities: ${(plan.activities ?? []).map((d) => d.name).join(", ")}.`
+        : `Warm-up done. Now technique drills: ${(plan.drills ?? []).map((d) => d.name).join(", ")}.`
       : next === "bowling" ? `Drills done. Bowling block: ${plan.bowling?.balls ?? 6} balls. First target: ${plan.bowling?.target ?? "hit a good length"}. Bowl when ready.`
       : next === "test" ? `Time for the test: ${plan.test?.name ?? "skills test"}. ${plan.test?.balls ?? 6} balls. Success means ${plan.test?.target ?? "hitting the target"}. Bowl when ready.`
+      : nonBowlingMode ? "Good work. Let's finish with a gentle cool-down and recovery check."
       : "Great bowling. Let's cool down properly to protect your body.";
     setMessage({ text });
     try {
@@ -209,8 +218,10 @@ export default function LiveSession() {
                 <Text style={s.permTitle}>{todayProgramme.title} · {todayProgramme.type.toUpperCase()}</Text>
                 <Text style={s.lead}>{todayProgramme.focus}</Text>
                 <Text style={s.coachText}>{todayProgramme.details}</Text>
-                {nonBowlingProgrammeDay ? (
-                  <Text style={s.ballBody}>Live bowling is unavailable today because your programme schedules {todayProgramme.type}. PACED is protecting that planned {todayProgramme.type} day from an extra bowling load.</Text>
+                {programmeBlocksTraining ? (
+                  <Text style={s.ballBody}>PACED has protected today's {todayProgramme.type} day from additional training load.</Text>
+                ) : todayProgramme.type === "gym" || todayProgramme.type === "recovery" ? (
+                  <Text style={s.ballBody}>Start a guided {todayProgramme.type} session. PACED will not add bowling deliveries.</Text>
                 ) : (
                   <Text style={s.ballBody}>Your AI session will use this programme focus and intensity when building today's bowling plan.</Text>
                 )}
@@ -238,13 +249,13 @@ export default function LiveSession() {
                 </View>
               </View>
             ) : null}
-            <PrimaryButton testID="session-start-button" label={nonBowlingProgrammeDay ? "Bowling paused for today's programme" : "Start Session"} icon="mic" loading={busy === "starting"} disabled={nonBowlingProgrammeDay} onPress={start} />
+            <PrimaryButton testID="session-start-button" label={programmeBlocksTraining ? "Training paused for today's programme" : todayProgramme?.type === "gym" ? "Start gym session" : todayProgramme?.type === "recovery" ? "Start recovery session" : "Start Session"} icon="mic" loading={busy === "starting"} disabled={programmeBlocksTraining} onPress={start} />
           </Animated.View>
         ) : (
           <>
             {!ended ? (
               <View style={s.stageBar} testID="session-stage-bar">
-                {STAGES.map((st, i) => (
+                {activeStages.map((st, i) => (
                   <View key={st.key} style={{ flex: 1, gap: 4 }}>
                     <View style={[s.stageSeg, i <= stageIdx && { backgroundColor: colors.accent }]} />
                     <Text style={[s.stageLabel, i === stageIdx && { color: colors.onSurface }]} numberOfLines={1}>{st.label}</Text>
@@ -257,10 +268,10 @@ export default function LiveSession() {
               <PlanStage stageKey="preparation" title="Session Preparation" subtitle="Check readiness, recent workload, hydration and your training intention before you start." items={plan.pre_session ?? []} nextLabel="Start warm-up" onNext={() => advance("warm_up")} />
             ) : null}
             {!ended && stage === "warm_up" ? (
-              <PlanStage stageKey="warm_up" title="Progressive Warm-up" subtitle="Raise temperature, mobilise, activate and build gradually into bowling. Do not rush straight to full pace." items={plan.warm_up ?? []} nextLabel="Start drills" onNext={() => advance("drills")} />
+              <PlanStage stageKey="warm_up" title="Progressive Warm-up" subtitle={nonBowlingMode ? "Prepare gradually for today's scheduled training without adding bowling." : "Raise temperature, mobilise, activate and build gradually into bowling. Do not rush straight to full pace."} items={plan.warm_up ?? []} nextLabel={nonBowlingMode ? (plan.session_mode === "gym" ? "Start gym session" : "Start recovery activities") : "Start drills"} onNext={() => advance("drills")} />
             ) : null}
             {!ended && stage === "drills" ? (
-              <PlanStage stageKey="drills" title="Technique Drills" subtitle={`Targeting today's focus: ${session.focus}.`} items={plan.drills ?? []} nextLabel="Start bowling block" onNext={() => advance("bowling")} />
+              <PlanStage stageKey="drills" title={nonBowlingMode ? (plan.session_mode === "gym" ? "Strength & Conditioning" : "Recovery Activities") : "Technique Drills"} subtitle={nonBowlingMode ? (session.scheduled_session?.details ?? "Follow today's saved programme at a controlled, comfortable effort.") : `Targeting today's focus: ${session.focus}.`} items={nonBowlingMode ? (plan.activities ?? []) : (plan.drills ?? [])} nextLabel={nonBowlingMode ? "Start cool-down" : "Start bowling block"} onNext={() => advance(nonBowlingMode ? "cool_down" : "bowling")} />
             ) : null}
             {!ended && stage === "cool_down" ? (
               <PlanStage stageKey="cool_down" title="Cool-down" subtitle="Bring the heart rate down and restore range of motion." items={plan.cool_down ?? []} nextLabel="Finish session" onNext={end} />
