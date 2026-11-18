@@ -106,6 +106,13 @@ def reconcile_synced_evidence(payload: dict) -> dict:
               / assessable_phase_count, 1)
         if overall_assessable else 0.0
     )
+    if not overall_assessable:
+        payload["summary"] = (
+            "There is not enough synchronized visual evidence to produce a reliable overall technique score. "
+            "Use a clearer recording that keeps the complete delivery visible from a suitable camera angle."
+        )
+        payload["strengths"] = []
+        payload["tips"] = []
 
     assessable_fault_steps = {
         step["key"]: step for step in assessable_steps if step.get("status") == "fault"
