@@ -13,9 +13,9 @@ import { fonts, radius, space } from "@/src/constants";
 import { ProLocked } from "@/src/components/ProLocked";
 import { PlanStage } from "@/src/components/PlanStage";
 
-type Stage = "warm_up" | "drills" | "bowling" | "test" | "cool_down";
+type Stage = "preparation" | "warm_up" | "drills" | "bowling" | "test" | "cool_down";
 const STAGES: { key: Stage; label: string }[] = [
-  { key: "warm_up", label: "Warm-up" }, { key: "drills", label: "Drills" }, { key: "bowling", label: "Bowling" },
+  { key: "preparation", label: "Prepare" }, { key: "warm_up", label: "Warm-up" }, { key: "drills", label: "Drills" }, { key: "bowling", label: "Bowling" },
   { key: "test", label: "Test" }, { key: "cool_down", label: "Cool-down" },
 ];
 import { ErrorBanner, Ionicons, PressScale, PrimaryButton, scoreColor } from "@/src/components/ui";
@@ -66,7 +66,7 @@ export default function LiveSession() {
       setSession(sess);
       setBalls([]);
       setMessage({ text: sess.intro, audio: sess.intro_audio });
-      setStage("warm_up");
+      setStage("preparation");
       say(sess.intro_audio);
     } catch (e: any) {
       setError(e?.message ?? "Could not start the session");
@@ -156,7 +156,8 @@ export default function LiveSession() {
     stopCoach();
     setStage(next);
     const text =
-      next === "drills" ? `Warm-up done. Now technique drills: ${(plan.drills ?? []).map((d) => d.name).join(", ")}.`
+      next === "warm_up" ? "Readiness checks complete. Let's raise your temperature and prepare to bowl."
+      : next === "drills" ? `Warm-up done. Now technique drills: ${(plan.drills ?? []).map((d) => d.name).join(", ")}.`
       : next === "bowling" ? `Drills done. Bowling block: ${plan.bowling?.balls ?? 6} balls. First target: ${plan.bowling?.target ?? "hit a good length"}. Bowl when ready.`
       : next === "test" ? `Time for the test: ${plan.test?.name ?? "skills test"}. ${plan.test?.balls ?? 6} balls. Success means ${plan.test?.target ?? "hitting the target"}. Bowl when ready.`
       : "Great bowling. Let's cool down properly to protect your body.";
@@ -235,8 +236,11 @@ export default function LiveSession() {
               </View>
             ) : null}
 
+            {!ended && stage === "preparation" ? (
+              <PlanStage stageKey="preparation" title="Session Preparation" subtitle="Check readiness, recent workload, hydration and your training intention before you start." items={plan.pre_session ?? []} nextLabel="Start warm-up" onNext={() => advance("warm_up")} />
+            ) : null}
             {!ended && stage === "warm_up" ? (
-              <PlanStage stageKey="warm_up" title="Warm-up" subtitle="Raise temperature and mobilise before any fast bowling." items={plan.warm_up ?? []} nextLabel="Start drills" onNext={() => advance("drills")} />
+              <PlanStage stageKey="warm_up" title="Progressive Warm-up" subtitle="Raise temperature, mobilise, activate and build gradually into bowling. Do not rush straight to full pace." items={plan.warm_up ?? []} nextLabel="Start drills" onNext={() => advance("drills")} />
             ) : null}
             {!ended && stage === "drills" ? (
               <PlanStage stageKey="drills" title="Technique Drills" subtitle={`Targeting today's focus: ${session.focus}.`} items={plan.drills ?? []} nextLabel="Start bowling block" onNext={() => advance("bowling")} />
@@ -359,9 +363,23 @@ export default function LiveSession() {
                     ))}
                   </View>
                 ) : null}
+                {(plan.recovery?.items ?? []).length ? (
+                  <View style={{ gap: space.sm }} testID="session-recovery-guidance">
+                    <Text style={s.label}>RECOVERY CHECKLIST</Text>
+                    {plan.recovery!.items!.map((item, i) => (
+                      <View key={i} style={s.achievement}>
+                        <View style={s.badge}><Ionicons name="checkmark-circle-outline" size={16} color={colors.accent} /></View>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text style={s.ballTitle}>{item.name}</Text>
+                          <Text style={s.ballBody}>{item.cue}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
                 {(plan.tips ?? []).length ? (
                   <View style={{ gap: space.sm }}>
-                    <Text style={s.label}>TIPS</Text>
+                    <Text style={s.label}>COACH NOTES</Text>
                     {plan.tips!.map((t, i) => <Text key={i} style={s.lead}>• {t}</Text>)}
                   </View>
                 ) : null}
