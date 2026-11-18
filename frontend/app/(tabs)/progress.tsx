@@ -121,8 +121,11 @@ export default function ProgressScreen() {
                 <SectionTitle title="Recurring Faults" />
                 <View style={s.card}>
                   {p.top_faults.map((f, i) => (
-                    <View key={f.title} style={[s.faultRow, i > 0 && s.divider]}>
-                      <Text style={s.faultTitle} numberOfLines={1}>{f.title}</Text>
+                    <View key={f.step_key} style={[s.faultRow, i > 0 && s.divider]}>
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Text style={s.faultTitle} numberOfLines={1}>{f.title}</Text>
+                        <Text style={s.phaseLabel}>{f.camera_view?.replace("_", " ") ?? "Camera view unavailable"} · last observed {f.last_seen ? new Date(f.last_seen).toLocaleDateString() : "date unavailable"}</Text>
+                      </View>
                       <Text style={s.faultCount}>×{f.count}</Text>
                     </View>
                   ))}
