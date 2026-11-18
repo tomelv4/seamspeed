@@ -345,8 +345,8 @@ def test_coaching_guidance_is_attached_only_to_exact_priorities_and_survives_evi
     payload["coaching_guidance"] = [
         {"step_key": "front_knee_bracing", "why_it_matters": "A stable base may help transfer momentum consistently.",
          "feel_cue": "Feel the front side firm up at contact.",
-         "drill": "Use a walk-in delivery: 3 sets of 4 controlled reps.",
-         "success_check": "The front knee position looks similar across three side-on clips."},
+         "drill": "This model suggestion must not override the vetted drill.",
+         "success_check": "This model success check must not override the vetted check."},
         {"step_key": "run_up_acceleration", "why_it_matters": "This is not a selected priority."},
         {"step_key": "not_a_real_step", "drill": "Ignore this."},
     ]
@@ -357,12 +357,14 @@ def test_coaching_guidance_is_attached_only_to_exact_priorities_and_survives_evi
     assert priority["step_key"] == "front_knee_bracing"
     assert priority["why_it_matters"].startswith("A stable base")
     assert priority["feel_cue"].startswith("Feel the front side")
-    assert priority["drill"].startswith("Use a walk-in")
-    assert priority["success_check"].startswith("The front knee")
+    assert priority["drill_name"] == "Front-leg support progression"
+    assert "controlled knee bend" in priority["drill_action"]
+    assert priority["drill_dose"].startswith("2 sets of 4")
+    assert priority["success_check"].startswith("The front leg supports the finish")
 
     result["steps"][-1]["t"] = None
     result = reconcile_synced_evidence(result)
-    assert result["coaching_priorities"][0]["drill"].startswith("Use a walk-in")
+    assert result["coaching_priorities"][0]["drill_name"] == "Front-leg support progression"
 
 
 def test_coaching_guidance_is_removed_when_its_priority_loses_timestamped_evidence():
