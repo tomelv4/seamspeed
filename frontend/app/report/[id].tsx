@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -31,6 +31,7 @@ export default function Report() {
   const drillHistory = useDrillPracticeHistory();
   const [loggingDrill, setLoggingDrill] = useState<string | null>(null);
   const [drillLogError, setDrillLogError] = useState<string | null>(null);
+  const [drillNotes, setDrillNotes] = useState<Record<string, string>>({});
   const steps = a?.steps ?? [];
   const coachingPriorities: CoachingPriority[] = a?.coaching_priorities?.length
     ? a.coaching_priorities
@@ -50,7 +51,8 @@ export default function Report() {
     setLoggingDrill(stepKey);
     setDrillLogError(null);
     try {
-      await apiSend(`/coach/drills/${id}/${encodeURIComponent(stepKey)}/complete`, "POST", {});
+      await apiSend(`/coach/drills/${id}/${encodeURIComponent(stepKey)}/complete`, "POST", { notes: drillNotes[stepKey] ?? "" });
+      setDrillNotes((current) => ({ ...current, [stepKey]: "" }));
       await Promise.all([drillHistory.refetch(), qc.invalidateQueries({ queryKey: ["progress"] })]);
     } catch (error: any) {
       setDrillLogError(error?.message ?? "Could not log this practice session.");
@@ -311,6 +313,16 @@ export default function Report() {
                               const isLogging = loggingDrill === item.step_key;
                               return (
                                 <View style={{ gap: 6, paddingTop: 6 }}>
+                                  <TextInput
+                                    testID={`drill-notes-${item.step_key}`}
+                                    value={drillNotes[item.step_key] ?? ""}
+                                    onChangeText={(value) => setDrillNotes((current) => ({ ...current, [item.step_key]: value }))}
+                                    placeholder="Optional: reps, how it felt, what was difficult…"
+                                    placeholderTextColor={colors.muted}
+                                    maxLength={500}
+                                    multiline
+                                    style={s.drillNotes}
+                                  />
                                   <PressScale testID={`complete-drill-${item.step_key}`} style={[s.smallBtn, { alignSelf: "flex-start", backgroundColor: colors.accent, opacity: isLogging ? 0.6 : 1 }]} disabled={isLogging} onPress={() => completeDrill(item.step_key)}>
                                     <Text style={[s.smallBtnText, { color: colors.onBrandPrimary }]}>{isLogging ? "Saving…" : "Log practice completed"}</Text>
                                   </PressScale>
@@ -389,6 +401,7 @@ const useStyles = makeStyles((c) => ({
   gaugeFill: { position: "absolute", top: 0, bottom: 0, backgroundColor: c.brandPrimary, borderRadius: 4 },
   gaugeLabels: { flexDirection: "row", justifyContent: "space-between" },
   gaugeLabel: { fontFamily: fonts.text, fontSize: 10, color: c.muted },
+  drillNotes: { minHeight: 42, maxHeight: 88, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: space.sm, backgroundColor: c.surfaceTertiary, color: c.onSurface, fontSize: 12, fontFamily: fonts.text },
   note: { fontFamily: fonts.text, fontSize: 13, lineHeight: 19, color: c.onSurfaceTertiary, marginTop: -space.md },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   phase: { width: "48.5%", padding: space.md, borderRadius: radius.lg, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, gap: space.sm },
