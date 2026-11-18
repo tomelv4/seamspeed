@@ -160,6 +160,18 @@ def test_synced_evidence_gate_removes_unanchored_step_and_recalculates_scores():
     assert run_up["score"] == 7.0
 
 
+def test_normalise_drops_faults_without_exact_step_key():
+    payload = valid_payload()
+    payload["faults"].append({
+        "title": "Unlinked fault", "phase": "front_foot", "severity": "high",
+        "description": "No precise movement step was supplied.", "fix": "Do not guess.",
+    })
+
+    result = normalise_model_payload(payload, duration=4.0)
+
+    assert all(fault["title"] != "Unlinked fault" for fault in result["faults"])
+
+
 def test_synced_evidence_gate_requires_fault_to_match_timestamped_fault_step():
     payload = valid_payload()
     target = next(step for step in payload["steps"] if step["key"] == "front_knee_bracing")
