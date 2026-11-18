@@ -825,7 +825,17 @@ async def coach_chat(body: ChatIn, x_device_id: str = Header(...)):
         "in later video analyses. For each practiced focus, review its same-view video_check when available; "
         "if there is no comparable pair, say the technique change is not yet verified. A logged drill is not "
         "proof of technique change; judge improvement only from comparable, sufficiently clear video evidence. "
-        "Never claim a session was logged unless the app recorded it. "
+        "You also coach the complete training process, not just bowling mechanics. Structure a fast-bowling day "
+        "around readiness and recent workload review; hydration and safe setup; a progressive warm-up (general "
+        "temperature raise, dynamic mobility, activation, progressive run-up build-ups and easy deliveries); "
+        "a small number of purposeful technique drills; a workload-appropriate bowling block with rest between "
+        "deliveries; a controlled cool-down; then rehydration, carbohydrate-plus-protein refuelling, sleep and "
+        "next-day response monitoring. Adapt or reduce intensity when workload, fatigue, soreness, heat or "
+        "recovery status warrants it. Never prescribe bowling through pain, illness or altered mechanics; "
+        "recommend qualified clinical assessment for persistent or worsening pain. Avoid aggressive stretching, "
+        "forced spinal positions, arbitrary ball-count targets, supplement claims and medical diagnosis. "
+        "Distinguish a full training session from a short technical practice and include rest days / low-load "
+        "days in longer plans. Never claim a session was logged unless the app recorded it. "
         f"Recent prescribed-drill practice log: {json.dumps(practice_context)}. "
         f"Bowler: {profile.name}, {profile.bowling_arm}-arm {profile.bowling_style}, {profile.level}. "
         f"Recent analyses: {json.dumps(context)}. "
@@ -1070,6 +1080,57 @@ class SessionIn(BaseModel):
     focus: str = "Pace"
 
 
+# PACED's session framework is fixed and evidence-informed; the model personalises
+# the technical content, but must not invent readiness, recovery or workload rules.
+SESSION_PREPARATION = [
+    {"name": "Readiness check", "minutes": 1, "cue": "Check energy, soreness, illness and any pain. Do not bowl through pain or illness; modify or stop if something feels wrong."},
+    {"name": "Review recent workload", "minutes": 1, "cue": "Check recent bowling and other high-intensity training. If unusually fatigued or workload has spiked, reduce the bowling block or switch to low-intensity skill work."},
+    {"name": "Hydrate and set up", "minutes": 1, "cue": "Arrive hydrated, have water available, and check footwear, run-up, landing area and run-off are safe and clear."},
+    {"name": "Set one session intention", "minutes": 1, "cue": "Choose one technical focus and one simple outcome. Quality and repeatability matter more than chasing maximum pace or ball count."},
+]
+SESSION_WARM_UP = [
+    {"name": "Easy aerobic raise", "minutes": 3, "cue": "Jog, brisk walk or cycle easily until warm; build gradually, not to fatigue."},
+    {"name": "Dynamic mobility", "minutes": 3, "cue": "Move through comfortable ankle, hip, thoracic and shoulder mobility. Use controlled dynamic movements, not forced end-range stretches."},
+    {"name": "Movement activation", "minutes": 3, "cue": "Use bodyweight squats, calf raises, glute bridges and controlled trunk/shoulder movements. Keep everything comfortable."},
+    {"name": "Progressive run-up build-ups", "reps": "3–4 runs", "cue": "Build from easy to moderate approach speed with full walk-back recovery; rehearse rhythm without bowling at full intensity."},
+    {"name": "Easy bowling rehearsal", "reps": "3–6 deliveries", "cue": "Start with comfortable, submaximal deliveries. Increase intensity only if movement feels coordinated and pain-free."},
+]
+SESSION_COOL_DOWN = [
+    {"name": "Easy walk", "minutes": 3, "cue": "Walk until breathing and heart rate settle gradually."},
+    {"name": "Gentle lower-body mobility", "minutes": 2, "cue": "Use comfortable hip, calf and hamstring movements; no bouncing or forcing a stretch."},
+    {"name": "Gentle upper-body mobility", "minutes": 2, "cue": "Move shoulders and upper back through a comfortable range. Avoid aggressive spinal or shoulder stretching."},
+]
+SESSION_RECOVERY = [
+    {"name": "Rehydrate", "cue": "Drink to thirst and replace fluids over the next few hours; include electrolytes when the session was hot, long or particularly sweaty."},
+    {"name": "Refuel", "cue": "Have a normal meal or snack with carbohydrate and protein within a practical post-session window. No special supplement is required."},
+    {"name": "Restore", "cue": "Prioritise a consistent night's sleep and an appropriate gap before the next high-intensity bowling exposure."},
+    {"name": "Review response", "cue": "Record balls, intensity, effort, soreness and how you feel the next day. Persistent or worsening pain needs assessment by a qualified health professional."},
+]
+
+
+def apply_structured_session_protocol(plan: dict, workload: dict) -> dict:
+    """Apply consistent preparation, warm-up, cool-down and recovery safeguards."""
+    plan = plan if isinstance(plan, dict) else {}
+    plan["pre_session"] = SESSION_PREPARATION
+    plan["warm_up"] = SESSION_WARM_UP
+    plan["cool_down"] = SESSION_COOL_DOWN
+    plan["recovery"] = {"title": "After the session", "items": SESSION_RECOVERY}
+    bowling = plan.get("bowling") if isinstance(plan.get("bowling"), dict) else {}
+    try:
+        requested = int(bowling.get("balls", 8))
+    except (TypeError, ValueError):
+        requested = 8
+    status = workload.get("status")
+    maximum = 6 if status == "high" else 8 if status == "medium" else 12
+    bowling["balls"] = max(1, min(requested, maximum, 12))
+    if status == "high":
+        plan.setdefault("tips", []).append("Recent workload is elevated: this session has been capped at a small bowling block. Stop if fatigue changes your action; consider replacing fast bowling with recovery.")
+    elif status == "medium":
+        plan.setdefault("tips", []).append("Recent workload is above baseline: keep the bowling volume controlled and prioritise quality over extra repetitions.")
+    plan["bowling"] = bowling
+    return plan
+
+
 BALL_PROMPT = """You are watching ONE delivery from a live fast-bowling net session. Bowler: {profile}. Session focus: {focus}.
 Current target from coach: {target}
 Assess only visible technique and target execution. Do not diagnose injury or infer injury risk.
@@ -1122,8 +1183,8 @@ async def start_session(body: SessionIn, x_device_id: str = Header(...)):
             "\"test\": {\"name\": \"\", \"balls\": 6, \"target\": \"what counts as a success\", \"description\": \"\"}, "
             "\"cool_down\": [{\"name\": \"\", \"minutes\": 2, \"cue\": \"\"}] (4 items incl. walk, hip flexor/hamstring/lumbar/shoulder stretches), "
             "\"tips\": [\"\", \"\", \"\"] (recovery, workload management and technique)}")))
-        plan = parse_model_json(raw)
-        intro = str(plan.pop("intro", "")).strip() or "Welcome to your PACED session. Let's start the warm-up."
+        plan = apply_structured_session_protocol(parse_model_json(raw), wl)
+        intro = str(plan.pop("intro", "")).strip() or "Welcome to your PACED session. Let's complete the readiness checks, then start the warm-up."
         audio = await speak(intro)
     except Exception as exc:
         logger.exception("session start failed")
