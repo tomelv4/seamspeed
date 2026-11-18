@@ -660,13 +660,15 @@ def _step_progress_trends(items: list[Analysis]) -> list[dict]:
                 "camera_view": analysis.camera_view,
                 "name": step.get("name") or key.replace("_", " ").title(),
                 "score": float(score), "status": step.get("status", "unknown"),
+                "evidence_level": step.get("evidence_level", "visual_assessment"),
             })
 
     trends = []
     for key, values in observations.items():
         values.sort(key=lambda item: item["date"], reverse=True)
         latest = values[0]
-        previous = next((item for item in values[1:] if item["camera_view"] == latest["camera_view"]), None)
+        previous = next((item for item in values[1:] if item["camera_view"] == latest["camera_view"]
+                            and item["evidence_level"] == latest["evidence_level"]), None)
         if previous is None:
             continue
         delta = round(latest["score"] - previous["score"], 1)
