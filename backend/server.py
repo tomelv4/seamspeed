@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 import pose as pose_lib
-from analysis_contract import normalise_model_payload, parse_model_json, reconcile_synced_evidence
+from analysis_contract import build_recurring_fault_history, normalise_model_payload, parse_model_json, reconcile_synced_evidence
 from storage import APP_NAME, CACHE_DIR, cache_path, cached_file, init_storage, put_object
 from emergentintegrations.llm.openai import OpenAITextToSpeech
 from emergentintegrations.llm.chat import (
@@ -704,15 +704,11 @@ async def progress(x_device_id: str = Header(...)):
             and isinstance(p.get("score"), (int, float)) and math.isfinite(float(p.get("score")))
         ]
         phase_avg[key] = round(sum(scores) / len(scores), 1) if scores else None
-    fault_counts: dict[str, int] = {}
-    for a in items:
-        for f in a.faults:
-            fault_counts[f.get("title", "Unknown")] = fault_counts.get(f.get("title", "Unknown"), 0) + 1
-    top_faults = sorted(fault_counts.items(), key=lambda x: -x[1])[:6]
+    top_faults = build_recurring_fault_history([a.model_dump() for a in items])
     return {
         "points": points,
         "phase_avg": phase_avg,
-        "top_faults": [{"title": t, "count": c} for t, c in top_faults],
+        "top_faults": top_faults,
         "best_score": max((p["score"] for p in points if p["score"] is not None), default=0),
         "best_pace": max(((a.pace_band or {}).get("max_kmh") or 0 for a in items), default=0),
         "total": len(points),
