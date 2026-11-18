@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import biomech
-from analysis_contract import normalise_model_payload, parse_model_json
+from analysis_contract import normalise_model_payload, parse_model_json, reconcile_synced_evidence
 
 
 def valid_payload():
@@ -140,3 +140,42 @@ def test_normalise_missing_phase_is_explicitly_unassessable():
     assert phase["assessable"] is False
     assert phase["feedback"] == "Not enough clear visual evidence to assess this phase."
     assert all(fault["phase"] != "release" for fault in result["faults"])
+
+
+
+def test_synced_evidence_gate_removes_unanchored_step_and_recalculates_scores():
+    result = normalise_model_payload(valid_payload(), duration=4.0)
+    first = result["steps"][0]
+    first["t"] = None
+
+    result = reconcile_synced_evidence(result)
+
+    assert first["status"] == "not_visible"
+    assert first["score"] == 0
+    assert first["evidence_level"] == "insufficient"
+    assert result["overall_score_assessable"] is True
+    assert result["overall_score"] == 7.0
+    run_up = next(phase for phase in result["phases"] if phase["key"] == "run_up")
+    assert run_up["assessable"] is True
+    assert run_up["score"] == 7.0
+
+
+def test_synced_evidence_gate_requires_fault_to_match_timestamped_fault_step():
+    payload = valid_payload()
+    target = next(step for step in payload["steps"] if step["key"] == "front_knee_bracing")
+    target["status"] = "fault"
+    payload["faults"] = [
+        {"title": "Supported front-knee fault", "phase": "front_foot", "step_key": "front_knee_bracing",
+         "severity": "medium", "description": "Visible at the linked moment.", "fix": "Brace more firmly."},
+        {"title": "Unsupported fault", "phase": "front_foot", "step_key": "front_knee_bracing",
+         "severity": "high", "description": "No timestamp supports this.", "fix": "Ignore."},
+    ]
+    result = normalise_model_payload(payload, duration=4.0)
+    result["steps"] = [dict(step) for step in result["steps"]]
+    target_result = next(step for step in result["steps"] if step["key"] == "front_knee_bracing")
+    target_result["t"] = None
+
+    result = reconcile_synced_evidence(result)
+
+    assert target_result["status"] == "not_visible"
+    assert result["faults"] == []
