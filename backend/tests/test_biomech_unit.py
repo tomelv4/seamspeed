@@ -102,6 +102,19 @@ class TestDetectEvents:
         track.t[40:] += np.arange(len(track.t) - 40) * 0.2
         assert biomech._landing(track, track.front["ankle"], 0.8, 3.0) is None
 
+    def test_landing_interpolates_contact_onset_between_video_frames(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        ankle = track.front["ankle"]
+        contact = biomech._landing(track, ankle, 0.8, 3.0)
+        assert contact is not None
+        assert not np.any(np.isclose(track.t, contact, atol=1e-7))
+        before = np.where(track.t < contact)[0]
+        after = np.where(track.t > contact)[0]
+        assert len(before) and len(after)
+        left, right = before[-1], after[0]
+        assert right == left + 1
+        assert track.xy[left, ankle, 1] < track.xy[right, ankle, 1]
+
     def test_landing_requires_downward_entry_into_contact_plateau(self):
         track = biomech.Track(synth_pose("right"), "right")
         ankle = track.front["ankle"]
