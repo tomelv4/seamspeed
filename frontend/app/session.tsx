@@ -47,6 +47,7 @@ export default function LiveSession() {
   const [stage, setStage] = useState<Stage>("warm_up");
   const [showCompletion, setShowCompletion] = useState(false);
   const [activityLog, setActivityLog] = useState<Record<number, { completed: boolean; sets: string; reps: string }>>({});
+  const [sessionEffort, setSessionEffort] = useState<"easy" | "moderate" | "hard" | null>(null);
   const [overallFeeling, setOverallFeeling] = useState<"fresh" | "normal" | "tired" | "rough" | null>(null);
   const [completionNotes, setCompletionNotes] = useState("");
   const canRecord = Platform.OS !== "web";
@@ -74,6 +75,7 @@ export default function LiveSession() {
       setSession(sess);
       setBalls([]);
       setActivityLog({});
+      setSessionEffort(null);
       setOverallFeeling(null);
       setCompletionNotes("");
       setShowCompletion(false);
@@ -147,11 +149,12 @@ export default function LiveSession() {
             name: item.name,
             completed: logged.completed,
             ...(plan.session_mode === "gym" ? {
-              actual_sets: sets !== null && Number.isFinite(sets) ? Math.max(0, Math.min(20, Math.round(sets))) : null,
+              actual_sets: sets !== null && Number.isInteger(sets) && sets >= 0 && sets <= 20 ? sets : null,
               actual_reps: logged.reps.trim() || null,
             } : {}),
           };
         }),
+        session_effort: sessionEffort,
         overall_feeling: overallFeeling,
         notes: completionNotes.trim(),
       } : undefined;
@@ -324,7 +327,15 @@ export default function LiveSession() {
                     </View>
                   );
                 })}
-                <Text style={s.label}>HOW DID THE SESSION FEEL?</Text>
+                <Text style={s.label}>OVERALL SESSION EFFORT</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {(["easy", "moderate", "hard"] as const).map((effort) => (
+                    <Pressable key={effort} testID={`session-effort-${effort}`} onPress={() => setSessionEffort(effort)} style={{ paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: sessionEffort === effort ? colors.accent : colors.border, backgroundColor: sessionEffort === effort ? colors.surface : "transparent" }}>
+                      <Text style={{ color: sessionEffort === effort ? colors.accent : colors.onSurface, textTransform: "capitalize", fontSize: 13 }}>{effort}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={s.label}>HOW DO YOU FEEL NOW?</Text>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                   {(["fresh", "normal", "tired", "rough"] as const).map((feeling) => (
                     <Pressable key={feeling} testID={`session-feeling-${feeling}`} onPress={() => setOverallFeeling(feeling)} style={{ paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: overallFeeling === feeling ? colors.accent : colors.border, backgroundColor: overallFeeling === feeling ? colors.surface : "transparent" }}>
