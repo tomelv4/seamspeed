@@ -46,8 +46,11 @@ function interpolate(frames: PoseData["frames"], t: number): number[][] | null {
   const a = frames[lo], b = frames[lo + 1];
   const ak = a.display_k ?? a.k;
   const bk = b ? (b.display_k ?? b.k) : null;
-  if (!ak) return bk && b && b.t - t < 0.1 ? bk : null;
-  if (!b || !bk || b.t === a.t) return t - a.t < 0.2 ? ak : null;
+  // The selected frame is the latest sample at or before playback time. Never
+  // borrow a future pose when this frame is missing: that draws the bowler
+  // through an occlusion or tracking dropout.
+  if (!ak) return null;
+  if (!b || !bk || b.t === a.t) return ak;
   const r = Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t)));
   return ak.map((p, i) => [p[0] + (bk[i][0] - p[0]) * r, p[1] + (bk[i][1] - p[1]) * r, Math.min(p[2], bk[i][2])]);
 }
