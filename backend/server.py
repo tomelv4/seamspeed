@@ -758,9 +758,8 @@ async def coach_drill_history(x_device_id: str = Header(...), limit: int = Query
                 "completed_at": item["completed_at"], "notes": item.get("notes", ""),
                 "analysis_id": item["analysis_id"],
             })
-    return {"total_completions": len(docs), "focuses": list(grouped.values()), "sessions": [
-        {k: v for k, v in item.items() if k != "device_id"} for item in docs
-    ]}
+    sessions = [{"id": str(item["_id"]), **{k: v for k, v in item.items() if k not in {"_id", "device_id"}}} for item in docs]
+    return {"total_completions": len(docs), "focuses": list(grouped.values()), "sessions": sessions}
 
 
 @api_router.get("/coach/messages")
