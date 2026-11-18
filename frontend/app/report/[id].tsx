@@ -94,6 +94,16 @@ export default function Report() {
                 Subject tracking: {(a.analysis_quality.pose.subject_selection_confidence ?? "unknown").toUpperCase()} confidence ·
                 {a.analysis_quality.pose.competing_tracks ?? 0} competing person track(s)
               </Text>
+              {a.analysis_quality.pose.joint_visibility ? (
+                <Text style={s.note}>
+                  Joint visibility in observed frames: {["left_wrist", "right_wrist", "left_knee", "right_knee", "left_ankle", "right_ankle"]
+                    .filter((key) => a.analysis_quality?.pose?.joint_visibility?.[key])
+                    .map((key) => {
+                      const joint = a.analysis_quality?.pose?.joint_visibility?.[key];
+                      return `${key.replace("_", " ")} ${Math.round((joint?.coverage ?? 0) * 100)}%`;
+                    }).join(" · ")}
+                </Text>
+              ) : null}
               {a.analysis_quality.pose.interpolated_frames ? (
                 <Text style={s.note}>
                   {a.analysis_quality.pose.interpolated_frames} interpolated frames were shown for continuity but excluded from measurements.
