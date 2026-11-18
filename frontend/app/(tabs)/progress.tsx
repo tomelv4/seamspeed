@@ -142,7 +142,7 @@ export default function ProgressScreen() {
                       <Pressable key={trend.step_key} onPress={() => router.push(`/report/${trend.current_analysis_id}`)} style={[s.trendRow, i > 0 && s.divider]} testID={`technique-trend-${trend.step_key}`}>
                         <View style={{ flex: 1, gap: 3 }}>
                           <Text style={s.faultTitle}>{trend.name}</Text>
-                          <Text style={s.phaseLabel}>{trend.camera_view.replace("_", " ")} · {new Date(trend.current_date).toLocaleDateString()}</Text>
+                          <Text style={s.phaseLabel}>{trend.camera_view.replace("_", " ")} · {new Date(trend.previous_date).toLocaleDateString()} → {new Date(trend.current_date).toLocaleDateString()}</Text>
                         </View>
                         <View style={{ alignItems: "flex-end", gap: 2 }}>
                           <Text style={[s.trendDelta, { color: tint }]}>{change}</Text>
