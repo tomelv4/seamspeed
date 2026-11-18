@@ -583,6 +583,19 @@ class TestMeasured:
 
         assert "back_knee_compression" not in metrics
 
+    def test_window_measurement_uses_local_cadence_for_variable_frame_rate(self):
+        # The run-up is sampled at ~60 fps while the delivery window is ~15 fps.
+        # Valid delivery observations should not be rejected by the faster
+        # clip-wide median cadence.
+        track = type("TrackTimes", (), {
+            "t": np.array([0.000, 0.016, 0.032, 0.048, 1.000, 1.067, 1.134, 1.201, 1.268, 1.284])
+        })()
+        ids = np.array([4, 5, 6, 7, 8])
+
+        values = biomech._window_values(track, ids, lambda i: float(i))
+
+        assert values == [4.0, 5.0, 6.0, 7.0, 8.0]
+
     def test_window_measurement_is_omitted_across_long_pose_tracking_gap(self):
         track = biomech.Track(synth_pose("right"), "right")
         ev = biomech.merge_events(biomech.detect_events(track), [], 2.5)
