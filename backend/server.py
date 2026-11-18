@@ -129,6 +129,7 @@ class Analysis(BaseDocument):
     camera_view_confidence: str = "low"
     phases: List[dict] = []
     faults: List[dict] = []
+    coaching_priorities: List[dict] = []
     strengths: List[str] = []
     tips: List[str] = []
     pace_band: dict = {}
