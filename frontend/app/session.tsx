@@ -7,7 +7,7 @@ import { ActivityIndicator, AppState, Linking, Platform, Pressable, ScrollView, 
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { apiSend, Ball, CoachSession, ttsUrl, uploadBall } from "@/src/api";
+import { apiSend, Ball, CoachSession, ttsUrl, uploadBall, useWeeklyProgramme } from "@/src/api";
 import { playCoach, stopCoach } from "@/src/coachAudio";
 import { fonts, radius, space } from "@/src/constants";
 import { ProLocked } from "@/src/components/ProLocked";
@@ -30,6 +30,10 @@ export default function LiveSession() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const qc = useQueryClient();
+  const { data: programmeData } = useWeeklyProgramme();
+  const todayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date().getDay()];
+  const todayProgramme = programmeData?.programme?.days?.find((d) => d.day === todayName);
+  const nonBowlingProgrammeDay = !!todayProgramme && ["rest", "recovery", "gym", "match"].includes(todayProgramme.type);
   const { isSubscribed, isLoading: subLoading } = useSubscription();
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
@@ -62,7 +66,7 @@ export default function LiveSession() {
     setBusy("starting");
     setError(null);
     try {
-      const sess = await apiSend<CoachSession>("/sessions", "POST", { focus });
+      const sess = await apiSend<CoachSession>("/sessions", "POST", { focus, local_day: todayName });
       setSession(sess);
       setBalls([]);
       setMessage({ text: sess.intro, audio: sess.intro_audio });
@@ -199,6 +203,19 @@ export default function LiveSession() {
         {!session ? (
           <Animated.View entering={FadeInDown} style={{ gap: space.lg }}>
             <Text style={s.lead}>Set up your phone side-on at the nets. Your coach gives you a target, you bowl, it watches and talks you through every ball.</Text>
+            {todayProgramme ? (
+              <View style={s.coachCard} testID="session-programme-context">
+                <Text style={s.label}>TODAY'S SAVED PROGRAMME</Text>
+                <Text style={s.permTitle}>{todayProgramme.title} · {todayProgramme.type.toUpperCase()}</Text>
+                <Text style={s.lead}>{todayProgramme.focus}</Text>
+                <Text style={s.coachText}>{todayProgramme.details}</Text>
+                {nonBowlingProgrammeDay ? (
+                  <Text style={s.ballBody}>Live bowling is unavailable today because your programme schedules {todayProgramme.type}. PACED is protecting that planned {todayProgramme.type} day from an extra bowling load.</Text>
+                ) : (
+                  <Text style={s.ballBody}>Your AI session will use this programme focus and intensity when building today's bowling plan.</Text>
+                )}
+              </View>
+            ) : null}
             <Text style={s.label}>TODAY'S FOCUS</Text>
             <View style={s.focusRow}>
               {FOCUSES.map((f) => (
@@ -221,7 +238,7 @@ export default function LiveSession() {
                 </View>
               </View>
             ) : null}
-            <PrimaryButton testID="session-start-button" label="Start Session" icon="mic" loading={busy === "starting"} onPress={start} />
+            <PrimaryButton testID="session-start-button" label={nonBowlingProgrammeDay ? "Bowling paused for today's programme" : "Start Session"} icon="mic" loading={busy === "starting"} disabled={nonBowlingProgrammeDay} onPress={start} />
           </Animated.View>
         ) : (
           <>
