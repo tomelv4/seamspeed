@@ -55,10 +55,13 @@ def test_recurring_fault_history_requires_exact_timestamped_fault_step():
     ]
 
     result = build_recurring_fault_history(analyses)
-    assert len(result) == 1
-    assert result[0]["step_key"] == "front_knee_bracing"
-    assert result[0]["count"] == 2
-    assert result[0]["last_seen"] == "2026-11-02T10:00:00Z"
+    assert len(result) == 2
+    side_on = next(item for item in result if item["camera_view"] == "side_on")
+    rear = next(item for item in result if item["camera_view"] == "rear")
+    assert side_on["step_key"] == "front_knee_bracing"
+    assert side_on["count"] == 2
+    assert side_on["last_seen"] == "2026-11-02T10:00:00Z"
+    assert rear["count"] == 1
 
 
 def valid_payload():
