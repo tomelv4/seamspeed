@@ -81,6 +81,20 @@ class TestDetectEvents:
         assert ev["ffc"] == pytest.approx(1.367, abs=0.034)
         assert ev["bfc"] == pytest.approx(1.1, abs=0.034)
 
+    def test_contact_confidence_uses_all_three_supporting_frames(self):
+        track = biomech.Track(synth_pose("right"), "right")
+        baseline = biomech.detect_events(track)
+        ankle = track.front["ankle"]
+        contact_ids = biomech._contact_observations(track, ankle, baseline["ffc"])
+        assert len(contact_ids) == 3
+        track.c[contact_ids[1], ankle] = 0.51
+
+        events = biomech.detect_events(track)
+
+        assert events["joint_confidence"]["ffc"] == pytest.approx(0.51)
+        assert events["contact_evidence"]["ffc"]["observed_frames"] == 3
+        assert events["contact_evidence"]["ffc"]["plateau_duration_s"] > 0
+
     def test_landing_rejects_three_frames_spread_over_long_elapsed_time(self):
         track = biomech.Track(synth_pose("right"), "right")
         # Simulate a sparse/irregular observation sequence around the foot plant.
