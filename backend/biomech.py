@@ -445,8 +445,14 @@ def event_timing_quality(ev, release_evidence=None):
         elif source == "ai" and method == "ai_visual_estimate":
             grade = "low"
         grades[key] = grade
-    rank = {"unavailable": 0, "low": 1, "medium": 2, "high": 3}
-    overall = min(grades.values(), key=lambda value: rank[value]) if grades else "low"
+    if "low" in grades.values():
+        overall = "low"
+    elif "unavailable" in grades.values():
+        overall = "unavailable"
+    elif "medium" in grades.values():
+        overall = "medium"
+    else:
+        overall = "high" if grades else "low"
     return {"overall": overall, "events": grades}
 
 
